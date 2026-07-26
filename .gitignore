@@ -1,0 +1,35 @@
+node_modules/
+
+# Build outputs and caches
+dist/
+build/
+coverage/
+.vite/
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Test and browser automation artifacts
+playwright-report/
+test-results/
+blob-report/
+.playwright-mcp/
+
+# Local runtime/config
+.env
+.env.*
+!.env.example
+/.clasp.json
+.codex/
+.superpowers/
+tmp/
+
+# Logs and OS/editor noise
+*.log
+.DS_Store
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

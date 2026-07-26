@@ -1,0 +1,4 @@
+interface:
+  display_name: "Solution & System Design"
+  short_description: "Thiết kế kiến trúc có phê duyệt và truy vết SRS"
+  default_prompt: "Rà soát PRD và SRS, làm rõ các quyết định kiến trúc, rồi soạn Solution/System Design sau khi tôi duyệt."

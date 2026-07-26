@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Discovery & PRD"
+  short_description: "Nghiên cứu sản phẩm và viết PRD có phê duyệt phạm vi"
+  default_prompt: "Nghiên cứu sản phẩm này, làm rõ yêu cầu và viết PRD sau khi tôi duyệt phạm vi."

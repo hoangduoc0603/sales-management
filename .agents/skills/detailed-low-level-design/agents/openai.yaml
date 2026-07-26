@@ -1,0 +1,4 @@
+interface:
+  display_name: "Detailed Design & LLD"
+  short_description: "Chuyển kiến trúc đã duyệt thành LLD triển khai được"
+  default_prompt: "Use $detailed-low-level-design to turn our approved PRD, SRS, and architecture into reviewed LLD documents."

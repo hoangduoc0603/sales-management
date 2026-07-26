@@ -1,0 +1,189 @@
+{
+  "kpis": 4,
+  "trendBadges": [
+    {
+      "text": "+11,6%",
+      "className": "trend-badge success",
+      "color": "rgb(22, 122, 74)",
+      "background": "rgb(233, 247, 239)",
+      "border": "oklab(0.512902 -0.106174 0.0467032 / 0.2)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 70,
+      "height": 26
+    },
+    {
+      "text": "Đã xác nhận",
+      "className": "trend-badge info",
+      "color": "rgb(37, 99, 184)",
+      "background": "rgb(234, 243, 255)",
+      "border": "oklab(0.506981 -0.0322453 -0.144947 / 0.2)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 104,
+      "height": 26
+    },
+    {
+      "text": "90,7%",
+      "className": "trend-badge success",
+      "color": "rgb(22, 122, 74)",
+      "background": "rgb(233, 247, 239)",
+      "border": "oklab(0.512902 -0.106174 0.0467032 / 0.2)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 69,
+      "height": 26
+    },
+    {
+      "text": "8.450.000 ₫ quá hạn",
+      "className": "trend-badge danger",
+      "color": "rgb(180, 35, 24)",
+      "background": "rgb(253, 237, 236)",
+      "border": "oklab(0.500343 0.158444 0.0896919 / 0.22)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 151,
+      "height": 26
+    }
+  ],
+  "statuses": [
+    {
+      "text": "Chờ xác nhận",
+      "className": "status warning",
+      "color": "rgb(152, 95, 10)",
+      "background": "rgb(255, 244, 229)",
+      "border": "oklab(0.536286 0.0421273 0.106077 / 0.22)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 110,
+      "height": 26
+    },
+    {
+      "text": "Chờ soạn hàng",
+      "className": "status info",
+      "color": "rgb(37, 99, 184)",
+      "background": "rgb(234, 243, 255)",
+      "border": "oklab(0.506981 -0.0322453 -0.144947 / 0.2)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 117,
+      "height": 26
+    },
+    {
+      "text": "Cần bổ sung tồn",
+      "className": "status danger",
+      "color": "rgb(180, 35, 24)",
+      "background": "rgb(253, 237, 236)",
+      "border": "oklab(0.500343 0.158444 0.0896919 / 0.22)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 124,
+      "height": 26
+    },
+    {
+      "text": "Chờ xác nhận",
+      "className": "status warning",
+      "color": "rgb(152, 95, 10)",
+      "background": "rgb(255, 244, 229)",
+      "border": "oklab(0.536286 0.0421273 0.106077 / 0.22)",
+      "radius": "999px",
+      "fontWeight": "600",
+      "width": 110,
+      "height": 26
+    }
+  ],
+  "queue": [
+    {
+      "text": "Tồn thấp: Sữa hạt óc chó 1LCòn 4 thùng, dưới ngưỡng tối thiểu 12 · rủi ro thiếu hàng trong ca chiều.Kho Nguyễn Trãi · Hà",
+      "className": "queue-item warning",
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(23, 32, 51) rgb(23, 32, 51) rgb(23, 32, 51) rgb(152, 95, 10)",
+      "radius": "0px",
+      "fontWeight": "400",
+      "width": 296,
+      "height": 109
+    },
+    {
+      "text": "",
+      "className": "queue-icon",
+      "color": "rgb(152, 95, 10)",
+      "background": "rgb(255, 244, 229)",
+      "border": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "fontWeight": "400",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "Đơn nhập tay quá SLA xác nhận3 đơn chờ quá 15 phút; đơn lâu nhất 46 phút · có nguy cơ bỏ lỡ khách.Đơn bán hàng · quá hạn",
+      "className": "queue-item danger",
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(238, 242, 246) rgb(23, 32, 51) rgb(23, 32, 51) rgb(180, 35, 24)",
+      "radius": "0px",
+      "fontWeight": "400",
+      "width": 296,
+      "height": 160
+    },
+    {
+      "text": "",
+      "className": "queue-icon",
+      "color": "rgb(180, 35, 24)",
+      "background": "rgb(253, 237, 236)",
+      "border": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "fontWeight": "400",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "Chênh lệch ca cần đối soát2 ca chưa đối soát trước hạn đóng 10:30 · ảnh hưởng bàn giao quầy.Quầy POS · Đối soát ca · còn",
+      "className": "queue-item danger",
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(238, 242, 246) rgb(23, 32, 51) rgb(23, 32, 51) rgb(180, 35, 24)",
+      "radius": "0px",
+      "fontWeight": "400",
+      "width": 296,
+      "height": 141
+    },
+    {
+      "text": "",
+      "className": "queue-icon",
+      "color": "rgb(180, 35, 24)",
+      "background": "rgb(253, 237, 236)",
+      "border": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "fontWeight": "400",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "Công nợ quá hạn cần theo dõi8.450.000 ₫ đã quá hạn · cần chốt người phụ trách liên hệ trong hôm nay.Công nợ phải thu · đ",
+      "className": "queue-item warning",
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(238, 242, 246) rgb(23, 32, 51) rgb(23, 32, 51) rgb(152, 95, 10)",
+      "radius": "0px",
+      "fontWeight": "400",
+      "width": 296,
+      "height": 160
+    },
+    {
+      "text": "",
+      "className": "queue-icon",
+      "color": "rgb(152, 95, 10)",
+      "background": "rgb(255, 244, 229)",
+      "border": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "fontWeight": "400",
+      "width": 32,
+      "height": 32
+    }
+  ],
+  "themeButton": 1,
+  "forbidden": [],
+  "nativeSelect": 0,
+  "title": "Cenio Sales — Tổng quan vận hành"
+}

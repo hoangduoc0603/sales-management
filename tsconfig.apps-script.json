@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "baseUrl": ".",
+    "lib": ["ES2020"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@shared/*": ["shared/*"]
+    },
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2020",
+    "types": ["google-apps-script"]
+  },
+  "include": ["apps-script/**/*.ts", "shared/**/*.ts"]
+}
