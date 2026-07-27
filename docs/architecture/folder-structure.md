@@ -28,6 +28,7 @@ apps-script/
     infrastructure/  # Adapter Google Workspace và hạ tầng kỹ thuật
       google-workspace/ # SheetGateway, DriveGateway, RuntimeConfigStore và Apps Script Lock provider production seam
     repositories/    # Đọc/ghi dữ liệu qua các adapter
+      platform/      # Repository nền tảng và repository primitive dùng chung qua SheetGateway
       catalog/       # Repository danh mục, variant, barcode, unit và chính sách thương mại
       crm/           # Repository khách hàng, nhóm khách và duplicate lookup
       finance/       # Repository Payment, CashTransaction, Allocation, Shift và công nợ
@@ -134,6 +135,7 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `apps-script/src/services/sales/` | Use case POS draft, checkout complete, receipt snapshot và điều phối Sales -> Catalog -> Inventory -> Finance | Repository mapping, React UI hoặc trực tiếp Google Workspace adapter |
 | `apps-script/src/services/reporting/` | Use case DashboardProjection, report query envelope, metadata coverage, export run và sensitive-field filtering | Ledger nguồn nghiệp vụ, UI dashboard hoặc worker Drive export thật |
 | `apps-script/src/repositories/` | Đọc/ghi và ánh xạ dữ liệu nghiệp vụ qua các adapter hạ tầng | Quy tắc nghiệp vụ hoặc UI |
+| `apps-script/src/repositories/platform/` | Repository nền tảng như auth/command/registry/admin và primitive repository dùng chung qua `SheetGateway`; không gọi trực tiếp Apps Script API | Rule nghiệp vụ domain, hard-code spreadsheet/sheet/header/row number hoặc UI |
 | `apps-script/src/repositories/catalog/` | Repository Catalog/Commercial qua adapter hạ tầng; hiện có in-memory seam cho test/local | Rule quote, permission hoặc UI |
 | `apps-script/src/repositories/crm/` | Repository Customer/CustomerGroup và duplicate lookup qua adapter hạ tầng; hiện có in-memory seam | Rule gộp khách, công nợ hoặc UI |
 | `apps-script/src/repositories/finance/` | Repository Payment, CashTransaction, Allocation, Obligation, Credit và Shift; hiện có in-memory seam cho test/local | Rule phân bổ, reversal, ca hoặc UI |

@@ -4,6 +4,8 @@ import type {
   VariantBarcodeDTO,
   VariantDTO,
 } from '@shared/contracts/catalog/catalog';
+import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { AppendOnlySheetRecordGateway } from '../platform/sheet-record-repository';
 
 export interface CatalogRepository {
   findVariantBySkuNormalized(skuNormalized: string): VariantDTO | undefined;
@@ -52,4 +54,153 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
 
 function clone<T>(value: T): T {
   return { ...value };
+}
+
+export interface SheetCatalogRepositoryDependencies {
+  gateway: AppendOnlySheetRecordGateway;
+  tableDefinitions: readonly TableDefinitionDTO[];
+}
+
+export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDependencies): CatalogRepository {
+  const products = createVersionedSheetTable<ProductDTO>({
+    gateway: deps.gateway,
+    table: findTable(deps.tableDefinitions, 'Product'),
+    idField: 'productId',
+  });
+  const variants = createVersionedSheetTable<VariantDTO>({
+    gateway: deps.gateway,
+    table: findTable(deps.tableDefinitions, 'Variant'),
+    idField: 'variantId',
+  });
+  const barcodes = createVersionedSheetTable<VariantBarcodeDTO>({
+    gateway: deps.gateway,
+    table: findTable(deps.tableDefinitions, 'VariantBarcode'),
+    idField: 'barcodeId',
+  });
+  const unitVersions = createVersionedSheetTable<UnitConversionVersionDTO>({
+    gateway: deps.gateway,
+    table: findTable(deps.tableDefinitions, 'UnitConversionVersion'),
+    idField: 'unitVersionId',
+  });
+
+  return {
+    findVariantBySkuNormalized(skuNormalized) {
+      return variants.list().find((variant) => variant.skuNormalized === skuNormalized);
+    },
+    findBarcodeByNormalized(barcodeNormalized) {
+      return barcodes.list().find((barcode) => barcode.barcodeNormalized === barcodeNormalized);
+    },
+    listProducts: () => products.list(),
+    listVariants: () => variants.list(),
+    listBarcodes: () => barcodes.list(),
+    listUnitVersions: () => unitVersions.list(),
+    saveProduct(product) {
+      products.save(product);
+    },
+    saveVariant(variant) {
+      variants.save(variant);
+    },
+    saveBarcode(barcode) {
+      barcodes.save(barcode);
+    },
+    saveUnitVersion(unitVersion) {
+      unitVersions.save(unitVersion);
+    },
+  };
+}
+
+interface VersionedSheetTableDependencies<TRecord extends object> {
+  gateway: AppendOnlySheetRecordGateway;
+  table: TableDefinitionDTO;
+  idField: keyof TRecord & string;
+}
+
+interface VersionedSheetTable<TRecord extends object> {
+  list(): TRecord[];
+  save(record: TRecord): void;
+}
+
+interface VersionedSheetRow extends Record<string, unknown> {
+  id: string;
+  schemaVersion: number;
+  recordVersion: number;
+}
+
+function createVersionedSheetTable<TRecord extends object>(
+  deps: VersionedSheetTableDependencies<TRecord>,
+): VersionedSheetTable<TRecord> {
+  function readRows(): VersionedSheetRow[] {
+    return deps.gateway.readTable({ table: deps.table }).map((row) => deepClone(row) as VersionedSheetRow);
+  }
+
+  function latestRows(): VersionedSheetRow[] {
+    const latestByRecordId = new Map<string, VersionedSheetRow>();
+    for (const row of readRows()) {
+      const recordId = String(row[deps.idField] ?? '');
+      if (recordId === '') continue;
+      const current = latestByRecordId.get(recordId);
+      if (current === undefined || getRecordVersion(row) > getRecordVersion(current)) {
+        latestByRecordId.set(recordId, row);
+      }
+    }
+    return [...latestByRecordId.values()];
+  }
+
+  return {
+    list() {
+      return latestRows().map((row) => stripSheetMetadata(row) as TRecord);
+    },
+    save(record) {
+      const recordData = deepClone(record) as Record<string, unknown>;
+      const recordId = String(recordData[deps.idField] ?? '');
+      if (recordId.trim() === '') {
+        throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
+      }
+      const nextVersion =
+        readRows()
+          .filter((row) => String(row[deps.idField] ?? '') === recordId)
+          .reduce((max, row) => Math.max(max, getRecordVersion(row)), 0) + 1;
+      deps.gateway.appendRows({
+        table: deps.table,
+        rows: [
+          {
+            ...recordData,
+            id: `${recordId}:v${nextVersion}`,
+            schemaVersion: deps.table.schemaVersion,
+            recordVersion: nextVersion,
+          },
+        ],
+      });
+    },
+  };
+}
+
+function findTable(definitions: readonly TableDefinitionDTO[], tableName: string): TableDefinitionDTO {
+  const table = definitions.find((definition) => definition.tableName === tableName);
+  if (table === undefined) {
+    throw new Error(`Missing catalog table definition: ${tableName}`);
+  }
+  return table;
+}
+
+function getRecordVersion(row: VersionedSheetRow): number {
+  if (typeof row.recordVersion === 'number') return row.recordVersion;
+  const parsedRecordVersion = Number(row.recordVersion);
+  if (Number.isFinite(parsedRecordVersion) && parsedRecordVersion > 0) return parsedRecordVersion;
+  const match = /:v(\d+)$/.exec(row.id);
+  return match === null ? 0 : Number(match[1]);
+}
+
+function stripSheetMetadata(row: VersionedSheetRow): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (key !== 'id' && key !== 'schemaVersion' && key !== 'recordVersion') {
+      record[key] = value;
+    }
+  }
+  return deepClone(record);
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
