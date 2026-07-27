@@ -13,6 +13,7 @@
     "check:artifact": "node scripts/verify-apps-script-artifact.mjs",
     "deploy:push": "node scripts/deploy-push.mjs",
     "lint": "eslint \"{apps-script,shared,tests,web}/**/*.{ts,tsx}\"",
+    "release:readiness": "node scripts/release-readiness.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.apps-script.json --noEmit",
     "verify": "node scripts/verify-structure.mjs && npm run typecheck && npm run lint && npm test && npm run build && npm run check:artifact"

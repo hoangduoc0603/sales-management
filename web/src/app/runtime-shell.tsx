@@ -12,6 +12,7 @@ export function RuntimeShell({ runtimeMode, apiClient }: RuntimeShellProps) {
   const client = useMemo(() => apiClient ?? createRuntimeApiClient(), [apiClient]);
   const mode = runtimeMode ?? detectRuntimeApiMode();
   const [sessionToken, setSessionToken] = useState<string>();
+  const [localPassword, setLocalPassword] = useState('admin123');
   const [isRunning, setIsRunning] = useState(false);
   const [output, setOutput] = useState<unknown>({
     message: 'Sẵn sàng test local flow.',
@@ -23,13 +24,24 @@ export function RuntimeShell({ runtimeMode, apiClient }: RuntimeShellProps) {
     const result = await client.invoke<AuthLoginResponse>({
       operation: 'platform.auth.login',
       requestId: createRequestId('login'),
-      payload: { loginId: 'admin', password: 'admin123' },
+      payload: { loginId: 'admin', password: localPassword },
     });
 
     if (result.ok) {
       setSessionToken(result.data.sessionToken);
     }
 
+    setOutput(result);
+    setIsRunning(false);
+  }, [client, localPassword]);
+
+  const runBootstrapStatus = useCallback(async () => {
+    setIsRunning(true);
+    const result = await client.invoke({
+      operation: 'platform.bootstrap.getStatus',
+      requestId: createRequestId('bootstrap-status'),
+      payload: {},
+    });
     setOutput(result);
     setIsRunning(false);
   }, [client]);
@@ -39,6 +51,18 @@ export function RuntimeShell({ runtimeMode, apiClient }: RuntimeShellProps) {
     const result = await client.invoke({
       operation: 'platform.session.me',
       requestId: createRequestId('me'),
+      sessionToken,
+      payload: {},
+    });
+    setOutput(result);
+    setIsRunning(false);
+  }, [client, sessionToken]);
+
+  const runCurrentScope = useCallback(async () => {
+    setIsRunning(true);
+    const result = await client.invoke({
+      operation: 'platform.scope.getCurrent',
+      requestId: createRequestId('current-scope'),
       sessionToken,
       payload: {},
     });
@@ -57,6 +81,25 @@ export function RuntimeShell({ runtimeMode, apiClient }: RuntimeShellProps) {
     setOutput(result);
     setIsRunning(false);
   }, [client, sessionToken]);
+
+  const runChangePassword = useCallback(async () => {
+    setIsRunning(true);
+    const nextPassword = localPassword === 'admin123' ? 'admin1234' : 'admin123';
+    const result = await client.invoke({
+      operation: 'platform.auth.changeOwnPassword',
+      requestId: createRequestId('change-password'),
+      sessionToken,
+      payload: { currentPassword: localPassword, newPassword: nextPassword },
+    });
+
+    if (result.ok) {
+      setSessionToken(undefined);
+      setLocalPassword(nextPassword);
+    }
+
+    setOutput(result);
+    setIsRunning(false);
+  }, [client, localPassword, sessionToken]);
 
   const runLogout = useCallback(async () => {
     setIsRunning(true);
@@ -86,18 +129,27 @@ export function RuntimeShell({ runtimeMode, apiClient }: RuntimeShellProps) {
         <div className="grid gap-4 md:grid-cols-3">
           <InfoCard label="Backend mode" value={mode === 'local-fake' ? 'Local fake backend' : 'Apps Script'} />
           <InfoCard label="Session" value={sessionToken ? 'Đã đăng nhập' : 'Chưa đăng nhập'} />
-          <InfoCard label="Credential local" value="admin / admin123" />
+          <InfoCard label="Credential local" value={`admin / ${localPassword}`} />
         </div>
 
         <div className="flex flex-wrap gap-3">
+          <button className={secondaryButtonClassName} disabled={isRunning} onClick={runBootstrapStatus} type="button">
+            Gọi bootstrap status
+          </button>
           <button className={buttonClassName} disabled={isRunning} onClick={runLogin} type="button">
             Login admin local
           </button>
           <button className={buttonClassName} disabled={isRunning} onClick={runSessionMe} type="button">
             Gọi session.me
           </button>
+          <button className={buttonClassName} disabled={isRunning || !sessionToken} onClick={runCurrentScope} type="button">
+            Gọi current scope
+          </button>
           <button className={buttonClassName} disabled={isRunning} onClick={runRegistry} type="button">
             Gọi registry
+          </button>
+          <button className={secondaryButtonClassName} disabled={isRunning || !sessionToken} onClick={runChangePassword} type="button">
+            Đổi mật khẩu
           </button>
           <button className={secondaryButtonClassName} disabled={isRunning || !sessionToken} onClick={runLogout} type="button">
             Logout

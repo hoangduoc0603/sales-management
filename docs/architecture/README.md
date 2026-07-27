@@ -7,6 +7,8 @@ Các tài liệu tại đây mô tả Solution/System Design đã được phê 
 - [Runtime và hiệu năng](runtime-and-performance.md): POS fast path, cache, commit, lock, idempotency và worker.
 - [Bảo mật và truy cập](security-and-access.md): public Web App, identity nội bộ, session, permission và bảo vệ dữ liệu.
 - [Triển khai và vòng đời](deployment-and-lifecycle.md): bootstrap tenant, upgrade, migration, backup/restore và health.
+- [Deployment Runbook](deployment-runbook.md): checklist triển khai/customer installation, bootstrap, upgrade, backup trước migration và emergency restore.
+- [Release Hardening](release-hardening.md): release gates, P0/P1 gaps và evidence nghiệm thu.
 - [Detailed Design](detailed-design.md): convention LLD, package ownership, traceability và quality gate trước implementation.
 - [Platform technical design](platform-technical-design.md): typed RPC gateway, command protocol, error contract, worker và test seam.
 - [LLD modules](modules/): thiết kế chi tiết theo bounded context.

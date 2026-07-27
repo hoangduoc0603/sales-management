@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AuthLoginRequest } from '@shared/contracts/platform/auth';
+import type { AuthChangeOwnPasswordRequest, AuthLoginRequest } from '@shared/contracts/platform/auth';
 
 export const authLoginRequestSchema = z
   .object({
@@ -10,4 +10,15 @@ export const authLoginRequestSchema = z
 
 export function parseAuthLoginRequest(value: unknown): AuthLoginRequest {
   return authLoginRequestSchema.parse(value);
+}
+
+export const authChangeOwnPasswordRequestSchema = z
+  .object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(1),
+  })
+  .strict();
+
+export function parseAuthChangeOwnPasswordRequest(value: unknown): AuthChangeOwnPasswordRequest {
+  return authChangeOwnPasswordRequestSchema.parse(value);
 }

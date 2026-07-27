@@ -1,5 +1,11 @@
 import type { ApiErrorCode } from '@shared/contracts/errors';
-import type { AuthLoginRequest, AuthLoginResponse, SessionMeResponse } from '@shared/contracts/platform/auth';
+import type {
+  AuthChangeOwnPasswordRequest,
+  AuthChangeOwnPasswordResponse,
+  AuthLoginRequest,
+  AuthLoginResponse,
+  SessionMeResponse,
+} from '@shared/contracts/platform/auth';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { Clock } from '../../../api/api-context';
 import {
@@ -34,6 +40,23 @@ export interface SessionService {
   login(input: AuthLoginRequest): ServiceResult<AuthLoginResponse>;
   validateSession(sessionToken: string): ServiceResult<SessionMeResponse>;
   logout(sessionToken: string): ServiceResult<{ revoked: boolean }>;
+  changeOwnPassword(
+    sessionToken: string,
+    input: AuthChangeOwnPasswordRequest,
+  ): ServiceResult<AuthChangeOwnPasswordResponse>;
+  resetPassword(input: {
+    userId: string;
+    temporaryPassword: string;
+  }): ServiceResult<{ userId: string; authVersion: number; passwordChangeRequired: boolean }>;
+  disableUser(input: {
+    userId: string;
+  }): ServiceResult<{ userId: string; authVersion: number; disabled: boolean }>;
+  applyAccessChange(input: {
+    userId: string;
+    actions?: readonly string[];
+    branchIds?: readonly string[];
+    warehouseIds?: readonly string[];
+  }): ServiceResult<{ userId: string; authVersion: number; actions: readonly string[]; branchIds: readonly string[]; warehouseIds: readonly string[] }>;
   bumpAuthVersion(userId: string): void;
 }
 
@@ -161,6 +184,115 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
 
       return { ok: true, data: { revoked: true } };
     },
+    changeOwnPassword(sessionToken, input) {
+      const sessionResult = this.validateSession(sessionToken);
+
+      if (!sessionResult.ok) {
+        return sessionResult;
+      }
+
+      const user = deps.repository.findUserById(sessionResult.data.actor.userId);
+
+      if (user === undefined || user.disabled) {
+        return sessionExpired();
+      }
+
+      const currentPasswordOk = deps.passwordService.verifyPassword({
+        password: input.currentPassword,
+        verifier: user.passwordVerifier,
+      });
+
+      if (!currentPasswordOk) {
+        return invalidCredentials();
+      }
+
+      deps.repository.saveUser({
+        ...user,
+        authVersion: user.authVersion + 1,
+        passwordVerifier: deps.passwordService.createVerifier(input.newPassword),
+        passwordChangeRequired: false,
+        failedLoginCount: 0,
+        lockedUntil: undefined,
+      });
+
+      return { ok: true, data: { changed: true, sessionRevoked: true } };
+    },
+    resetPassword(input) {
+      const user = deps.repository.findUserById(input.userId);
+
+      if (user === undefined) {
+        return failure('INVALID_INPUT', 'Không tìm thấy user.');
+      }
+
+      const updatedUser = {
+        ...user,
+        authVersion: user.authVersion + 1,
+        passwordVerifier: deps.passwordService.createVerifier(input.temporaryPassword),
+        passwordChangeRequired: true,
+        failedLoginCount: 0,
+        lockedUntil: undefined,
+      };
+      deps.repository.saveUser(updatedUser);
+
+      return {
+        ok: true,
+        data: {
+          userId: updatedUser.userId,
+          authVersion: updatedUser.authVersion,
+          passwordChangeRequired: updatedUser.passwordChangeRequired,
+        },
+      };
+    },
+    disableUser(input) {
+      const user = deps.repository.findUserById(input.userId);
+
+      if (user === undefined) {
+        return failure('INVALID_INPUT', 'Không tìm thấy user.');
+      }
+
+      const updatedUser = {
+        ...user,
+        authVersion: user.authVersion + 1,
+        disabled: true,
+      };
+      deps.repository.saveUser(updatedUser);
+
+      return {
+        ok: true,
+        data: {
+          userId: updatedUser.userId,
+          authVersion: updatedUser.authVersion,
+          disabled: updatedUser.disabled,
+        },
+      };
+    },
+    applyAccessChange(input) {
+      const user = deps.repository.findUserById(input.userId);
+
+      if (user === undefined) {
+        return failure('INVALID_INPUT', 'Không tìm thấy user.');
+      }
+
+      const updatedUser = {
+        ...user,
+        authVersion: user.authVersion + 1,
+        actions: input.actions ?? user.actions,
+        branchIds: input.branchIds ?? user.branchIds,
+        warehouseIds: input.warehouseIds ?? user.warehouseIds,
+      };
+      deps.repository.saveUser(updatedUser);
+
+      return {
+        ok: true,
+        data: {
+          userId: updatedUser.userId,
+          authVersion: updatedUser.authVersion,
+          actions: updatedUser.actions,
+          branchIds: updatedUser.branchIds,
+          warehouseIds: updatedUser.warehouseIds,
+        },
+      };
+    },
     bumpAuthVersion(userId) {
       const user = deps.repository.findUserById(userId);
 
@@ -202,14 +334,36 @@ export function createAdminUserFixture(): UserAccountRecord {
     tenantId: 'tenant-default',
     authVersion: 1,
     disabled: false,
-    passwordChangeRequired: false,
+    passwordChangeRequired: true,
     passwordVerifier: 'test-verifier:admin123',
     failedLoginCount: 0,
     actions: [
       'platform.auth.logout',
+      'platform.auth.changeOwnPassword',
       'platform.session.view',
       'platform.command.view',
       'platform.registry.view',
+      'platform.scope.view',
+      'platform.warehouse.update',
+      'sales.draft.manage',
+      'sales.pos.complete',
+      'sales.order.view',
+      'sales.online.manage',
+      'sales.return.process',
+      'sales.warranty.manage',
+      'reporting.dashboard.view',
+      'reporting.report.view',
+      'reporting.export',
+      'operations.import.manage',
+      'operations.attachment.manage',
+      'operations.attachment.view',
+      'operations.audit.view',
+      'operations.audit.deliver',
+      'operations.backup.manage',
+      'operations.restore.manage',
+      'operations.health.view',
+      'operations.partition.manage',
+      'operations.runtime.cleanup',
     ],
     branchIds: ['branch-default'],
     warehouseIds: ['warehouse-default'],
@@ -231,6 +385,13 @@ function sessionExpired(): ServiceResult<never> {
   return {
     ok: false,
     error: { code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập đã hết hạn.' },
+  };
+}
+
+function failure(code: ApiErrorCode, message: string): ServiceResult<never> {
+  return {
+    ok: false,
+    error: { code, message },
   };
 }
 

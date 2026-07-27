@@ -28,6 +28,24 @@ Toàn bộ ứng dụng gồm nhiều bounded context độc lập: Platform, Ad
 
 Mỗi phase dưới đây phải được tách thành implementation plan chi tiết riêng trước khi code nếu phase có nhiều task hoặc thay đổi nhiều module. Plan chi tiết phải chỉ rõ file tạo/sửa, test fail/pass, acceptance scenario và command verify.
 
+## Implementation Tracking
+
+| Phase | Trạng thái | Detailed plan / bằng chứng |
+| --- | --- | --- |
+| Phase 0 — Baseline Audit | Hoàn thành | `npm run verify` pass trong các phase sau; technical foundation đã có trước master plan. |
+| Phase 1 — Platform Core | Hoàn thành theo slice in-memory/platform seam | [`2026-07-26-platform-core-phase-1.md`](2026-07-26-platform-core-phase-1.md) đã tick; verify pass. |
+| Phase 2 — Tenant Bootstrap & Administration Minimum | Hoàn thành phần bootstrap/admin minimum; full user management còn thuộc phase sau | [`2026-07-27-tenant-bootstrap-administration-minimum-phase-2.md`](2026-07-27-tenant-bootstrap-administration-minimum-phase-2.md) đã tick; verify pass. |
+| Phase 3 — UI Foundation | Hoàn thành AppShell/Auth, primitive UI nền và POS shell theo phạm vi foundation; domain POS thật thuộc các phase sau | [`2026-07-27-ui-foundation-app-shell-auth-phase-3.md`](2026-07-27-ui-foundation-app-shell-auth-phase-3.md) đã tick; verify pass. |
+| Phase 4 — Catalog, CRM & Commercial Core | Hoàn thành core contracts/service/projection/cache/UI shell; checkout stale conflict chờ Sales checkout phase | [`2026-07-27-catalog-crm-commercial-core-phase-4.md`](2026-07-27-catalog-crm-commercial-core-phase-4.md) đã tick; `npm run verify` và local browser smoke pass. |
+| Phase 5 — Inventory Ledger & Balance Core | Hoàn thành core movement/balance/reservation/return baseline; opening/lot/serial/transfer/stocktake còn là release scope gap | [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md) đã tick; verify pass. |
+| Phase 6 — Finance, Payment & Shift Core | Hoàn thành shift/payment/reversal/expense baseline; CashDrawer/PaymentMethod master và aging projection còn là release scope gap | [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md) đã tick; verify pass. |
+| Phase 7 — POS Checkout End-to-End | Hoàn thành POS local/UI/service baseline; orchestration/receipt/performance cần acceptance audit Phase 12 | [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md) đã tick; verify pass. |
+| Phase 8 — Sales Orders, Returns & Warranty | Hoàn thành sales/return/exchange/warranty baseline; deposit cancellation/attachment Drive/policy reversal còn là release scope gap | [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md) và [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md) đã tick; verify pass. |
+| Phase 9 — Purchasing & Supplier Operations | Hoàn thành purchasing backend baseline; purchasing UI/full production adapter thuộc release hardening | [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md) đã tick; verify pass. |
+| Phase 10 — Dashboard, Reporting & Export | Hoàn thành dashboard/report/export baseline; worker-backed export, drill-down resolver và archive coverage còn là release hardening gap | [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md) đã tick; verify pass. |
+| Phase 11 — Operations, Backup, Archive & Health | Hoàn thành operations baseline; Drive adapter, worker, retention, replacement restore và archive routing thật còn là release hardening gap | [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md) đã tick; verify pass. |
+| Phase 12 — Release Hardening & Acceptance | Local hardening gates đã chạy; release vẫn Blocked vì còn thiếu production/dry-run evidence | [`2026-07-27-release-hardening-acceptance-phase-12.md`](2026-07-27-release-hardening-acceptance-phase-12.md), `docs/architecture/release-hardening.md`. |
+
 ## Current Baseline
 
 Đã có technical foundation deployable:
@@ -53,11 +71,11 @@ Chưa có:
 | --- | --- | --- | --- | --- |
 | Sales Dashboard | `app-shell-dashboard.html` | `Approved` | Có | Có thể implement khi Reporting projection và scope metadata đủ contract. |
 | POS Checkout | `app-pos-checkout.html` | `Approved` | Có | Ưu tiên UI đầu tiên sau khi Platform + Catalog + Inventory + Finance đủ để checkout thật. |
-| Sales Orders / Returns / Warranty | `sales-orders-returns.html` | `Review` | Chưa | Chỉ code UI sau khi user duyệt và registry/handoff đổi `Approved`. |
-| Catalog / CRM / Commercial | `catalog-crm-commercial.html` | `Review` | Chưa | Backend/API có thể làm trước; UI chờ duyệt. |
-| Inventory / Purchasing | `inventory-purchasing.html` | `Review` | Chưa | Backend/API có thể làm trước; UI chờ duyệt. |
-| Finance / Shifts | `finance-shifts.html` | `Review` | Chưa | Backend/API có thể làm trước; UI chờ duyệt. |
-| Reporting / Administration / Operations | `reporting-administration-operations.html` | `Review` | Chưa | Backend/API có thể làm trước; UI quản trị chờ duyệt trừ Dashboard đã Approved. |
+| Sales Orders / Returns / Warranty | `sales-orders-returns.html` | `Approved` | Có | Code UI theo handoff khi phase Sales/Returns triển khai. |
+| Catalog / CRM / Commercial | `catalog-crm-commercial.html` | `Approved` | Có | Code UI theo handoff trong Phase 4 nếu cần surface local cho Catalog/CRM. |
+| Inventory / Purchasing | `inventory-purchasing.html` | `Approved` | Có | Code UI theo handoff khi phase Inventory/Purchasing triển khai. |
+| Finance / Shifts | `finance-shifts.html` | `Approved` | Có | Code UI theo handoff khi phase Finance/Shifts triển khai. |
+| Reporting / Administration / Operations | `reporting-administration-operations.html` | `Approved` | Có | Code UI theo handoff khi phase Reporting/Admin/Operations triển khai. |
 
 ## Repository Placement
 
@@ -94,12 +112,12 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Files:** Không tạo source mới nếu audit không phát hiện lỗi. Có thể cập nhật plan chi tiết nếu phát hiện thiếu gate.
 
-- [ ] Chạy `node scripts/verify-structure.mjs`.
-- [ ] Chạy `npm run typecheck`.
-- [ ] Chạy `npm run lint`.
-- [ ] Chạy `npm test`.
-- [ ] Chạy `npm run build && npm run check:artifact`.
-- [ ] Ghi lại mọi lỗi nền tảng vào plan sửa riêng trước khi sang Phase 1.
+- [x] Chạy `node scripts/verify-structure.mjs`.
+- [x] Chạy `npm run typecheck`.
+- [x] Chạy `npm run lint`.
+- [x] Chạy `npm test`.
+- [x] Chạy `npm run build && npm run check:artifact`.
+- [x] Ghi lại mọi lỗi nền tảng vào plan sửa riêng trước khi sang Phase 1.
 
 **Exit gate:** `npm run verify` pass hoặc có danh sách lỗi nền tảng rõ ràng đã được xử lý.
 
@@ -124,16 +142,16 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Viết operation registry với login public duy nhất; mọi operation khác yêu cầu session.
-- [ ] Tạo `ActorContext` và permission/scope resolver backend, không để frontend làm security boundary.
-- [ ] Implement session metadata: idle expiry 1 giờ, absolute expiry 8 giờ, revoke theo `authVersion`.
-- [ ] Implement login lockout: khóa 15 phút sau 5 lần sai.
-- [ ] Implement command journal: `Preparing`, `Committed`, `Failed`, retry cùng idempotency key trả outcome cũ.
-- [ ] Implement TableRegistry/header mapping/migration append-only; không hard-code header index.
-- [ ] Implement storage role + active partition locator cho Core/Runtime/Transaction/Audit.
-- [ ] Implement `AuditOutbox` write contract cho command bắt buộc audit.
-- [ ] Add sanitized telemetry meta: requestId, durationMs, stage timing, I/O summary.
-- [ ] Test permission/scope denial trước repository, session expiry/revoke, idempotency duplicate, migration idempotent, missing header, partition routing.
+- [x] Viết operation registry với login public duy nhất; mọi operation khác yêu cầu session.
+- [x] Tạo `ActorContext` và permission/scope resolver backend, không để frontend làm security boundary.
+- [x] Implement session metadata: idle expiry 1 giờ, absolute expiry 8 giờ, revoke theo `authVersion`.
+- [x] Implement login lockout: khóa 15 phút sau 5 lần sai.
+- [x] Implement command journal: `Preparing`, `Committed`, `Failed`, retry cùng idempotency key trả outcome cũ.
+- [x] Implement TableRegistry/header mapping/migration append-only; không hard-code header index.
+- [x] Implement storage role + active partition locator cho Core/Runtime/Transaction/Audit ở mức registry/seam in-memory của Phase 1.
+- [x] Implement `AuditOutbox` write contract cho command bắt buộc audit.
+- [x] Add sanitized telemetry meta: requestId, durationMs, stage timing, I/O summary.
+- [x] Test permission/scope denial trước repository, session expiry/revoke, idempotency duplicate, migration idempotent, missing header, partition routing.
 
 **Exit gate:** Có thể login bằng user seed trong fake repository, gọi query/mutation mẫu qua operation registry, command retry không duplicate, và toàn bộ test platform pass.
 
@@ -153,13 +171,13 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Tạo bootstrap command idempotent cho tenant mới: một Branch và một Warehouse mặc định.
-- [ ] Tạo admin mặc định với mật khẩu tạm một lần, bắt buộc đổi mật khẩu lần đầu.
-- [ ] Tạo role/permission baseline theo actor trong SRS.
-- [ ] Tạo login UI tối thiểu, không dùng Google account làm identity.
-- [ ] Tạo session provider, logout, auto idle timeout và absolute timeout.
-- [ ] Tạo Branch/Warehouse scope provider và chặn scope không hợp lệ.
-- [ ] Test không disable Warehouse khi còn blocker bằng fake blocker service.
+- [x] Tạo bootstrap command idempotent cho tenant mới: một Branch và một Warehouse mặc định.
+- [x] Tạo admin mặc định với mật khẩu tạm một lần, bắt buộc đổi mật khẩu lần đầu.
+- [x] Tạo role/permission baseline theo actor trong SRS.
+- [x] Tạo login UI tối thiểu, không dùng Google account làm identity.
+- [x] Tạo session provider, logout, auto idle timeout và absolute timeout.
+- [x] Tạo Branch/Warehouse scope provider và chặn scope không hợp lệ.
+- [x] Test không disable Warehouse khi còn blocker bằng fake blocker service.
 - [ ] Test reset password/disable/role change revoke session.
 
 **Exit gate:** App có thể bootstrap tenant, login admin, đổi mật khẩu, xem scope mặc định, logout và revoke session đúng.
@@ -179,13 +197,13 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Map token Cenio Core v0.6 vào CSS variables/Tailwind setup; không tạo palette cục bộ.
-- [ ] Implement custom Select/Listbox keyboard/focus state; không dùng native visual select.
-- [ ] Implement button loading rule: giữ label, chỉ thêm loading icon.
-- [ ] Implement theme toggle icon button ở header.
-- [ ] Implement restricted/loading/empty/error/scope/stale/archive/command state components.
-- [ ] Add UI tests cho theme, select interaction, command button no duplicate.
-- [ ] Chạy visual review cục bộ với artifact Approved trước khi dùng cho màn thật.
+- [x] Map token Cenio Core v0.6 vào CSS variables/Tailwind setup; không tạo palette cục bộ.
+- [x] Implement custom Select/Listbox keyboard/focus state; không dùng native visual select.
+- [x] Implement button loading rule: giữ label, chỉ thêm loading icon.
+- [x] Implement theme toggle icon button ở header.
+- [x] Implement restricted/loading/empty/error/scope/stale/archive/command state components ở mức primitive `StateBlock`; state nghiệp vụ cụ thể sẽ gắn theo từng màn/module.
+- [x] Add UI tests cho theme, select interaction, command button no duplicate ở mức primitive/app shell.
+- [x] Đối chiếu artifact Approved trước khi dựng shell màn thật: Dashboard `app-shell-dashboard.html`, POS `app-pos-checkout.html`; visual QA chi tiết vẫn thực hiện theo từng màn domain khi nối dữ liệu thật.
 
 **Exit gate:** Component layer có thể dựng AppShell, Dashboard skeleton và POS shell theo Cenio Core ở light/dark.
 
@@ -206,14 +224,14 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement Variant là transaction unit duy nhất; product đơn giản tự có Default Variant.
-- [ ] Implement SKU/barcode normalized unique check trong command lock.
-- [ ] Implement UnitConversionVersion và effective range.
-- [ ] Implement PriceList/PriceRule publish guard chống conflict.
-- [ ] Implement deterministic quote: product price -> branch price -> customer group price -> one best automatic promotion -> voucher/point.
-- [ ] Implement `CatalogPosProjection` theo Branch/Warehouse/version, không chứa cost/supplier/secret.
-- [ ] Implement customer quick create, duplicate warning và customer group snapshot source.
-- [ ] Test scan/search no backend per keystroke khi cache warm.
+- [x] Implement Variant là transaction unit duy nhất; product đơn giản tự có Default Variant.
+- [x] Implement SKU/barcode normalized unique check trong command lock.
+- [x] Implement UnitConversionVersion và effective range.
+- [x] Implement PriceList/PriceRule publish guard chống conflict.
+- [x] Implement deterministic quote: product price -> branch price -> customer group price -> one best automatic promotion -> voucher/point.
+- [x] Implement `CatalogPosProjection` theo Branch/Warehouse/version, không chứa cost/supplier/secret.
+- [x] Implement customer quick create, duplicate warning và customer group snapshot source.
+- [x] Test scan/search no backend per keystroke khi cache warm.
 - [ ] Test price/promotion stale conflict cho checkout.
 
 **Exit gate:** POS có thể tải cache catalog 10.000 SKU/variant trong profile test, scan/search local đạt budget, quote trả kết quả deterministic và conflict code ổn định.
@@ -232,14 +250,16 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement quantity milli-unit và value VND integer.
-- [ ] Implement moving weighted average cost theo Warehouse + Variant.
-- [ ] Implement `InventoryMovement` append-only và `InventoryBalance` projection batch update.
+- [x] Implement quantity milli-unit và value VND integer.
+- [x] Implement moving weighted average cost theo Warehouse + Variant.
+- [x] Implement `InventoryMovement` append-only và `InventoryBalance` projection batch update.
 - [ ] Implement opening balance/import-safe flow; không ghi trực tiếp balance.
-- [ ] Implement `issueForSale`, `reserve`, `release`, `receive`, `return.receive/resolve`.
+- [x] Implement `issueForSale`, `reserve`, `release`, `receive`, `return.receive/resolve`.
 - [ ] Implement lot FEFO và serial state guard.
 - [ ] Implement transfer state và stocktake state.
 - [ ] Test two receipts average cost, issue value rounding, concurrent last stock, expired lot, serial uniqueness, negative stock approval.
+
+**Tracking hiện tại:** Core receive/issue/reserve/release/return quarantine/restock, table registry, API composition, local fake backend và Inventory/Purchasing UI shell đã triển khai trong [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md). Opening/import-safe flow, lot/serial guard, transfer/stocktake state và full concurrency/performance matrix vẫn để mở cho các slice sau.
 
 **Exit gate:** Backend có thể tăng/giảm/reserve tồn qua command, balance đối soát được từ movement, không có đường sửa số dư trực tiếp.
 
@@ -259,12 +279,14 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 **Steps:**
 
 - [ ] Implement CashDrawer/PaymentMethod master.
-- [ ] Implement `finance.shift.open/close/lock` và policy một cashier/một drawer.
-- [ ] Implement `finance.payment.record` với nhiều allocation.
+- [x] Implement `finance.shift.open/close/lock` và policy một cashier/một drawer.
+- [x] Implement `finance.payment.record` với nhiều allocation.
 - [ ] Implement receivable/payable obligation ledger và aging projection.
-- [ ] Implement payment reversal/counter-transaction, không sửa payment gốc.
-- [ ] Implement expense approval tạo disbursement/cash transaction.
-- [ ] Test POS thiếu ca bị chặn, partial payment tạo receivable, overpayment tạo credit, reversal không sửa nguồn.
+- [x] Implement payment reversal/counter-transaction, không sửa payment gốc.
+- [x] Implement expense approval tạo disbursement/cash transaction.
+- [x] Test POS thiếu ca bị chặn, partial payment tạo receivable, overpayment tạo credit, reversal không sửa nguồn.
+
+**Tracking hiện tại:** Shift open/close/lock, payment record multi-allocation, receivable partial/settled, overpayment customer credit, reversal, expense cash transaction, POS missing-shift integration test, TableRegistry, API composition, local fake backend và Finance/Shifts UI shell đã triển khai trong [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md) và Phase 7. CashDrawer/PaymentMethod management commands, payable aging đầy đủ và finance performance/concurrency matrix vẫn để mở cho các slice sau.
 
 **Exit gate:** POS command có thể gọi Finance để ghi payment/AR/shift an toàn trong cùng command.
 
@@ -284,17 +306,19 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement browser cart local state; scan/search/add/change quantity không RPC khi cache warm.
-- [ ] Implement explicit `saveDraft`, `openDraft`, `cancelDraft`; không autosave.
+- [x] Implement browser cart local state; scan/search/add/change quantity không RPC khi cache warm.
+- [x] Implement explicit `saveDraft`, `openDraft`, `cancelDraft`; không autosave.
 - [ ] Implement POS checkout command with Sales -> Catalog -> Inventory -> Finance -> CRM orchestration.
 - [ ] Revalidate scope, shift, quote, stock, lot/serial, credit, tender total và idempotency trong commit.
 - [ ] Return structured conflict: `PRICE_CHANGED`, `PROMOTION_CHANGED`, `INSUFFICIENT_STOCK`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED`.
 - [ ] Return immutable receipt snapshot for K80/A4 browser print; print/reprint không tạo ledger.
-- [ ] Implement POS UI from `app-pos-checkout.html` only after opening artifact/local preview.
+- [x] Implement POS UI from `app-pos-checkout.html` only after opening artifact/local preview.
 - [ ] Test full payment, partial payment, insufficient stock, missing serial, quote conflict, timeout retry, duplicate prevention, print no-ledger.
 - [ ] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
 
 **Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + AuditOutbox một lần, receipt in được và retry không duplicate.
+
+**Tracking hiện tại:** Phase 7 baseline đã triển khai trong [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md): Sales contracts/schema, in-memory repository/service, API operations, TableRegistry Sales, local cart state, local fake backend Sales, POS UI interactive, full payment, partial receivable, insufficient stock, missing shift, price stale conflict và idempotency duplicate prevention. CRM policy ledger, lot/serial backend guard đầy đủ, credit policy, đủ toàn bộ conflict code runtime, print/reprint UI action không tạo ledger, timeout recovery và benchmark p95/p99 vẫn để mở.
 
 ## Phase 8: Sales Orders, Manual Online, Return & Warranty
 
@@ -306,16 +330,19 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement SaleOrder list/detail query theo Branch/Warehouse/status/date partition.
-- [ ] Implement online manual lifecycle: Draft -> Confirmed -> Packing -> Shipped -> Delivered.
-- [ ] Implement reservation ở Confirmed, issue/revenue/AR ở Shipped, Delivered không ledger lần hai.
-- [ ] Implement cancel trước Shipped và deposit credit/refund behavior.
-- [ ] Implement return by source, fast return permission, inspection Quarantine/Restock/Scrap.
-- [ ] Implement exchange as Return + new SaleOrder linked.
-- [ ] Implement WarrantyCase lifecycle and attachment references.
-- [ ] Test online reservation/cancel/ship/deliver, return max quantity, fast return denial, exchange net settlement, warranty serial trace.
+- [x] Implement SaleOrder list/detail query theo Branch/Warehouse/status/date partition.
+- [x] Implement online manual lifecycle: Draft -> Confirmed -> Packing -> Shipped -> Delivered.
+- [x] Implement reservation ở Confirmed, issue/revenue/AR ở Shipped, Delivered không ledger lần hai.
+- [x] Implement cancel trước Shipped.
+- [ ] Implement deposit credit/refund behavior khi hủy đơn có đặt cọc.
+- [x] Implement return by source, fast return permission, inspection Quarantine/Restock/Scrap.
+- [x] Implement exchange as Return + new SaleOrder linked.
+- [x] Implement WarrantyCase lifecycle and attachment references.
+- [x] Test online reservation/cancel/ship/deliver, return max quantity, fast return denial, exchange net settlement, warranty serial trace.
 
 **Exit gate:** Chứng từ bán và hậu mãi giữ bất biến lịch sử, mọi sửa sai đi qua return/reversal/adjustment.
+
+**Tracking hiện tại:** Phase 8 baseline đã triển khai trong [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md), bổ sung Phase 8B trong [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md): Sales order list/detail query, online `Draft -> Confirmed -> Packing -> Shipped -> Delivered`, reservation ở Confirmed, release+issue+receivable ở Shipped, Delivered không tạo ledger lần hai, cancel trước Shipped baseline, return theo đơn gốc vào Quarantine/Restock/KeepQuarantine/Scrap, return refund/customer credit, fast-return denial, exchange = Return + SaleOrder mới liên kết với net settlement, WarrantyCase open/transition kèm attachment IDs, API/local fake backend và UI shell `orders` theo handoff Approved. Deposit credit/refund thật khi hủy đơn có đặt cọc, attachment Drive flow, CRM policy reversal đầy đủ và performance benchmark vẫn để mở.
 
 ## Phase 9: Purchasing & Supplier Operations
 
@@ -327,15 +354,19 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement Supplier master và supplier status.
-- [ ] Implement PO lifecycle; PO không tạo tồn/cost/payable.
-- [ ] Implement GoodsReceipt approval tạo Inventory receive + Payable + AuditOutbox.
-- [ ] Implement landed cost allocation exact reconciliation.
-- [ ] Implement late cost split: on-hand allocated value và `PurchaseCostVariance` cho phần đã bán.
-- [ ] Implement SupplierReturn limit by receipt less returned quantity.
-- [ ] Test partial receipt, lot/serial receipt rejection, late cost split, supplier return settlement, payment allocation multi-receipt.
+- [x] Implement Supplier master và supplier status.
+- [x] Implement PO lifecycle; PO không tạo tồn/cost/payable.
+- [x] Implement GoodsReceipt approval tạo Inventory receive + Payable.
+- [x] Implement landed cost allocation exact reconciliation.
+- [x] Implement late cost split: on-hand allocated value và `PurchaseCostVariance` cho phần đã bán.
+- [x] Implement SupplierReturn limit by receipt less returned quantity.
+- [x] Implement SupplierReturn `ReducePayable`, `Refund`, `Replacement` và SupplierPrepayment behavior.
+- [x] Implement Purchasing AuditOutbox cho GoodsReceipt/SupplierReturn approval.
+- [x] Test partial receipt, lot/serial receipt rejection, late cost split, supplier return ReducePayable settlement, payment allocation multi-receipt.
 
 **Exit gate:** Nhập hàng và chi phí mua thay đổi tồn/cost/payable bằng chứng từ duyệt, không sửa receipt hoặc COGS lịch sử.
+
+**Tracking hiện tại:** Phase 9 backend đã triển khai trong [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md): Supplier master/status, PO lifecycle no-ledger, GoodsReceipt approval tạo Inventory `PurchaseReceipt` + Finance Payable + AuditOutbox, landed cost snapshot, late cost split theo ADR 0015, SupplierReturn `ReducePayable` tạo Inventory `PurchaseReturn` + giảm payable, SupplierReturn `Refund` tạo SupplierPrepayment, SupplierReturn `Replacement` không chỉnh payable/prepayment, SupplierReturn approval tạo AuditOutbox, lot/serial receipt rejection, supplier payment allocation nhiều receipt, API composition và local fake backend đã có contract/service/test. Purchasing UI chưa triển khai do còn chờ UI gate theo design/handoff Approved.
 
 ## Phase 10: Dashboard, Reporting & Export
 
@@ -353,15 +384,18 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement report query envelope: reportId, dateField, date range, scope, filters, cursor/page size, asOf.
-- [ ] Implement DashboardProjection theo Branch/date bucket; không quét ledger/document toàn kỳ khi mở dashboard.
-- [ ] Implement metadata `generatedAt`, `asOf`, `partitionCoverage`, `archiveIncluded`.
-- [ ] Backend loại sensitive COGS/profit trước projection/export khi thiếu permission.
-- [ ] Implement export small/large routing: small sync ngoài lock, large worker/checkpoint.
-- [ ] Implement Sales Dashboard UI từ `app-shell-dashboard.html`, không thêm recent activity thật nếu chưa có query/projection contract.
-- [ ] Test scope denial, archive coverage partial, sensitive field removed, drill-down token revalidates permission, export không giữ ScriptLock.
+- [x] Implement report query envelope: reportId, dateField, date range, scope, filters, cursor/page size, asOf.
+- [x] Implement DashboardProjection theo Branch/date bucket; không quét ledger/document toàn kỳ khi mở dashboard.
+- [x] Implement metadata `generatedAt`, `asOf`, `partitionCoverage`, `archiveIncluded`.
+- [x] Backend loại sensitive COGS/profit trước projection/export khi thiếu permission.
+- [x] Implement export small/large routing: small sync ngoài lock, large worker/checkpoint baseline.
+- [x] Implement Sales Dashboard UI từ `app-shell-dashboard.html`, không thêm recent activity thật nếu chưa có query/projection contract.
+- [x] Test scope denial, sensitive field removed, API/local fake reporting operations và export routing baseline.
+- [ ] Test archive coverage partial, drill-down token revalidates permission, worker-backed export không giữ ScriptLock.
 
 **Exit gate:** Dashboard hiển thị đúng 4 KPI, chart, queue, manual order table, metadata freshness/coverage và restricted state từ backend.
+
+**Tracking hiện tại:** Phase 10A đã triển khai trong [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md): shared Reporting contracts/schema, `reporting.dashboard.get`, `reporting.report.query`, `reporting.export.request`, `reporting.export.getStatus`, in-memory DashboardProjection/ExportRun repository, service scope guard, sensitive-field filtering, API composition, local fake backend, và Sales Dashboard UI nối `reporting.dashboard.get` theo artifact Approved. Worker-backed export thật và drill-down token full resolver vẫn để mở.
 
 ## Phase 11: Import, Attachment, Audit, Backup, Restore, Archive & Health
 
@@ -377,10 +411,12 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [ ] Implement daily/manual backup manifest with checksums and retention 30 newest daily.
 - [ ] Implement restore prepare -> replacement resources -> Owner switch -> revoke sessions -> health check; không overwrite production.
 - [ ] Implement active partition capacity alert, create next partition, archive read-only routing.
-- [ ] Implement runtime TTL cleanup only for technical expired data, never business/audit/ledger history.
+- [x] Implement runtime TTL cleanup only for technical expired data, never business/audit/ledger history.
 - [ ] Test import retry no duplicate, attachment permission, audit pending+delivered search, backup manifest checksum, restore switch, archive query routing.
 
 **Exit gate:** App có backup/restore/archive/health story đủ để bán một lần và vận hành dài hạn.
+
+**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Audit/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, audit search pending+delivered, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Các checkbox master còn mở vì cần production worker/Drive adapter/backup retention/restore replacement resources/session revoke/archive read-only routing thật.
 
 ## Phase 12: Full Release Hardening
 
@@ -390,14 +426,16 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 - [ ] Seed representative dataset: 1 Branch, 1 Warehouse, 1 cashier, 10.000 SKU/variant, transaction mix đại diện.
 - [ ] Benchmark POS cold/warm cache, scan, search, cart change, simple/complex checkout, timeout retry, concurrent checkout, report/export song song.
-- [ ] Run security review: session token not logged, password not stored/exported, scope cannot be bypassed, sensitive fields backend-gated.
+- [x] Run security review: session token not logged, password not stored/exported, scope cannot be bypassed, sensitive fields backend-gated.
 - [ ] Run migration dry-run on fresh tenant and upgraded tenant with backup before migration.
 - [ ] Run restore drill with replacement resources.
-- [ ] Run accessibility/keyboard checks for approved UI screens.
-- [ ] Run `npm run verify` and Apps Script artifact check.
-- [ ] Prepare deployment runbook and customer installation checklist.
+- [x] Run accessibility/keyboard checks for approved UI screens.
+- [x] Run `npm run verify` and Apps Script artifact check.
+- [x] Prepare deployment runbook and customer installation checklist.
 
 **Exit gate:** Baseline release đạt SRS acceptance trọng yếu, POS performance budget và deployment/restore drill thành công.
+
+**Tracking hiện tại:** Detailed plan Phase 12 đã tạo trong [`2026-07-27-release-hardening-acceptance-phase-12.md`](2026-07-27-release-hardening-acceptance-phase-12.md). Task 1 và Task 3 đã triển khai: `npm run release:readiness` hiện trả `Blocked` với P0/P1 gaps rõ ràng; `docs/architecture/release-hardening.md` và `docs/architecture/release-scope-baseline.md` đã phân loại gap release. Task 2 đã triển khai production adapter seam `SheetGateway`/`DriveGateway`/`RuntimeConfigStore`/`AppsScriptLockProvider` với contract tests, nhưng P0 persistence vẫn mở cho tới khi sellable repositories cutover và chạy drill với tài nguyên thật. Task 4 đã triển khai cross-domain acceptance harness qua `createApiComposition().invoke(...)` cho bootstrap/auth/POS/dashboard, online/receivable/return, purchasing/payable/payment và backup/restore/health. Task 5 đã triển khai POS performance local baseline cho 10.000 variants, warm scan/search/cart và checkout local in-memory. Task 6 đã triển khai security review baseline cho authVersion revoke, secret sanitization, scope và sensitive-field filtering. Task 7 đã triển khai worker/backup/restore/archive local baseline cho lease/checkpoint/retry, backup retention, replacement restore và archive read-only routing. Task 8 đã triển khai UI accessibility/Approved screen acceptance. Task 9 đã tạo deployment runbook/customer installation checklist và safety guard cho `.clasp.json`. Task 10 đã chạy `npm run verify`, `npm run release:readiness` và POS benchmark targeted; release vẫn `Blocked` do thiếu production/dry-run evidence: repository cutover qua adapter thật, Apps Script POS benchmark, scheduled trigger/Drive-Sheets drill, deployment migration dry-run và restore replacement-resource drill.
 
 ## Recommended Execution Order
 
@@ -435,4 +473,4 @@ Không có blocker cho Implementation Planning tổng thể. Các quyết địn
 
 ## First Next Action
 
-Bước code đầu tiên nên là tạo plan chi tiết `platform-core`, rồi triển khai Phase 1. Không nên bắt đầu từ POS UI hoặc Dashboard UI vì hiện backend chưa có auth/session/permission/registry/command/projection để cấp dữ liệu thật.
+Bước tiếp theo nên là tạo Apps Script test project local-only (`.clasp.json` không commit), rồi chạy deployment dry-run và restore drill theo [`deployment-runbook.md`](../../architecture/deployment-runbook.md). Nếu chưa có test project, tiếp tục code phần cutover production repositories/scheduled trigger để gỡ các P0 còn lại trước khi dry-run.

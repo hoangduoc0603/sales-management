@@ -28,3 +28,13 @@ export interface SessionMeResponse {
   idleExpiresAt: string;
   absoluteExpiresAt: string;
 }
+
+export interface AuthChangeOwnPasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface AuthChangeOwnPasswordResponse {
+  changed: boolean;
+  sessionRevoked: boolean;
+}

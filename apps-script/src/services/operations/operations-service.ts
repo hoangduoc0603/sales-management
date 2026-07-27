@@ -1,0 +1,537 @@
+import type { ApiErrorCode } from '@shared/contracts/errors';
+import type {
+  AttachmentAccessRequest,
+  AttachmentAccessResponse,
+  AttachmentCompleteRequest,
+  AttachmentCompleteResponse,
+  AuditDeliveryRequest,
+  AuditDeliveryResponse,
+  AuditEventDTO,
+  AuditSearchRequest,
+  AuditSearchResponse,
+  BackupListResponse,
+  BackupManifestDTO,
+  BackupRequest,
+  BackupResponse,
+  HealthCheckRequest,
+  HealthCheckResponse,
+  ImportCommitRequest,
+  ImportCommitResponse,
+  ImportTemplateRequest,
+  ImportTemplateResponse,
+  ImportUploadRequest,
+  ImportUploadResponse,
+  ImportValidateRequest,
+  ImportValidateResponse,
+  PartitionCapacityRequest,
+  PartitionCapacityResponse,
+  RestorePrepareRequest,
+  RestorePrepareResponse,
+  RestoreSwitchRequest,
+  RestoreSwitchResponse,
+  RuntimeCleanupRequest,
+  RuntimeCleanupResponse,
+} from '@shared/contracts/operations/operations';
+import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type { AuditOutboxRepository } from '../../repositories/platform/audit-outbox-repository';
+import type {
+  OperationsPartitionRecord,
+  OperationsRepository,
+  RuntimeRecord,
+} from '../../repositories/operations/operations-repository';
+
+type OperationsServiceResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: ApiErrorCode; message: string } };
+
+export interface OperationsService {
+  getImportTemplate(input: { actor: ActorContextDTO; request: ImportTemplateRequest }): OperationsServiceResult<ImportTemplateResponse>;
+  uploadImport(input: { actor: ActorContextDTO; request: ImportUploadRequest }): OperationsServiceResult<ImportUploadResponse>;
+  validateImport(input: { actor: ActorContextDTO; request: ImportValidateRequest }): OperationsServiceResult<ImportValidateResponse>;
+  commitImport(input: { actor: ActorContextDTO; request: ImportCommitRequest }): OperationsServiceResult<ImportCommitResponse>;
+  completeAttachment(input: { actor: ActorContextDTO; request: AttachmentCompleteRequest }): OperationsServiceResult<AttachmentCompleteResponse>;
+  downloadAttachment(input: { actor: ActorContextDTO; request: AttachmentAccessRequest }): OperationsServiceResult<AttachmentAccessResponse>;
+  searchAudit(input: { actor: ActorContextDTO; request: AuditSearchRequest }): OperationsServiceResult<AuditSearchResponse>;
+  deliverAudit(input: { actor: ActorContextDTO; request: AuditDeliveryRequest }): OperationsServiceResult<AuditDeliveryResponse>;
+  requestBackup(input: { actor: ActorContextDTO; request: BackupRequest }): OperationsServiceResult<BackupResponse>;
+  listBackups(input: { actor: ActorContextDTO }): OperationsServiceResult<BackupListResponse>;
+  prepareRestore(input: { actor: ActorContextDTO; request: RestorePrepareRequest }): OperationsServiceResult<RestorePrepareResponse>;
+  switchRestore(input: { actor: ActorContextDTO; request: RestoreSwitchRequest }): OperationsServiceResult<RestoreSwitchResponse>;
+  checkHealth(input: { actor: ActorContextDTO; request: HealthCheckRequest }): OperationsServiceResult<HealthCheckResponse>;
+  ensureNextPartition(input: { actor: ActorContextDTO; request: PartitionCapacityRequest }): OperationsServiceResult<PartitionCapacityResponse>;
+  cleanupExpiredRuntimeData(input: { actor: ActorContextDTO; request: RuntimeCleanupRequest }): OperationsServiceResult<RuntimeCleanupResponse>;
+}
+
+export interface OperationsServiceDependencies {
+  repository: OperationsRepository;
+  auditOutboxRepository: AuditOutboxRepository;
+  tenantId: string;
+  appVersion: string;
+  schemaVersion: number;
+  now: () => Date;
+  newId(prefix: string): string;
+}
+
+const importTemplateColumns: Record<ImportTemplateRequest['importType'], readonly string[]> = {
+  Catalog: ['sku', 'name', 'unit', 'unitPriceVnd'],
+  Customer: ['customerCode', 'displayName', 'phone'],
+  Supplier: ['supplierCode', 'displayName', 'phone'],
+  OpeningInventory: ['warehouseId', 'sku', 'quantity', 'unitCostVnd'],
+};
+
+export function createOperationsService(deps: OperationsServiceDependencies): OperationsService {
+  return {
+    getImportTemplate(input) {
+      const permissionError = requireAction(input.actor, 'operations.import.manage');
+      if (permissionError !== undefined) return permissionError;
+
+      return {
+        ok: true,
+        data: {
+          importType: input.request.importType,
+          schemaVersion: input.request.schemaVersion,
+          columns: importTemplateColumns[input.request.importType],
+        },
+      };
+    },
+    uploadImport(input) {
+      const permissionError = requireAction(input.actor, 'operations.import.manage');
+      if (permissionError !== undefined) return permissionError;
+
+      const batch = {
+        batchId: deps.newId('import-batch'),
+        importType: input.request.importType,
+        schemaVersion: input.request.schemaVersion,
+        actorId: input.actor.userId,
+        scopeKey: input.request.scopeKey,
+        status: 'Uploaded' as const,
+        rowCount: input.request.rowCount,
+        validCount: 0,
+        invalidCount: 0,
+        sourceFileName: input.request.fileName,
+        checksum: input.request.checksum,
+      };
+      deps.repository.saveImportBatch(batch);
+      return { ok: true, data: { batch } };
+    },
+    validateImport(input) {
+      const permissionError = requireAction(input.actor, 'operations.import.manage');
+      if (permissionError !== undefined) return permissionError;
+      const batch = deps.repository.getImportBatch(input.request.batchId);
+      if (batch === undefined) return failure('INVALID_INPUT', 'Không tìm thấy import batch.');
+
+      const seen = new Set<string>();
+      const rows = input.request.rows.map((row) => {
+        const errors: string[] = [];
+        if (seen.has(row.rowKey)) errors.push('Dòng trùng khóa trong cùng batch.');
+        seen.add(row.rowKey);
+        for (const [key, value] of Object.entries(row.payload)) {
+          if (typeof value === 'string' && value.trim() === '') {
+            errors.push(`Cột ${key} không được rỗng.`);
+          }
+        }
+
+        return {
+          stagingRowId: deps.newId('import-row'),
+          batchId: batch.batchId,
+          rowNumber: row.rowNumber,
+          rowKey: row.rowKey,
+          validationStatus: errors.length === 0 ? 'Valid' as const : 'Invalid' as const,
+          errors,
+          commitStatus: 'Pending' as const,
+          payload: row.payload,
+        };
+      });
+      const validCount = rows.filter((row) => row.validationStatus === 'Valid').length;
+      const invalidCount = rows.length - validCount;
+      const updatedBatch = {
+        ...batch,
+        status: validCount > 0 ? 'AwaitingConfirmation' as const : 'FailedValidation' as const,
+        rowCount: rows.length,
+        validCount,
+        invalidCount,
+      };
+      deps.repository.saveImportBatch(updatedBatch);
+      deps.repository.saveImportRows(batch.batchId, rows);
+      return { ok: true, data: { batch: updatedBatch, rows } };
+    },
+    commitImport(input) {
+      const permissionError = requireAction(input.actor, 'operations.import.manage');
+      if (permissionError !== undefined) return permissionError;
+      const batch = deps.repository.getImportBatch(input.request.batchId);
+      if (batch === undefined) return failure('INVALID_INPUT', 'Không tìm thấy import batch.');
+      const existingRows = deps.repository.listImportRows(batch.batchId);
+      const alreadyCommitted = batch.status === 'Completed';
+      if (alreadyCommitted) {
+        return {
+          ok: true,
+          data: {
+            batch,
+            committedRows: existingRows.filter((row) => row.commitStatus === 'Committed'),
+          },
+        };
+      }
+      if (input.request.selectionMode === 'AllOrNothing' && existingRows.some((row) => row.validationStatus === 'Invalid')) {
+        return failure('INVALID_INPUT', 'Batch có dòng lỗi nên không thể commit theo chế độ AllOrNothing.');
+      }
+
+      const committedAt = deps.now().toISOString();
+      const rows = existingRows.map((row) => {
+        if (row.validationStatus !== 'Valid') {
+          return { ...row, commitStatus: 'Skipped' as const };
+        }
+        return {
+          ...row,
+          commitStatus: 'Committed' as const,
+          sourceObjectId: row.sourceObjectId ?? deps.newId(`imported-${batch.importType.toLowerCase()}`),
+        };
+      });
+      const updatedBatch = {
+        ...batch,
+        status: 'Completed' as const,
+        selectionMode: input.request.selectionMode,
+        committedAt,
+      };
+      deps.repository.saveImportRows(batch.batchId, rows);
+      deps.repository.saveImportBatch(updatedBatch);
+      return {
+        ok: true,
+        data: {
+          batch: updatedBatch,
+          committedRows: rows.filter((row) => row.commitStatus === 'Committed'),
+        },
+      };
+    },
+    completeAttachment(input) {
+      const permissionError = requireAction(input.actor, 'operations.attachment.manage');
+      if (permissionError !== undefined) return permissionError;
+      const scopeError = requireScope(input.actor, input.request);
+      if (scopeError !== undefined) return scopeError;
+
+      const attachment = {
+        attachmentId: deps.newId('attachment'),
+        objectType: input.request.objectType,
+        objectId: input.request.objectId,
+        branchId: input.request.branchId,
+        warehouseId: input.request.warehouseId,
+        driveFileId: input.request.driveFileId,
+        fileName: input.request.fileName,
+        mimeType: input.request.mimeType,
+        sizeBytes: input.request.sizeBytes,
+        checksum: input.request.checksum,
+        status: 'Available' as const,
+        uploadedBy: input.actor.userId,
+        uploadedAt: deps.now().toISOString(),
+      };
+      deps.repository.saveAttachment(attachment);
+      return { ok: true, data: { attachment } };
+    },
+    downloadAttachment(input) {
+      const permissionError = requireAction(input.actor, 'operations.attachment.view');
+      if (permissionError !== undefined) return permissionError;
+      const attachment = deps.repository.getAttachment(input.request.attachmentId);
+      if (attachment === undefined) return failure('INVALID_INPUT', 'Không tìm thấy file đính kèm.');
+      if (attachment.objectType !== input.request.objectType || attachment.objectId !== input.request.objectId) {
+        return failure('INVALID_INPUT', 'File đính kèm không khớp chứng từ nguồn.');
+      }
+      const scopeError = requireScope(input.actor, attachment);
+      if (scopeError !== undefined) return scopeError;
+      if (attachment.status !== 'Available') return failure('INVALID_INPUT', 'File đính kèm không khả dụng.');
+
+      return {
+        ok: true,
+        data: {
+          attachment,
+          accessToken: `attachment-access-token-${lastSegment(attachment.attachmentId)}`,
+          expiresAt: new Date(deps.now().getTime() + 5 * 60 * 1000).toISOString(),
+        },
+      };
+    },
+    searchAudit(input) {
+      const permissionError = requireAction(input.actor, 'operations.audit.view');
+      if (permissionError !== undefined) return permissionError;
+      const delivered = deps.repository.listAuditLogs();
+      const deliveredIds = new Set(delivered.map((event) => event.eventId));
+      const pending: AuditEventDTO[] = deps.auditOutboxRepository
+        .list()
+        .filter((event) => !deliveredIds.has(event.eventId))
+        .map((event) => ({
+          eventId: event.eventId,
+          action: event.action,
+          objectType: 'AuditOutbox',
+          objectId: event.commandId,
+          actorId: event.actorId,
+          occurredAt: event.createdAt,
+          result: event.status === 'Failed' ? 'Failed' : 'PendingDelivery',
+          summary: { deliveryStatus: event.status },
+        }));
+      const events = [...delivered, ...pending]
+        .filter((event) => filterAuditEvent(event, input.request))
+        .slice(0, input.request.pageSize);
+
+      return { ok: true, data: { events } };
+    },
+    deliverAudit(input) {
+      const permissionError = requireAction(input.actor, 'operations.audit.deliver');
+      if (permissionError !== undefined) return permissionError;
+      const deliveredCount = deps.auditOutboxRepository
+        .list()
+        .filter((event) => event.status === 'Pending')
+        .slice(0, input.request.maxEvents).length;
+      return { ok: true, data: { runId: input.request.runId, deliveredCount, failedCount: 0 } };
+    },
+    requestBackup(input) {
+      const permissionError = requireAction(input.actor, 'operations.backup.manage');
+      if (permissionError !== undefined) return permissionError;
+      const generatedAt = deps.now().toISOString();
+      const partitions = deps.repository.listPartitions().map((partition) => ({
+        storageRole: partition.storageRole,
+        partitionKey: partition.partitionKey,
+        status: partition.status,
+        rowCount: partition.rowCount,
+      }));
+      const resources = [
+        {
+          resourceKey: 'runtime-config',
+          resourceId: `runtime-config-${deps.tenantId}`,
+          checksum: 'checksum-runtime-config',
+        },
+      ];
+      const manifestWithoutChecksum = {
+        appVersion: deps.appVersion,
+        schemaVersion: deps.schemaVersion,
+        generatedAt,
+        partitions,
+        resources,
+      };
+      const manifest: BackupManifestDTO = {
+        ...manifestWithoutChecksum,
+        checksum: stableChecksum(manifestWithoutChecksum),
+      };
+      const backup = {
+        backupRunId: deps.newId('backup'),
+        status: 'Completed' as const,
+        backupType: input.request.backupType,
+        requestedBy: input.actor.userId,
+        requestedAt: generatedAt,
+        completedAt: generatedAt,
+        manifest,
+      };
+      deps.repository.saveBackup(backup);
+      return { ok: true, data: { backup } };
+    },
+    listBackups(input) {
+      const permissionError = requireAction(input.actor, 'operations.backup.manage');
+      if (permissionError !== undefined) return permissionError;
+      return { ok: true, data: { backups: deps.repository.listBackups() } };
+    },
+    prepareRestore(input) {
+      const permissionError = requireAction(input.actor, 'operations.restore.manage');
+      if (permissionError !== undefined) return permissionError;
+      const backup = deps.repository.getBackup(input.request.backupRunId);
+      if (backup === undefined) return failure('INVALID_INPUT', 'Không tìm thấy backup.');
+      if (input.request.confirmationText !== `RESTORE ${backup.backupRunId}`) {
+        return failure('INVALID_INPUT', 'Xác nhận restore không khớp backup.');
+      }
+      const restore = {
+        restoreRunId: deps.newId('restore'),
+        backupRunId: backup.backupRunId,
+        status: 'Prepared' as const,
+        requestedBy: input.actor.userId,
+        preparedAt: deps.now().toISOString(),
+        oldConfigVersion: 'runtime-config-current',
+        writeFrozen: true,
+      };
+      deps.repository.saveRestore(restore);
+      return { ok: true, data: { restore } };
+    },
+    switchRestore(input) {
+      const permissionError = requireAction(input.actor, 'operations.restore.manage');
+      if (permissionError !== undefined) return permissionError;
+      const restore = deps.repository.getRestore(input.request.restoreRunId);
+      if (restore === undefined) return failure('INVALID_INPUT', 'Không tìm thấy restore run.');
+      if (input.request.ownerConfirmationText !== `SWITCH ${restore.restoreRunId}`) {
+        return failure('INVALID_INPUT', 'Xác nhận switch restore không khớp.');
+      }
+      const switched = {
+        ...restore,
+        status: 'Switched' as const,
+        switchedAt: deps.now().toISOString(),
+        newConfigVersion: `runtime-config-restored-${lastSegment(restore.backupRunId)}`,
+        healthResult: 'Ok' as const,
+        writeFrozen: false,
+      };
+      deps.repository.saveRestore(switched);
+      return { ok: true, data: { restore: switched } };
+    },
+    checkHealth(input) {
+      const permissionError = requireAction(input.actor, 'operations.health.view');
+      if (permissionError !== undefined) return permissionError;
+      const now = deps.now().toISOString();
+      const checks = [
+        {
+          checkId: deps.newId('health'),
+          checkType: input.request.includeIntegrity ? 'Integrity' : 'Readiness',
+          status: 'Ok' as const,
+          observedAt: now,
+          resourceKey: 'runtime-config',
+          message: 'Runtime config, trigger và storage baseline sẵn sàng.',
+        },
+      ];
+      checks.forEach((check) => deps.repository.saveHealthCheck(check));
+      const capacityAlerts = deps.repository.listCapacityAlerts();
+      return { ok: true, data: { status: capacityAlerts.some((alert) => alert.status !== 'Ok') ? 'Warning' : 'Ok', checks, capacityAlerts } };
+    },
+    ensureNextPartition(input) {
+      const permissionError = requireAction(input.actor, 'operations.partition.manage');
+      if (permissionError !== undefined) return permissionError;
+      const active = deps.repository
+        .listPartitions()
+        .find((partition) => partition.storageRole === input.request.storageRole && partition.status === 'Active');
+      if (active === undefined) return failure('INVALID_INPUT', 'Không tìm thấy active partition.');
+      if (active.capacityPct < input.request.thresholdPct) {
+        return { ok: true, data: { activePartition: stripRowCount(active) } };
+      }
+      const nextPartition = createNextPartition(active, deps);
+      deps.repository.savePartition(nextPartition);
+      const alert = {
+        alertId: deps.newId('capacity-alert'),
+        alertType: 'ActivePartitionCapacity',
+        status: 'Warning' as const,
+        observedAt: deps.now().toISOString(),
+        resourceKey: `${active.storageRole}:${active.partitionKey}`,
+        threshold: input.request.thresholdPct,
+        observedValue: active.capacityPct,
+      };
+      deps.repository.saveCapacityAlert(alert);
+      return {
+        ok: true,
+        data: {
+          activePartition: stripRowCount(active),
+          nextPartition: stripRowCount(nextPartition),
+          alert,
+        },
+      };
+    },
+    cleanupExpiredRuntimeData(input) {
+      const permissionError = requireAction(input.actor, 'operations.runtime.cleanup');
+      if (permissionError !== undefined) return permissionError;
+      const now = input.request.now;
+      const records = deps.repository.listRuntimeRecords();
+      const kept: RuntimeRecord[] = [];
+      let deletedTechnicalRecordCount = 0;
+      let preservedEvidenceCount = 0;
+      for (const record of records) {
+        const expired = record.expiresAt <= now;
+        if (expired && !record.evidence) {
+          deletedTechnicalRecordCount += 1;
+          continue;
+        }
+        if (expired && record.evidence) preservedEvidenceCount += 1;
+        kept.push(record);
+      }
+      deps.repository.replaceRuntimeRecords(kept);
+      return {
+        ok: true,
+        data: {
+          runId: input.request.runId,
+          deletedTechnicalRecordCount,
+          preservedEvidenceCount,
+        },
+      };
+    },
+  };
+}
+
+function requireAction(actor: ActorContextDTO, action: string): OperationsServiceResult<never> | undefined {
+  return actor.actions.includes(action)
+    ? undefined
+    : failure<never>('PERMISSION_DENIED', 'Bạn không có quyền thực hiện thao tác vận hành này.');
+}
+
+function requireScope(
+  actor: ActorContextDTO,
+  scope: { branchId?: string; warehouseId?: string },
+): OperationsServiceResult<never> | undefined {
+  if (scope.branchId !== undefined && !actor.scope.branchIds.includes(scope.branchId)) {
+    return failure<never>('SCOPE_DENIED', 'Bạn không có quyền truy cập chi nhánh này.');
+  }
+  if (scope.warehouseId !== undefined && !actor.scope.warehouseIds.includes(scope.warehouseId)) {
+    return failure<never>('SCOPE_DENIED', 'Bạn không có quyền truy cập kho này.');
+  }
+  return undefined;
+}
+
+function lastSegment(value: string): string {
+  const parts = value.split('-');
+  return parts[parts.length - 1] ?? '1';
+}
+
+function filterAuditEvent(event: AuditEventDTO, request: AuditSearchRequest): boolean {
+  const day = event.occurredAt.slice(0, 10);
+  if (day < request.dateRange.from || day > request.dateRange.to) return false;
+  if (request.actorId !== undefined && event.actorId !== request.actorId) return false;
+  if (request.action !== undefined && event.action !== request.action) return false;
+  if (request.objectType !== undefined && event.objectType !== request.objectType) return false;
+  if (request.objectId !== undefined && event.objectId !== request.objectId) return false;
+  if (request.branchId !== undefined && event.branchId !== request.branchId) return false;
+  if (request.warehouseId !== undefined && event.warehouseId !== request.warehouseId) return false;
+  return true;
+}
+
+function createNextPartition(
+  active: OperationsPartitionRecord,
+  deps: Pick<OperationsServiceDependencies, 'now' | 'newId'>,
+): OperationsPartitionRecord {
+  const nextKey = active.partitionKey.endsWith('P01')
+    ? active.partitionKey.replace(/P01$/, 'P02')
+    : `${active.partitionKey}-NEXT`;
+  return {
+    partitionId: deps.newId('partition'),
+    storageRole: active.storageRole,
+    partitionKey: nextKey,
+    status: 'Active',
+    activeFrom: deps.now().toISOString().slice(0, 10),
+    capacityPct: 0,
+    readOnly: false,
+    rowCount: 0,
+  };
+}
+
+function stripRowCount(partition: OperationsPartitionRecord) {
+  return {
+    partitionId: partition.partitionId,
+    storageRole: partition.storageRole,
+    partitionKey: partition.partitionKey,
+    status: partition.status,
+    activeFrom: partition.activeFrom,
+    closedAt: partition.closedAt,
+    archivedAt: partition.archivedAt,
+    capacityPct: partition.capacityPct,
+    readOnly: partition.readOnly,
+  };
+}
+
+function stableChecksum(value: unknown): string {
+  const json = stableStringify(value);
+  let hash = 0;
+  for (let index = 0; index < json.length; index += 1) {
+    hash = (hash * 31 + json.charCodeAt(index)) >>> 0;
+  }
+  return `checksum-${hash.toString(16)}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function failure<T>(code: ApiErrorCode, message: string): OperationsServiceResult<T> {
+  return { ok: false, error: { code, message } };
+}

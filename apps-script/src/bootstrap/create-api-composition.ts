@@ -1,20 +1,187 @@
-import type { AuthLoginRequest } from '@shared/contracts/platform/auth';
+import type { AuthChangeOwnPasswordRequest, AuthLoginRequest } from '@shared/contracts/platform/auth';
+import type {
+  CatalogCreateProductRequest,
+  CatalogPosProjectionRequest,
+  CatalogQuoteRequest,
+} from '@shared/contracts/catalog/catalog';
+import type {
+  CustomerQuickCreateRequest,
+  CustomerSearchRequest,
+} from '@shared/contracts/crm/customer';
+import type {
+  InventoryBalanceSummaryRequest,
+  InventoryIssueForSaleRequest,
+  InventoryReceiveRequest,
+  InventoryReleaseRequest,
+  InventoryReserveRequest,
+  InventoryReturnReceiveRequest,
+  InventoryReturnRestockRequest,
+} from '@shared/contracts/inventory/inventory';
+import type {
+  FinanceExpenseApproveRequest,
+  FinancePaymentRecordRequest,
+  FinancePaymentReverseRequest,
+  FinanceShiftCloseRequest,
+  FinanceShiftLockRequest,
+  FinanceShiftOpenRequest,
+  FinanceSupplierPaymentRecordRequest,
+} from '@shared/contracts/finance/finance';
+import type {
+  PurchasingGoodsReceiptApproveRequest,
+  PurchasingGoodsReceiptCreateRequest,
+  PurchasingLandedCostAdjustRequest,
+  PurchasingPoApproveRequest,
+  PurchasingPoCreateRequest,
+  PurchasingPoSubmitRequest,
+  PurchasingSupplierCreateRequest,
+  PurchasingSupplierReturnApproveRequest,
+  PurchasingSupplierReturnCreateRequest,
+} from '@shared/contracts/purchasing/purchasing';
+import type {
+  ReportingDashboardRequest,
+  ReportingExportRequest,
+  ReportingExportStatusRequest,
+  ReportingReportQueryRequest,
+} from '@shared/contracts/reporting/reporting';
+import type {
+  AttachmentAccessRequest,
+  AttachmentCompleteRequest,
+  AuditDeliveryRequest,
+  AuditSearchRequest,
+  BackupRequest,
+  HealthCheckRequest,
+  ImportCommitRequest,
+  ImportTemplateRequest,
+  ImportUploadRequest,
+  ImportValidateRequest,
+  PartitionCapacityRequest,
+  RestorePrepareRequest,
+  RestoreSwitchRequest,
+  RuntimeCleanupRequest,
+} from '@shared/contracts/operations/operations';
+import type {
+  SalesDraftCancelRequest,
+  SalesDraftOpenRequest,
+  SalesDraftSaveRequest,
+  SalesExchangeCreateRequest,
+  SalesOnlineCancelRequest,
+  SalesOnlineTransitionRequest,
+  SalesOrderDetailRequest,
+  SalesOrderListRequest,
+  SalesPosCompleteRequest,
+  SalesReturnCreateRequest,
+  SalesReturnResolveRequest,
+  SalesWarrantyOpenRequest,
+  SalesWarrantyTransitionRequest,
+} from '@shared/contracts/sales/sales';
+import type {
+  BootstrapInstallRequest,
+} from '@shared/contracts/platform/bootstrap';
 import type { CommandStatusRequest } from '@shared/contracts/platform/command';
-import { parseAuthLoginRequest } from '@shared/schemas/platform/auth';
+import type { DisableWarehouseRequest } from '@shared/contracts/platform/administration';
+import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import { parseDisableWarehouseRequest } from '@shared/schemas/platform/administration';
+import { parseAuthChangeOwnPasswordRequest, parseAuthLoginRequest } from '@shared/schemas/platform/auth';
+import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap';
 import { parseCommandStatusRequest } from '@shared/schemas/platform/command';
+import {
+  parseCatalogCreateProductRequest,
+  parseCatalogPosProjectionRequest,
+  parseCatalogQuoteRequest,
+} from '@shared/schemas/catalog/catalog';
+import {
+  parseCustomerQuickCreateRequest,
+  parseCustomerSearchRequest,
+} from '@shared/schemas/crm/customer';
+import {
+  parseInventoryBalanceSummaryRequest,
+  parseInventoryIssueForSaleRequest,
+  parseInventoryReceiveRequest,
+  parseInventoryReleaseRequest,
+  parseInventoryReserveRequest,
+  parseInventoryReturnReceiveRequest,
+  parseInventoryReturnRestockRequest,
+} from '@shared/schemas/inventory/inventory';
+import {
+  parseFinanceExpenseApproveRequest,
+  parseFinancePaymentRecordRequest,
+  parseFinancePaymentReverseRequest,
+  parseFinanceShiftCloseRequest,
+  parseFinanceShiftLockRequest,
+  parseFinanceShiftOpenRequest,
+  parseFinanceSupplierPaymentRecordRequest,
+} from '@shared/schemas/finance/finance';
+import {
+  parsePurchasingGoodsReceiptApproveRequest,
+  parsePurchasingGoodsReceiptCreateRequest,
+  parsePurchasingLandedCostAdjustRequest,
+  parsePurchasingPoApproveRequest,
+  parsePurchasingPoCreateRequest,
+  parsePurchasingPoSubmitRequest,
+  parsePurchasingSupplierCreateRequest,
+  parsePurchasingSupplierReturnApproveRequest,
+  parsePurchasingSupplierReturnCreateRequest,
+} from '@shared/schemas/purchasing/purchasing';
+import {
+  parseReportingDashboardRequest,
+  parseReportingExportRequest,
+  parseReportingExportStatusRequest,
+  parseReportingReportQueryRequest,
+} from '@shared/schemas/reporting/reporting';
+import {
+  parseAttachmentAccessRequest,
+  parseAttachmentCompleteRequest,
+  parseAuditDeliveryRequest,
+  parseAuditSearchRequest,
+  parseBackupRequest,
+  parseHealthCheckRequest,
+  parseImportCommitRequest,
+  parseImportTemplateRequest,
+  parseImportUploadRequest,
+  parseImportValidateRequest,
+  parsePartitionCapacityRequest,
+  parseRestorePrepareRequest,
+  parseRestoreSwitchRequest,
+  parseRuntimeCleanupRequest,
+} from '@shared/schemas/operations/operations';
+import {
+  parseSalesDraftCancelRequest,
+  parseSalesDraftOpenRequest,
+  parseSalesDraftSaveRequest,
+  parseSalesExchangeCreateRequest,
+  parseSalesOnlineCancelRequest,
+  parseSalesOnlineTransitionRequest,
+  parseSalesOrderDetailRequest,
+  parseSalesOrderListRequest,
+  parseSalesPosCompleteRequest,
+  parseSalesReturnCreateRequest,
+  parseSalesReturnResolveRequest,
+  parseSalesWarrantyOpenRequest,
+  parseSalesWarrantyTransitionRequest,
+} from '@shared/schemas/sales/sales';
 import { createInvokeHandler, type Clock } from '../api/invoke';
 import { createOperationRegistry } from '../api/operation-registry';
+import { createInMemoryCatalogRepository } from '../repositories/catalog/catalog-repository';
+import { createInMemoryCustomerRepository } from '../repositories/crm/customer-repository';
+import { createInMemoryFinanceRepository } from '../repositories/finance/finance-repository';
+import { createInMemoryInventoryRepository } from '../repositories/inventory/inventory-repository';
+import { createInMemoryPurchasingRepository } from '../repositories/purchasing/purchasing-repository';
+import { createInMemoryReportingRepository } from '../repositories/reporting/reporting-repository';
+import { createInMemorySalesRepository } from '../repositories/sales/sales-repository';
+import { createInMemoryOperationsRepository } from '../repositories/operations/operations-repository';
+import { createInMemoryAdministrationRepository } from '../repositories/platform/administration-repository';
 import { createInMemoryAuditOutboxRepository } from '../repositories/platform/audit-outbox-repository';
 import { createInMemoryAuthRepository } from '../repositories/platform/auth-repository';
 import { createInMemoryCommandRepository } from '../repositories/platform/command-repository';
 import { createStaticTableRegistryRepository } from '../repositories/platform/table-registry-repository';
 import { createImmediateLockProvider } from '../infrastructure/platform/runtime';
+import { createAdministrationService } from '../services/administration/administration-service';
 import { createAuthorizationService } from '../services/platform/authorization/authorization-service';
 import { createInMemoryAuthorizationRepository } from '../repositories/platform/authorization-repository';
+import { createBootstrapService } from '../services/platform/bootstrap/bootstrap-service';
 import { createCommandCoordinator } from '../services/platform/command/command-coordinator';
 import {
   actorFromSessionResult,
-  createAdminUserFixture,
   createSessionService,
 } from '../services/platform/auth/session-service';
 import { createDeterministicPasswordServiceForTest } from '../services/platform/auth/password-service';
@@ -22,6 +189,15 @@ import {
   createPlatformTableDefinitions,
   createTableRegistryService,
 } from '../services/platform/registry/table-registry';
+import { createCatalogService } from '../services/catalog/catalog-service';
+import { createPricingService } from '../services/catalog/pricing-service';
+import { createCustomerService } from '../services/crm/customer-service';
+import { createFinanceService } from '../services/finance/finance-service';
+import { createInventoryService } from '../services/inventory/inventory-service';
+import { createPurchasingService } from '../services/purchasing/purchasing-service';
+import { createReportingService } from '../services/reporting/reporting-service';
+import { createOperationsService } from '../services/operations/operations-service';
+import { createSalesService } from '../services/sales/sales-service';
 
 export function createApiComposition(clock: Clock) {
   let idSequence = 0;
@@ -29,33 +205,91 @@ export function createApiComposition(clock: Clock) {
     idSequence += 1;
     return `${prefix}-${idSequence}`;
   };
+  const authRepository = createInMemoryAuthRepository([]);
+  const administrationRepository = createInMemoryAdministrationRepository();
+  const bootstrapService = createBootstrapService({
+    repository: administrationRepository,
+    authRepository,
+  });
+  bootstrapService.install({
+    tenantDisplayName: 'Cửa hàng mặc định',
+    adminLoginId: 'admin',
+    temporaryPassword: 'admin123',
+  });
   const sessionService = createSessionService({
     clock,
     idGenerator: {
       newId,
     },
-    repository: createInMemoryAuthRepository([createAdminUserFixture()]),
+    repository: authRepository,
     passwordService: createDeterministicPasswordServiceForTest(),
   });
   const authorizationService = createAuthorizationService(
-    createInMemoryAuthorizationRepository([
-      {
-        userId: 'user-admin',
-        actions: [
-          'platform.auth.logout',
-          'platform.session.view',
-          'platform.command.view',
-          'platform.registry.view',
-        ],
-        tenantId: 'tenant-default',
-        branchIds: ['branch-default'],
-        warehouseIds: ['warehouse-default'],
-      },
-    ]),
+    createInMemoryAuthorizationRepository([]),
   );
+  const administrationService = createAdministrationService({
+    repository: administrationRepository,
+  });
+  const catalogRepository = createInMemoryCatalogRepository();
+  const inventoryRepository = createInMemoryInventoryRepository();
+  const financeRepository = createInMemoryFinanceRepository();
+  const purchasingRepository = createInMemoryPurchasingRepository();
+  const reportingRepository = createInMemoryReportingRepository();
+  const salesRepository = createInMemorySalesRepository();
+  const operationsRepository = createInMemoryOperationsRepository();
+  const auditOutboxRepository = createInMemoryAuditOutboxRepository();
+  const catalogService = createCatalogService({
+    repository: catalogRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+  });
+  const customerService = createCustomerService({
+    repository: createInMemoryCustomerRepository(),
+    tenantId: 'tenant-default',
+    newId,
+  });
+  const inventoryService = createInventoryService({
+    repository: inventoryRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+  });
+  const financeService = createFinanceService({
+    repository: financeRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+  });
+  const purchasingService = createPurchasingService({
+    repository: purchasingRepository,
+    inventoryService,
+    financeService,
+    auditOutboxRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+  });
+  seedReportingRepository(reportingRepository);
+  const reportingService = createReportingService({
+    repository: reportingRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+  });
+  seedOperationsRepository(operationsRepository);
+  const operationsService = createOperationsService({
+    repository: operationsRepository,
+    auditOutboxRepository,
+    tenantId: 'tenant-default',
+    appVersion: '0.1.0',
+    schemaVersion: 1,
+    now: () => clock.now(),
+    newId,
+  });
   const commandCoordinator = createCommandCoordinator({
     commandRepository: createInMemoryCommandRepository(),
-    auditOutboxRepository: createInMemoryAuditOutboxRepository(),
+    auditOutboxRepository,
     lockProvider: createImmediateLockProvider(),
     now: () => clock.now(),
     newId,
@@ -63,7 +297,31 @@ export function createApiComposition(clock: Clock) {
   const tableRegistryService = createTableRegistryService(
     createStaticTableRegistryRepository(createPlatformTableDefinitions()),
   );
+  const salesService = createSalesService({
+    catalogService,
+    commandCoordinator,
+    financeRepository,
+    financeService,
+    inventoryService,
+    repository: salesRepository,
+    tenantId: 'tenant-default',
+    now: () => clock.now(),
+    newId,
+    requireOpenShift: true,
+  });
   const registry = createOperationRegistry([
+    {
+      name: 'platform.bootstrap.install',
+      kind: 'public',
+      parsePayload: parseBootstrapInstallRequest,
+      handler: (input) => bootstrapService.install(input as BootstrapInstallRequest),
+    },
+    {
+      name: 'platform.bootstrap.getStatus',
+      kind: 'public',
+      parsePayload: () => ({}),
+      handler: () => bootstrapService.getStatus(),
+    },
     {
       name: 'platform.auth.login',
       kind: 'public',
@@ -71,6 +329,17 @@ export function createApiComposition(clock: Clock) {
       handler: (input) => {
         return sessionService.login(input as AuthLoginRequest);
       },
+    },
+    {
+      name: 'platform.auth.changeOwnPassword',
+      kind: 'mutation',
+      requiredAction: 'platform.auth.changeOwnPassword',
+      parsePayload: parseAuthChangeOwnPasswordRequest,
+      handler: (input, context) =>
+        sessionService.changeOwnPassword(
+          context.sessionToken ?? '',
+          input as AuthChangeOwnPasswordRequest,
+        ),
     },
     {
       name: 'platform.auth.logout',
@@ -108,6 +377,559 @@ export function createApiComposition(clock: Clock) {
         tables: tableRegistryService.getDefinitions(),
       }),
     },
+    {
+      name: 'platform.scope.getCurrent',
+      kind: 'query',
+      requiredAction: 'platform.scope.view',
+      parsePayload: () => ({}),
+      handler: (_input, context) => administrationService.getCurrentScope(requireActor(context.actor)),
+    },
+    {
+      name: 'platform.warehouse.disable',
+      kind: 'mutation',
+      requiredAction: 'platform.warehouse.update',
+      parsePayload: parseDisableWarehouseRequest,
+      handler: (input) => administrationService.disableWarehouse(input as DisableWarehouseRequest),
+    },
+    {
+      name: 'catalog.product.create',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogCreateProductRequest,
+      handler: (input) => catalogService.createProduct(input as CatalogCreateProductRequest),
+    },
+    {
+      name: 'catalog.pos.getProjection',
+      kind: 'query',
+      requiredAction: 'catalog.pos.view',
+      parsePayload: parseCatalogPosProjectionRequest,
+      handler: (input) => catalogService.getPosProjection(input as CatalogPosProjectionRequest),
+    },
+    {
+      name: 'catalog.quote.preview',
+      kind: 'query',
+      requiredAction: 'catalog.quote.view',
+      parsePayload: parseCatalogQuoteRequest,
+      handler: (input) => {
+        const request = input as CatalogQuoteRequest;
+        const projection = catalogService.getPosProjection({
+          branchId: request.branchId,
+          warehouseId: request.warehouseId,
+        });
+
+        return createPricingService({
+          variants: projection.variants.map((variant) => ({
+            variantId: variant.variantId,
+            unitVersionId: variant.unitVersionId,
+            unitPriceVnd: variant.unitPriceVnd,
+          })),
+          priceRules: [],
+          promotions: [],
+        }).quoteCart(request);
+      },
+    },
+    {
+      name: 'crm.customer.quickCreate',
+      kind: 'mutation',
+      requiredAction: 'crm.customer.create',
+      parsePayload: parseCustomerQuickCreateRequest,
+      handler: (input) => customerService.quickCreate(input as CustomerQuickCreateRequest),
+    },
+    {
+      name: 'crm.customer.search',
+      kind: 'query',
+      requiredAction: 'crm.customer.view',
+      parsePayload: parseCustomerSearchRequest,
+      handler: (input) => customerService.search(input as CustomerSearchRequest),
+    },
+    {
+      name: 'inventory.receive',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryReceiveRequest,
+      handler: (input) => inventoryService.receive(input as InventoryReceiveRequest),
+    },
+    {
+      name: 'inventory.issueForSale',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryIssueForSaleRequest,
+      handler: (input) => inventoryService.issueForSale(input as InventoryIssueForSaleRequest),
+    },
+    {
+      name: 'inventory.reserve',
+      kind: 'mutation',
+      requiredAction: 'inventory.reserve',
+      parsePayload: parseInventoryReserveRequest,
+      handler: (input) => inventoryService.reserve(input as InventoryReserveRequest),
+    },
+    {
+      name: 'inventory.release',
+      kind: 'mutation',
+      requiredAction: 'inventory.release',
+      parsePayload: parseInventoryReleaseRequest,
+      handler: (input) => inventoryService.release(input as InventoryReleaseRequest),
+    },
+    {
+      name: 'inventory.return.receive',
+      kind: 'mutation',
+      requiredAction: 'inventory.return.process',
+      parsePayload: parseInventoryReturnReceiveRequest,
+      handler: (input) => inventoryService.receiveReturnToQuarantine(input as InventoryReturnReceiveRequest),
+    },
+    {
+      name: 'inventory.return.restock',
+      kind: 'mutation',
+      requiredAction: 'inventory.return.process',
+      parsePayload: parseInventoryReturnRestockRequest,
+      handler: (input) => inventoryService.restockReturn(input as InventoryReturnRestockRequest),
+    },
+    {
+      name: 'inventory.balance.getSummary',
+      kind: 'query',
+      requiredAction: 'inventory.balance.view',
+      parsePayload: parseInventoryBalanceSummaryRequest,
+      handler: (input) => inventoryService.getBalanceSummary(input as InventoryBalanceSummaryRequest),
+    },
+    {
+      name: 'finance.shift.open',
+      kind: 'mutation',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinanceShiftOpenRequest,
+      handler: (input) => financeService.openShift(input as FinanceShiftOpenRequest),
+    },
+    {
+      name: 'finance.shift.close',
+      kind: 'mutation',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinanceShiftCloseRequest,
+      handler: (input) => financeService.closeShift(input as FinanceShiftCloseRequest),
+    },
+    {
+      name: 'finance.shift.lock',
+      kind: 'mutation',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinanceShiftLockRequest,
+      handler: (input) => financeService.lockShift(input as FinanceShiftLockRequest),
+    },
+    {
+      name: 'finance.payment.record',
+      kind: 'mutation',
+      requiredAction: 'finance.payment.record',
+      parsePayload: parseFinancePaymentRecordRequest,
+      handler: (input) => financeService.recordPayment(input as FinancePaymentRecordRequest),
+    },
+    {
+      name: 'finance.supplierPayment.record',
+      kind: 'mutation',
+      requiredAction: 'finance.supplierPayment.record',
+      parsePayload: parseFinanceSupplierPaymentRecordRequest,
+      handler: (input) => financeService.recordSupplierPayment(input as FinanceSupplierPaymentRecordRequest),
+    },
+    {
+      name: 'finance.payment.reverse',
+      kind: 'mutation',
+      requiredAction: 'finance.payment.reverse',
+      parsePayload: parseFinancePaymentReverseRequest,
+      handler: (input) => financeService.reversePayment(input as FinancePaymentReverseRequest),
+    },
+    {
+      name: 'finance.expense.approve',
+      kind: 'mutation',
+      requiredAction: 'finance.expense.approve',
+      parsePayload: parseFinanceExpenseApproveRequest,
+      handler: (input) => financeService.approveExpense(input as FinanceExpenseApproveRequest),
+    },
+    {
+      name: 'finance.summary.get',
+      kind: 'query',
+      requiredAction: 'finance.summary.view',
+      parsePayload: () => ({}),
+      handler: () => financeService.getSummary(),
+    },
+    {
+      name: 'purchasing.supplier.create',
+      kind: 'mutation',
+      requiredAction: 'purchasing.supplier.manage',
+      parsePayload: parsePurchasingSupplierCreateRequest,
+      handler: (input) => purchasingService.createSupplier(input as PurchasingSupplierCreateRequest),
+    },
+    {
+      name: 'purchasing.po.create',
+      kind: 'mutation',
+      requiredAction: 'purchasing.po.manage',
+      parsePayload: parsePurchasingPoCreateRequest,
+      handler: (input) => purchasingService.createPurchaseOrder(input as PurchasingPoCreateRequest),
+    },
+    {
+      name: 'purchasing.po.submit',
+      kind: 'mutation',
+      requiredAction: 'purchasing.po.manage',
+      parsePayload: parsePurchasingPoSubmitRequest,
+      handler: (input) => purchasingService.submitPurchaseOrder(input as PurchasingPoSubmitRequest),
+    },
+    {
+      name: 'purchasing.po.approve',
+      kind: 'mutation',
+      requiredAction: 'purchasing.po.manage',
+      parsePayload: parsePurchasingPoApproveRequest,
+      handler: (input) => purchasingService.approvePurchaseOrder(input as PurchasingPoApproveRequest),
+    },
+    {
+      name: 'purchasing.receipt.create',
+      kind: 'mutation',
+      requiredAction: 'purchasing.receipt.manage',
+      parsePayload: parsePurchasingGoodsReceiptCreateRequest,
+      handler: (input) => purchasingService.createGoodsReceipt(input as PurchasingGoodsReceiptCreateRequest),
+    },
+    {
+      name: 'purchasing.receipt.approve',
+      kind: 'mutation',
+      requiredAction: 'purchasing.receipt.manage',
+      parsePayload: parsePurchasingGoodsReceiptApproveRequest,
+      handler: (input) => purchasingService.approveGoodsReceipt(input as PurchasingGoodsReceiptApproveRequest),
+    },
+    {
+      name: 'purchasing.landedCost.adjust',
+      kind: 'mutation',
+      requiredAction: 'purchasing.cost.adjust',
+      parsePayload: parsePurchasingLandedCostAdjustRequest,
+      handler: (input) => purchasingService.adjustLandedCost(input as PurchasingLandedCostAdjustRequest),
+    },
+    {
+      name: 'purchasing.supplierReturn.create',
+      kind: 'mutation',
+      requiredAction: 'purchasing.supplierReturn.manage',
+      parsePayload: parsePurchasingSupplierReturnCreateRequest,
+      handler: (input) => purchasingService.createSupplierReturn(input as PurchasingSupplierReturnCreateRequest),
+    },
+    {
+      name: 'purchasing.supplierReturn.approve',
+      kind: 'mutation',
+      requiredAction: 'purchasing.supplierReturn.manage',
+      parsePayload: parsePurchasingSupplierReturnApproveRequest,
+      handler: (input) => purchasingService.approveSupplierReturn(input as PurchasingSupplierReturnApproveRequest),
+    },
+    {
+      name: 'sales.draft.save',
+      kind: 'mutation',
+      requiredAction: 'sales.draft.manage',
+      parsePayload: parseSalesDraftSaveRequest,
+      handler: (input) => salesService.saveDraft(input as SalesDraftSaveRequest),
+    },
+    {
+      name: 'sales.draft.list',
+      kind: 'query',
+      requiredAction: 'sales.draft.manage',
+      parsePayload: parseSalesDraftOpenRequest,
+      handler: (input) => salesService.listDrafts(input as SalesDraftOpenRequest),
+    },
+    {
+      name: 'sales.draft.cancel',
+      kind: 'mutation',
+      requiredAction: 'sales.draft.manage',
+      parsePayload: parseSalesDraftCancelRequest,
+      handler: (input) => salesService.cancelDraft(input as SalesDraftCancelRequest),
+    },
+    {
+      name: 'sales.pos.complete',
+      kind: 'mutation',
+      requiredAction: 'sales.pos.complete',
+      parsePayload: parseSalesPosCompleteRequest,
+      handler: (input) => salesService.completePosSale(input as SalesPosCompleteRequest),
+    },
+    {
+      name: 'sales.order.list',
+      kind: 'query',
+      requiredAction: 'sales.order.view',
+      parsePayload: parseSalesOrderListRequest,
+      handler: (input) => salesService.listOrders(input as SalesOrderListRequest),
+    },
+    {
+      name: 'sales.order.get',
+      kind: 'query',
+      requiredAction: 'sales.order.view',
+      parsePayload: parseSalesOrderDetailRequest,
+      handler: (input) => salesService.getOrder(input as SalesOrderDetailRequest),
+    },
+    {
+      name: 'sales.online.confirm',
+      kind: 'mutation',
+      requiredAction: 'sales.online.manage',
+      parsePayload: parseSalesOnlineTransitionRequest,
+      handler: (input) => salesService.confirmOnline(input as SalesOnlineTransitionRequest),
+    },
+    {
+      name: 'sales.online.startPacking',
+      kind: 'mutation',
+      requiredAction: 'sales.online.manage',
+      parsePayload: parseSalesOnlineTransitionRequest,
+      handler: (input) => salesService.startPackingOnline(input as SalesOnlineTransitionRequest),
+    },
+    {
+      name: 'sales.online.ship',
+      kind: 'mutation',
+      requiredAction: 'sales.online.manage',
+      parsePayload: parseSalesOnlineTransitionRequest,
+      handler: (input) => salesService.shipOnline(input as SalesOnlineTransitionRequest),
+    },
+    {
+      name: 'sales.online.deliver',
+      kind: 'mutation',
+      requiredAction: 'sales.online.manage',
+      parsePayload: parseSalesOnlineTransitionRequest,
+      handler: (input) => salesService.deliverOnline(input as SalesOnlineTransitionRequest),
+    },
+    {
+      name: 'sales.online.cancel',
+      kind: 'mutation',
+      requiredAction: 'sales.online.manage',
+      parsePayload: parseSalesOnlineCancelRequest,
+      handler: (input) => salesService.cancelOnline(input as SalesOnlineCancelRequest),
+    },
+    {
+      name: 'sales.return.create',
+      kind: 'mutation',
+      requiredAction: 'sales.return.process',
+      parsePayload: parseSalesReturnCreateRequest,
+      handler: (input) => salesService.createReturn(input as SalesReturnCreateRequest),
+    },
+    {
+      name: 'sales.return.resolve',
+      kind: 'mutation',
+      requiredAction: 'sales.return.process',
+      parsePayload: parseSalesReturnResolveRequest,
+      handler: (input) => salesService.resolveReturn(input as SalesReturnResolveRequest),
+    },
+    {
+      name: 'sales.exchange.create',
+      kind: 'mutation',
+      requiredAction: 'sales.return.process',
+      parsePayload: parseSalesExchangeCreateRequest,
+      handler: (input) => salesService.createExchange(input as SalesExchangeCreateRequest),
+    },
+    {
+      name: 'sales.warranty.open',
+      kind: 'mutation',
+      requiredAction: 'sales.warranty.manage',
+      parsePayload: parseSalesWarrantyOpenRequest,
+      handler: (input) => salesService.openWarranty(input as SalesWarrantyOpenRequest),
+    },
+    {
+      name: 'sales.warranty.transition',
+      kind: 'mutation',
+      requiredAction: 'sales.warranty.manage',
+      parsePayload: parseSalesWarrantyTransitionRequest,
+      handler: (input) => salesService.transitionWarranty(input as SalesWarrantyTransitionRequest),
+    },
+    {
+      name: 'reporting.dashboard.get',
+      kind: 'query',
+      requiredAction: 'reporting.dashboard.view',
+      parsePayload: parseReportingDashboardRequest,
+      handler: (input, context) =>
+        reportingService.getSalesDashboard({
+          actor: requireActor(context.actor),
+          request: input as ReportingDashboardRequest,
+        }),
+    },
+    {
+      name: 'reporting.report.query',
+      kind: 'query',
+      requiredAction: 'reporting.report.view',
+      parsePayload: parseReportingReportQueryRequest,
+      handler: (input, context) =>
+        reportingService.queryReport({
+          actor: requireActor(context.actor),
+          request: input as ReportingReportQueryRequest,
+        }),
+    },
+    {
+      name: 'reporting.export.request',
+      kind: 'mutation',
+      requiredAction: 'reporting.export',
+      parsePayload: parseReportingExportRequest,
+      handler: (input, context) =>
+        reportingService.requestExport({
+          actor: requireActor(context.actor),
+          request: input as ReportingExportRequest,
+        }),
+    },
+    {
+      name: 'reporting.export.getStatus',
+      kind: 'query',
+      requiredAction: 'reporting.export',
+      parsePayload: parseReportingExportStatusRequest,
+      handler: (input, context) =>
+        reportingService.getExportRun({
+          actor: requireActor(context.actor),
+          request: input as ReportingExportStatusRequest,
+        }),
+    },
+    {
+      name: 'operations.import.template',
+      kind: 'query',
+      requiredAction: 'operations.import.manage',
+      parsePayload: parseImportTemplateRequest,
+      handler: (input, context) =>
+        operationsService.getImportTemplate({
+          actor: requireActor(context.actor),
+          request: input as ImportTemplateRequest,
+        }),
+    },
+    {
+      name: 'operations.import.upload',
+      kind: 'mutation',
+      requiredAction: 'operations.import.manage',
+      parsePayload: parseImportUploadRequest,
+      handler: (input, context) =>
+        operationsService.uploadImport({
+          actor: requireActor(context.actor),
+          request: input as ImportUploadRequest,
+        }),
+    },
+    {
+      name: 'operations.import.validate',
+      kind: 'mutation',
+      requiredAction: 'operations.import.manage',
+      parsePayload: parseImportValidateRequest,
+      handler: (input, context) =>
+        operationsService.validateImport({
+          actor: requireActor(context.actor),
+          request: input as ImportValidateRequest,
+        }),
+    },
+    {
+      name: 'operations.import.commit',
+      kind: 'mutation',
+      requiredAction: 'operations.import.manage',
+      parsePayload: parseImportCommitRequest,
+      handler: (input, context) =>
+        operationsService.commitImport({
+          actor: requireActor(context.actor),
+          request: input as ImportCommitRequest,
+        }),
+    },
+    {
+      name: 'operations.attachment.complete',
+      kind: 'mutation',
+      requiredAction: 'operations.attachment.manage',
+      parsePayload: parseAttachmentCompleteRequest,
+      handler: (input, context) =>
+        operationsService.completeAttachment({
+          actor: requireActor(context.actor),
+          request: input as AttachmentCompleteRequest,
+        }),
+    },
+    {
+      name: 'operations.attachment.download',
+      kind: 'query',
+      requiredAction: 'operations.attachment.view',
+      parsePayload: parseAttachmentAccessRequest,
+      handler: (input, context) =>
+        operationsService.downloadAttachment({
+          actor: requireActor(context.actor),
+          request: input as AttachmentAccessRequest,
+        }),
+    },
+    {
+      name: 'operations.audit.search',
+      kind: 'query',
+      requiredAction: 'operations.audit.view',
+      parsePayload: parseAuditSearchRequest,
+      handler: (input, context) =>
+        operationsService.searchAudit({
+          actor: requireActor(context.actor),
+          request: input as AuditSearchRequest,
+        }),
+    },
+    {
+      name: 'operations.audit.deliver',
+      kind: 'mutation',
+      requiredAction: 'operations.audit.deliver',
+      parsePayload: parseAuditDeliveryRequest,
+      handler: (input, context) =>
+        operationsService.deliverAudit({
+          actor: requireActor(context.actor),
+          request: input as AuditDeliveryRequest,
+        }),
+    },
+    {
+      name: 'operations.backup.request',
+      kind: 'mutation',
+      requiredAction: 'operations.backup.manage',
+      parsePayload: parseBackupRequest,
+      handler: (input, context) =>
+        operationsService.requestBackup({
+          actor: requireActor(context.actor),
+          request: input as BackupRequest,
+        }),
+    },
+    {
+      name: 'operations.backup.list',
+      kind: 'query',
+      requiredAction: 'operations.backup.manage',
+      parsePayload: () => ({}),
+      handler: (_input, context) =>
+        operationsService.listBackups({
+          actor: requireActor(context.actor),
+        }),
+    },
+    {
+      name: 'operations.restore.prepare',
+      kind: 'mutation',
+      requiredAction: 'operations.restore.manage',
+      parsePayload: parseRestorePrepareRequest,
+      handler: (input, context) =>
+        operationsService.prepareRestore({
+          actor: requireActor(context.actor),
+          request: input as RestorePrepareRequest,
+        }),
+    },
+    {
+      name: 'operations.restore.switch',
+      kind: 'mutation',
+      requiredAction: 'operations.restore.manage',
+      parsePayload: parseRestoreSwitchRequest,
+      handler: (input, context) =>
+        operationsService.switchRestore({
+          actor: requireActor(context.actor),
+          request: input as RestoreSwitchRequest,
+        }),
+    },
+    {
+      name: 'operations.health.check',
+      kind: 'query',
+      requiredAction: 'operations.health.view',
+      parsePayload: parseHealthCheckRequest,
+      handler: (input, context) =>
+        operationsService.checkHealth({
+          actor: requireActor(context.actor),
+          request: input as HealthCheckRequest,
+        }),
+    },
+    {
+      name: 'operations.partition.ensureNext',
+      kind: 'mutation',
+      requiredAction: 'operations.partition.manage',
+      parsePayload: parsePartitionCapacityRequest,
+      handler: (input, context) =>
+        operationsService.ensureNextPartition({
+          actor: requireActor(context.actor),
+          request: input as PartitionCapacityRequest,
+        }),
+    },
+    {
+      name: 'operations.runtime.cleanupExpired',
+      kind: 'mutation',
+      requiredAction: 'operations.runtime.cleanup',
+      parsePayload: parseRuntimeCleanupRequest,
+      handler: (input, context) =>
+        operationsService.cleanupExpiredRuntimeData({
+          actor: requireActor(context.actor),
+          request: input as RuntimeCleanupRequest,
+        }),
+    },
   ]);
 
   return {
@@ -118,4 +940,82 @@ export function createApiComposition(clock: Clock) {
       authorize: (actor, action) => authorizationService.requireAction(actor, action).ok,
     }),
   };
+}
+
+function seedOperationsRepository(repository: ReturnType<typeof createInMemoryOperationsRepository>): void {
+  repository.savePartition({
+    partitionId: 'partition-transaction-1',
+    storageRole: 'transaction',
+    partitionKey: 'FY2026-P01',
+    status: 'Active',
+    activeFrom: '2026-01-01',
+    capacityPct: 87,
+    readOnly: false,
+    rowCount: 42,
+  });
+}
+
+function seedReportingRepository(repository: ReturnType<typeof createInMemoryReportingRepository>): void {
+  repository.saveDashboardProjection({
+    tenantId: 'tenant-default',
+    branchId: 'branch-default',
+    warehouseId: 'warehouse-default',
+    dateBucket: '2026-07-26',
+    response: {
+      metadata: {
+        generatedAt: '2026-07-27T09:00:00.000Z',
+        asOf: '2026-07-27T08:59:30.000Z',
+        partitionCoverage: {
+          status: 'Complete',
+          activeFrom: '2026-07-26',
+          activeTo: '2026-07-26',
+          archiveIncluded: false,
+        },
+        archiveIncluded: false,
+      },
+      scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+      kpis: [
+        { kpiId: 'netRevenue', label: 'Doanh thu thuần', valueVnd: 286_450_000, trendPct: 11.6 },
+        { kpiId: 'completedOrders', label: 'Đơn hoàn tất', valueCount: 1284 },
+        { kpiId: 'collected', label: 'Đã thu', valueVnd: 259_830_000 },
+        { kpiId: 'receivableOverdue', label: 'Phải thu / quá hạn', valueVnd: 26_620_000 },
+      ],
+      revenueSeries: [{ bucket: '18:00', currentNetRevenueVnd: 42_800_000, previousNetRevenueVnd: 38_350_000 }],
+      decisionQueue: [
+        {
+          itemId: 'decision-low-stock-1',
+          itemType: 'LowStock',
+          title: 'Tồn thấp: Sữa hạt óc chó 1L',
+          description: 'Còn 4 thùng, dưới ngưỡng tối thiểu 12.',
+          priority: 'High',
+          actionLabel: 'Xử lý',
+        },
+      ],
+      manualOrders: [
+        {
+          orderId: 'SO-260726-01842',
+          source: 'Phone',
+          customerName: 'Trần Thị Hồng Nhung',
+          ageMinutes: 18,
+          status: 'PendingConfirmation',
+          valueVnd: 2_680_000,
+        },
+      ],
+      restricted: { sensitiveFields: [] },
+    },
+  });
+  repository.saveReportRows('sales-profit', [
+    { branchId: 'branch-default', netRevenueVnd: 286_450_000, cogsVnd: 180_000_000, grossProfitVnd: 106_450_000 },
+  ]);
+  repository.saveReportRows('sales-summary', [
+    { branchId: 'branch-default', netRevenueVnd: 286_450_000 },
+  ]);
+}
+
+function requireActor(actor: ActorContextDTO | undefined): ActorContextDTO {
+  if (actor === undefined) {
+    throw new Error('Authenticated actor is required.');
+  }
+
+  return actor;
 }
