@@ -27,6 +27,7 @@ export interface OperationsPartitionRecord extends PartitionDTO {
 export interface OperationsRepository {
   saveImportBatch(batch: ImportBatchDTO): void;
   getImportBatch(batchId: string): ImportBatchDTO | undefined;
+  listImportBatches(): readonly ImportBatchDTO[];
   saveImportRows(batchId: string, rows: readonly ImportStagingRowDTO[]): void;
   listImportRows(batchId: string): readonly ImportStagingRowDTO[];
   saveAttachment(attachment: AttachmentMetadataDTO): void;
@@ -72,6 +73,9 @@ export function createInMemoryOperationsRepository(): OperationsRepository {
     },
     getImportBatch(batchId) {
       return cloneOptional(importBatches.get(batchId));
+    },
+    listImportBatches() {
+      return clone([...importBatches.values()]);
     },
     saveImportRows(batchId, rows) {
       importRows.set(batchId, clone(rows) as ImportStagingRowDTO[]);
@@ -246,6 +250,9 @@ export function createSheetOperationsRepository(deps: SheetOperationsRepositoryD
     },
     getImportBatch(batchId) {
       return importBatches.list().find((batch) => batch.batchId === batchId);
+    },
+    listImportBatches() {
+      return importBatches.list();
     },
     saveImportRows(batchId, rows) {
       importRows.saveSet(batchId, rows);

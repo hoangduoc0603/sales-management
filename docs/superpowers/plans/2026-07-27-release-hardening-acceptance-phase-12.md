@@ -80,6 +80,13 @@ Baseline hiện đã có nhiều contract/service/repository in-memory, API comp
 - `tests/apps-script/reporting/reporting-sheet-repository.test.ts`: contract test cho `createSheetReportingRepository`, ghi/đọc DashboardProjection, ReportRow replacement set và ReportingExportRun qua `SheetGateway`.
 - `tests/apps-script/platform/production-repositories.test.ts`: contract test cho `createProductionRepositories`, wiring các repository sheet-backed đã cutover vào cùng `SheetGateway`, transaction partition và audit partition.
 - `tests/apps-script/release/acceptance-flow.test.ts`: acceptance tests cross-domain cho bootstrap -> POS -> return -> purchasing -> dashboard -> backup/restore baseline.
+- `tests/apps-script/operations/audit-delivery-worker.test.ts`: worker test cho AuditOutbox -> AuditLog delivery idempotent, không ghi secret/token vào audit payload.
+- `tests/apps-script/operations/import-commit-worker.test.ts`: worker test cho ImportBatch `Committing`, commit staging rows theo chunk và retry không duplicate source object.
+- `tests/apps-script/operations/archive-worker.test.ts`: worker test cho archive closed transaction partition theo chunk, read-only routing và retry idempotency.
+- `tests/apps-script/reporting/reporting-export-worker.test.ts`: worker test cho ReportingExportRun routing `LargeWorker`, hoàn tất export run với row count và fileId idempotent.
+- `tests/apps-script/reporting/reporting-service.test.ts`: thêm coverage cho `reporting.drillDown.resolve`, revalidate scope và sensitive-field filtering theo quyền hiện tại của actor.
+- `tests/apps-script/reporting/reporting-composition.test.ts`: kiểm drill-down resolver đi qua single API gateway với parser và permission `reporting.report.view`.
+- `tests/apps-script/reporting/reporting-partition-coverage.test.ts`: kiểm report query coverage `Partial` khi date range chạm archived partition mà chưa include archive, và `Complete` khi include archive rõ ràng.
 - `docs/architecture/release-hardening.md`: kết quả readiness audit có thể đọc độc lập ngoài implementation plan.
 - `docs/architecture/deployment-runbook.md`: runbook triển khai/customer installation checklist.
 
@@ -287,6 +294,8 @@ type ReleaseReadinessResult = {
 - [x] Run `npm test -- tests/apps-script/release/worker-backup-restore.test.ts`.
 - [x] Implement worker baseline outside POS fast path; do not hold ScriptLock during Drive/export/backup/archive work.
 - [x] Run targeted tests for operations/reporting/platform worker.
+- [x] Add local AuditOutbox delivery worker and scheduled tick wiring.
+- [x] Add local worker-backed ReportingExportRun baseline and scheduled tick wiring.
 
 ## Task 8: UI accessibility and approved screen acceptance
 

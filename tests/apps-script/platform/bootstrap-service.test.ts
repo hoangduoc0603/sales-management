@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createBootstrapServiceForTest } from '../../../apps-script/src/services/platform/bootstrap/bootstrap-service';
+import {
+  createBootstrapService,
+  createBootstrapServiceForTest,
+} from '../../../apps-script/src/services/platform/bootstrap/bootstrap-service';
+import { createInMemoryAdministrationRepository } from '../../../apps-script/src/repositories/platform/administration-repository';
+import { createInMemoryAuthRepository } from '../../../apps-script/src/repositories/platform/auth-repository';
 
 describe('BootstrapService', () => {
   it('install idempotent tạo một tenant, branch, warehouse và admin mặc định', () => {
@@ -44,5 +49,28 @@ describe('BootstrapService', () => {
     const fixture = createBootstrapServiceForTest();
 
     expect(fixture.service.getStatus()).toEqual({ installed: false });
+  });
+
+  it('tạo verifier admin qua PasswordService được inject thay vì hard-code verifier test', () => {
+    const repository = createInMemoryAdministrationRepository();
+    const authRepository = createInMemoryAuthRepository([]);
+    const service = createBootstrapService({
+      repository,
+      authRepository,
+      passwordService: {
+        verifyPassword: () => false,
+        createVerifier: (password) => `custom-verifier:${password}`,
+      },
+    });
+
+    service.install({
+      tenantDisplayName: 'Cửa hàng An Nhiên',
+      adminLoginId: 'admin',
+      temporaryPassword: 'temporary-secret',
+    });
+
+    expect(authRepository.findUserByLoginId('admin')?.passwordVerifier).toBe(
+      'custom-verifier:temporary-secret',
+    );
   });
 });

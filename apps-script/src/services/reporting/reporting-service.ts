@@ -3,14 +3,18 @@ import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type {
   ReportingDashboardRequest,
   ReportingDashboardResponse,
+  ReportingDrillDownRequest,
+  ReportingDrillDownResponse,
   ReportingExportRequest,
   ReportingExportResponse,
   ReportingExportRunDTO,
   ReportingExportStatusRequest,
+  ReportingPartitionCoverageDTO,
   ReportingReportQueryRequest,
   ReportingReportQueryResponse,
 } from '@shared/contracts/reporting/reporting';
 import type { ReportingRepository } from '../../repositories/reporting/reporting-repository';
+import type { ReportingPartitionCoverageResolver } from './reporting-partition-coverage';
 
 type ReportingServiceResult<T> =
   | { ok: true; data: T }
@@ -19,6 +23,7 @@ type ReportingServiceResult<T> =
 export interface ReportingService {
   getSalesDashboard(input: { actor: ActorContextDTO; request: ReportingDashboardRequest }): ReportingServiceResult<ReportingDashboardResponse>;
   queryReport(input: { actor: ActorContextDTO; request: ReportingReportQueryRequest }): ReportingServiceResult<ReportingReportQueryResponse>;
+  resolveDrillDown(input: { actor: ActorContextDTO; request: ReportingDrillDownRequest }): ReportingServiceResult<ReportingDrillDownResponse>;
   requestExport(input: { actor: ActorContextDTO; request: ReportingExportRequest }): ReportingServiceResult<ReportingExportResponse>;
   getExportRun(input: { actor: ActorContextDTO; request: ReportingExportStatusRequest }): ReportingServiceResult<ReportingExportResponse>;
 }
@@ -28,6 +33,7 @@ export interface ReportingServiceDependencies {
   tenantId: string;
   now: () => Date;
   newId(prefix: string): string;
+  resolvePartitionCoverage?: ReportingPartitionCoverageResolver;
 }
 
 const sensitiveKeys = new Set(['cogsVnd', 'grossProfitVnd', 'grossMarginPct']);
@@ -79,8 +85,35 @@ export function createReportingService(deps: ReportingServiceDependencies): Repo
       return {
         ok: true,
         data: {
-          metadata: metadataFor(input.request.dateRange.to, deps.now().toISOString()),
+          metadata: metadataFor(
+            input.request.dateRange.to,
+            deps.now().toISOString(),
+            deps.resolvePartitionCoverage?.({
+              dateRange: input.request.dateRange,
+              includeArchive: input.request.includeArchive ?? false,
+            }),
+          ),
           reportId: input.request.reportId,
+          rows,
+        },
+      };
+    },
+    resolveDrillDown(input) {
+      const scopeError = requireScope(input.actor, input.request.token.scope);
+      if (scopeError !== undefined) return scopeError;
+
+      const canViewSensitive = input.actor.actions.includes('reporting.sensitive.view');
+      const rows = deps.repository
+        .getReportRows(input.request.token.reportId)
+        .slice(0, input.request.pageSize)
+        .map((row) => sanitizeReportRow(row, canViewSensitive));
+
+      return {
+        ok: true,
+        data: {
+          metadata: metadataFor(input.request.token.dateRange.to, input.request.token.asOf),
+          tokenId: input.request.token.tokenId,
+          reportId: input.request.token.reportId,
           rows,
         },
       };
@@ -141,17 +174,21 @@ function sanitizeReportRow(row: Record<string, unknown>, canViewSensitive: boole
   return Object.fromEntries(Object.entries(row).filter(([key]) => !sensitiveKeys.has(key)));
 }
 
-function metadataFor(dateBucket: string, nowIso: string) {
+function metadataFor(
+  dateBucket: string,
+  nowIso: string,
+  partitionCoverage: ReportingPartitionCoverageDTO = {
+    status: 'Complete',
+    activeFrom: dateBucket,
+    activeTo: dateBucket,
+    archiveIncluded: false,
+  },
+) {
   return {
     generatedAt: nowIso,
     asOf: nowIso,
-    partitionCoverage: {
-      status: 'Complete' as const,
-      activeFrom: dateBucket,
-      activeTo: dateBucket,
-      archiveIncluded: false,
-    },
-    archiveIncluded: false,
+    partitionCoverage,
+    archiveIncluded: partitionCoverage.archiveIncluded,
   };
 }
 

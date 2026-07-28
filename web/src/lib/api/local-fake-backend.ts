@@ -153,6 +153,8 @@ export interface LocalFakeBackendOptions {
   now?: () => Date;
 }
 
+export const LOCAL_DEBUG_SESSION_TOKEN = 'local-debug-session';
+
 const idleTtlMs = 60 * 60 * 1000;
 const absoluteTtlMs = 8 * 60 * 60 * 1000;
 
@@ -170,6 +172,16 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
     passwordChangeRequired: true,
     authVersion: 1,
   };
+  const debugSessionIssuedAtMs = now().getTime();
+  sessions.set(LOCAL_DEBUG_SESSION_TOKEN, {
+    sessionToken: LOCAL_DEBUG_SESSION_TOKEN,
+    actor: createLocalDebugActor(),
+    issuedAtMs: debugSessionIssuedAtMs,
+    idleExpiresAtMs: debugSessionIssuedAtMs + idleTtlMs,
+    absoluteExpiresAtMs: debugSessionIssuedAtMs + absoluteTtlMs,
+    revoked: false,
+  });
+
   let warehouseStatus: 'Active' | 'Disabled' = 'Active';
   const customers = new Map<string, CustomerDTO>();
   const purchasingSuppliers = new Map<string, SupplierDTO>();
@@ -1118,6 +1130,10 @@ function createLocalAdminActor(authVersion: number): ActorContextDTO {
   };
 }
 
+export function createLocalDebugActor(): ActorContextDTO {
+  return createLocalAdminActor(1);
+}
+
 function createLocalCatalogProjection(): CatalogPosProjectionResponse {
   return {
     projectionVersion: 'local-catalog-v1',
@@ -1149,6 +1165,36 @@ function createLocalCatalogProjection(): CatalogPosProjectionResponse {
         unitVersionId: 'unit-bag-v1',
         unitName: 'túi',
         unitPriceVnd: 185000,
+        saleEnabled: true,
+        inventoryMode: 'Tracked',
+        lotTracking: false,
+        serialTracking: false,
+        isActive: true,
+      },
+      {
+        variantId: 'variant-filter-210',
+        productId: 'product-filter',
+        sku: 'GD-FL-210',
+        displayName: 'Lõi lọc nước gia dụng',
+        barcode: '893000000003',
+        unitVersionId: 'unit-set-v1',
+        unitName: 'Bộ',
+        unitPriceVnd: 285000,
+        saleEnabled: true,
+        inventoryMode: 'Tracked',
+        lotTracking: false,
+        serialTracking: true,
+        isActive: true,
+      },
+      {
+        variantId: 'variant-shirt-basic',
+        productId: 'product-shirt',
+        sku: 'FA-TS-018',
+        displayName: 'Áo thun cổ tròn basic',
+        barcode: '893000000004',
+        unitVersionId: 'unit-piece-v1',
+        unitName: 'Cái',
+        unitPriceVnd: 159000,
         saleEnabled: true,
         inventoryMode: 'Tracked',
         lotTracking: false,
@@ -2114,21 +2160,58 @@ function createLocalReportingDashboard(payload: unknown, now: () => Date): Repor
     scope: { branchId: input.branchId, warehouseId: input.warehouseId },
     kpis: [
       { kpiId: 'netRevenue', label: 'Doanh thu thuần', valueVnd: 286_450_000, trendPct: 11.6 },
-      { kpiId: 'completedOrders', label: 'Đơn hoàn tất', valueCount: 1284 },
+      { kpiId: 'completedOrders', label: 'Đơn hoàn tất', valueCount: 184, statusLabel: 'Đã xác nhận' },
       { kpiId: 'collected', label: 'Đã thu', valueVnd: 259_830_000 },
-      { kpiId: 'receivableOverdue', label: 'Phải thu / quá hạn', valueVnd: 26_620_000 },
+      { kpiId: 'receivableOverdue', label: 'Phải thu / quá hạn', valueVnd: 26_620_000, secondaryValueVnd: 8_450_000 },
     ],
     revenueSeries: [
-      { bucket: '18:00', currentNetRevenueVnd: 42_800_000, previousNetRevenueVnd: 38_350_000 },
+      { bucket: '08h', currentNetRevenueVnd: 5_200_000, previousNetRevenueVnd: 7_000_000 },
+      { bucket: '11h', currentNetRevenueVnd: 16_800_000, previousNetRevenueVnd: 14_400_000 },
+      { bucket: '14h', currentNetRevenueVnd: 27_500_000, previousNetRevenueVnd: 25_000_000 },
+      { bucket: '16h', currentNetRevenueVnd: 24_300_000, previousNetRevenueVnd: 31_900_000 },
+      { bucket: '18h', currentNetRevenueVnd: 42_800_000, previousNetRevenueVnd: 38_350_000 },
+      { bucket: '20h', currentNetRevenueVnd: 26_100_000, previousNetRevenueVnd: 23_500_000 },
     ],
     decisionQueue: [
       {
         itemId: 'decision-low-stock-1',
         itemType: 'LowStock',
         title: 'Tồn thấp: Sữa hạt óc chó 1L',
-        description: 'Còn 4 thùng, dưới ngưỡng tối thiểu 12.',
-        priority: 'High',
+        description: 'Còn 4 thùng, dưới ngưỡng tối thiểu 12 · rủi ro thiếu hàng trong ca chiều.',
+        priority: 'Medium',
         actionLabel: 'Xử lý',
+      },
+      {
+        itemId: 'decision-expiring-lot-1',
+        itemType: 'ExpiringLot',
+        title: 'Hàng sắp hết hạn cần luân chuyển',
+        description: '12 chai Sữa hạt hạnh nhân 1L còn 4 ngày hạn dùng · cần ưu tiên bán hoặc điều chuyển.',
+        priority: 'Medium',
+        actionLabel: 'Xem lô hàng',
+      },
+      {
+        itemId: 'decision-manual-order-sla-1',
+        itemType: 'ManualOrderSla',
+        title: 'Đơn nhập tay quá SLA xác nhận',
+        description: '3 đơn chờ quá 15 phút; đơn lâu nhất 46 phút · có nguy cơ bỏ lỡ khách.',
+        priority: 'High',
+        actionLabel: 'Mở hàng đợi',
+      },
+      {
+        itemId: 'decision-shift-variance-1',
+        itemType: 'ShiftVariance',
+        title: 'Chênh lệch ca cần đối soát',
+        description: '2 ca chưa đối soát trước hạn đóng 10:30 · ảnh hưởng bàn giao quầy.',
+        priority: 'High',
+        actionLabel: 'Đối soát',
+      },
+      {
+        itemId: 'decision-receivable-1',
+        itemType: 'OverdueReceivable',
+        title: 'Công nợ quá hạn cần theo dõi',
+        description: '8.450.000 ₫ đã quá hạn · cần chốt người phụ trách liên hệ trong hôm nay.',
+        priority: 'Medium',
+        actionLabel: 'Phân công',
       },
     ],
     manualOrders: [
@@ -2136,9 +2219,41 @@ function createLocalReportingDashboard(payload: unknown, now: () => Date): Repor
         orderId: 'SO-260726-01842',
         source: 'Phone',
         customerName: 'Trần Thị Hồng Nhung',
+        customerSubtitle: 'Khách lẻ',
         ageMinutes: 18,
+        slaTargetMinutes: 15,
         status: 'PendingConfirmation',
         valueVnd: 2_680_000,
+      },
+      {
+        orderId: 'SO-260726-01837',
+        source: 'CustomerMessage',
+        customerName: 'Công ty CP Văn phòng Phương Nam',
+        customerSubtitle: 'Khách doanh nghiệp',
+        ageMinutes: 31,
+        slaTargetMinutes: 15,
+        status: 'Picking',
+        valueVnd: 18_450_000,
+      },
+      {
+        orderId: 'SO-260726-01815',
+        source: 'StaffCreated',
+        customerName: 'Nguyễn Minh Tâm',
+        customerSubtitle: 'Khách lẻ',
+        ageMinutes: 46,
+        slaTargetMinutes: 15,
+        status: 'NeedStock',
+        valueVnd: 1_249_000,
+      },
+      {
+        orderId: 'SO-260726-01811',
+        source: 'Preorder',
+        customerName: 'Cửa hàng Gia Hân',
+        customerSubtitle: 'Khách doanh nghiệp',
+        ageMinutes: 12,
+        slaTargetMinutes: 15,
+        status: 'PendingConfirmation',
+        valueVnd: 6_870_000,
       },
     ],
     restricted: {
@@ -2650,6 +2765,10 @@ function createLocalCurrentScope(warehouseStatus: 'Active' | 'Disabled'): Curren
     activeBranchId: baseline.branch.branchId,
     activeWarehouseId: baseline.warehouse.warehouseId,
   };
+}
+
+export function createLocalDebugScope(): CurrentScopeResponse {
+  return createLocalCurrentScope('Active');
 }
 
 function createLocalBootstrapBaseline(warehouseStatus: 'Active' | 'Disabled') {

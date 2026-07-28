@@ -63,6 +63,8 @@ Attachment: PendingUpload -> Available | Unavailable | Deleted
 Mỗi query có envelope: `reportId`, `dateField`, date range, Branch/Warehouse scope, filters, dimensions, cursor/page size và `asOf`. `ReportService` intersect scope yêu cầu với `ActorContext`, chọn active/archive partitions theo date/reference, đọc projection đã hiệu lực và trả metadata `generatedAt`, `asOf`, `partitionCoverage`, `archiveIncluded` cùng drill-down token. Token chỉ mang query hash/scope fingerprint; backend resolve lại permission khi drill-down.
 
 - Dashboard dùng `DashboardProjection` theo Branch/date bucket; không quét ledger/document toàn kỳ trong lúc mở POS.
+- Dashboard KPI trả bốn chỉ số chính theo `DashboardKpiDTO`; ngoài `valueVnd`/`valueCount` có thể trả `statusLabel` và `secondaryValueVnd` để UI render badge phụ như “Đã xác nhận” hoặc “quá hạn”. Các giá trị phụ này vẫn thuộc projection/backend permission filtering, không được UI tự bịa từ display mock.
+- Hàng đợi đơn nhập tay trên Dashboard trả `DashboardManualOrderDTO` từ projection/backend, có thể kèm `customerSubtitle` và `slaTargetMinutes` để UI render dòng phụ/SLA; UI không tự suy diễn nhóm khách hoặc SLA từ tên hiển thị.
 - Báo cáo doanh số phân biệt `createdAt`, `completedOrShippedAt`, `deliveredAt`, `paidAt`; query bắt buộc chọn một `dateField`.
 - Báo cáo tồn/mua/tiền đọc balance, aging và shift projection có `asOf`/source reference; drill-down luôn về ledger/chứng từ nguồn trong scope.
 - Draft/Rejected/Cancelled bị loại trừ mặc định. Báo cáo chứng từ mở phải khai báo rõ tập trạng thái. COGS/lợi nhuận bị loại ngay tại query/export resolver nếu actor thiếu sensitive permission.

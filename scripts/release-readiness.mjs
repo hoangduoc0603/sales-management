@@ -10,7 +10,7 @@ const masterPlanPath = 'docs/superpowers/plans/2026-07-26-sales-management-imple
 const p0Rules = [
   {
     id: 'production-persistence-adapters',
-    title: 'Thiếu production Google Workspace adapter cho Sheets/Drive/runtime config',
+    title: 'Thiếu Apps Script drill cho Google Workspace adapter production persistence/runtime config',
     source: 'SRS-OVR-003, SRS-OVR-008, SRS-OVR-023, sheet-schema-and-registry.md',
     evidence: ['Google Workspace adapter', 'SheetGateway', 'DriveGateway'],
   },
@@ -28,7 +28,7 @@ const p0Rules = [
   },
   {
     id: 'scheduled-worker-runtime',
-    title: 'Thiếu scheduled worker runtime cho audit/import/export/backup/archive',
+    title: 'Thiếu scheduled trigger/dry-run production trên Apps Script test project',
     source: 'SRS-OVR-021, LLD Administration–Reporting–Operations §5',
     evidence: ['Worker thật', 'scheduled trigger', 'BackgroundRun'],
   },
@@ -81,15 +81,15 @@ const p1Rules = [
   },
   {
     id: 'reporting-drilldown-archive-worker-export',
-    title: 'Archive coverage, drill-down permission và worker-backed export cần chốt production scope',
+    title: 'Reporting export/archive production drill cần chốt production scope',
     source: 'Phase 10, SRS-ACC',
-    evidence: ['archive coverage', 'drill-down token', 'worker-backed export'],
+    evidence: ['production export/archive drill', 'Production archive route drill', 'production archive route drill'],
   },
   {
     id: 'operations-production-lifecycle',
-    title: 'Import/attachment/audit/backup/restore/archive production lifecycle cần hardening',
+    title: 'Attachment Drive, backup/restore replacement và production lifecycle cần hardening',
     source: 'Phase 11, SRS-OVR-009..011',
-    evidence: ['ImportBatch/ImportStagingRow', 'attachment metadata', 'AuditOutbox delivery worker'],
+    evidence: ['attachment metadata', 'restore replacement', 'session revoke thật', 'Production Apps Script trigger/drill'],
   },
 ];
 

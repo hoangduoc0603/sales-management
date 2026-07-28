@@ -9,6 +9,39 @@ export interface ArchiveWorkerDependencies {
   now: () => Date;
 }
 
+export interface ArchiveChunkResult {
+  archivedCount: number;
+  checkpointKey?: string;
+}
+
+export function runArchiveChunk(
+  deps: ArchiveWorkerDependencies & {
+    storageRole: StorageRole;
+    maxPartitions: number;
+  },
+): ArchiveChunkResult {
+  const candidates = deps.repository
+    .listPartitions()
+    .filter((partition) => partition.storageRole === deps.storageRole)
+    .filter((partition) => partition.status === 'Closed')
+    .sort((left, right) => left.activeFrom.localeCompare(right.activeFrom))
+    .slice(0, Math.max(0, deps.maxPartitions));
+
+  let checkpointKey: string | undefined;
+  for (const partition of candidates) {
+    ensureArchiveReadOnlyRouting(deps, {
+      storageRole: partition.storageRole,
+      partitionKey: partition.partitionKey,
+    });
+    checkpointKey = `archive:${partition.storageRole}:${partition.partitionKey}`;
+  }
+
+  return {
+    archivedCount: candidates.length,
+    checkpointKey,
+  };
+}
+
 export function ensureArchiveReadOnlyRouting(
   deps: ArchiveWorkerDependencies,
   input: {

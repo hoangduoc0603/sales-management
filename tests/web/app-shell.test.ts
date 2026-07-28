@@ -78,7 +78,36 @@ describe('AppShell', () => {
     expect(html).toContain('Chi nhánh mặc định');
     expect(html).toContain('Kho mặc định');
     expect(html).toContain('aria-label="Chuyển sang giao diện tối"');
+    expect(html).toContain('aria-label="Thu gọn sidebar"');
     expect(html).not.toContain('<select');
+  });
+
+  it('render sidebar thu gọn dạng icon-only nhưng vẫn giữ aria-label điều hướng', () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        actor,
+        currentRoute: 'pos',
+        initialSidebarCollapsed: true,
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        theme: 'dark',
+        onLogout: () => undefined,
+        onRouteChange: () => undefined,
+        onScopeChange: () => undefined,
+        onThemeToggle: () => undefined,
+        children: createElement('div', null, 'Nội dung'),
+      }),
+    );
+
+    expect(html).toContain('cn-app-shell cn-app-shell-collapsed');
+    expect(html).toContain('aria-label="Mở rộng sidebar"');
+    expect(html).toContain('aria-label="Bán hàng"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).not.toContain('<span>Bán hàng</span>');
+    expect(html).not.toContain('Retail operations');
+    expect(html).toContain('cn-sidebar-foot-compact');
+    expect(html).not.toContain('class="cn-sidebar-foot"><span class="cn-sync-dot"></span>Đồng bộ cục bộ sẵn sàng');
   });
 });
 

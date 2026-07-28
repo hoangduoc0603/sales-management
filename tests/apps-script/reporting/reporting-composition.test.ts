@@ -53,6 +53,33 @@ describe('reporting API composition', () => {
     if (!report.ok) throw new Error('report failed');
     expect(report.data.rows[0]).not.toHaveProperty('grossProfitVnd');
 
+    expect(
+      api.invoke({
+        operation: 'reporting.drillDown.resolve',
+        requestId: 'req-report-drill',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          token: {
+            tokenId: 'drill-sales-profit',
+            reportId: 'sales-profit',
+            dateField: 'completedOrShippedAt',
+            dateRange: { from: '2026-07-26', to: '2026-07-26' },
+            scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+            filters: { kpiId: 'netRevenue' },
+            issuedAt: '2026-07-27T08:59:30.000Z',
+            asOf: '2026-07-27T08:59:30.000Z',
+          },
+          pageSize: 50,
+        },
+      }),
+    ).toMatchObject({
+      ok: true,
+      data: {
+        tokenId: 'drill-sales-profit',
+        rows: [{ branchId: 'branch-default', netRevenueVnd: 286_450_000 }],
+      },
+    });
+
     const exportRequest = api.invoke({
         operation: 'reporting.export.request',
         requestId: 'req-export',

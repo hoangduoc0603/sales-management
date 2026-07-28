@@ -1,33 +1,43 @@
 import type { CatalogPosVariantDTO } from '@shared/contracts/catalog/catalog';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
+import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type {
   SalesDraftListResponse,
   SalesDraftSaveResponse,
   SalesPosCompleteResponse,
 } from '@shared/contracts/sales/sales';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge } from '../../components/ui/badge';
-import { Button } from '../../components/ui/button';
-import { Panel } from '../../components/ui/panel';
-import { StateBlock } from '../../components/ui/state-block';
-import { Tabs } from '../../components/ui/tabs';
+import { CenioBrandMark } from '../../components/ui/brand-mark';
+import { Button, IconButton } from '../../components/ui/button';
+import { AppIcon } from '../../components/ui/icons';
+import { Listbox } from '../../components/ui/listbox';
+import { TextAvatar } from '../../components/ui/text-avatar';
 import type { ApiClient } from '../../lib/api/client';
 import { loadPosCatalogProjection } from './catalog-cache/load-pos-catalog-projection';
 import type { CatalogPosProjectionResponse } from './catalog-cache/pos-catalog-cache';
 import { createPosCatalogCache } from './catalog-cache/pos-catalog-cache';
 import type { PosCartLine } from './pos-cart-state';
 
+type PosTheme = 'light' | 'dark';
+type PosShellMode = 'standalone' | 'embedded';
+
 export interface PosCheckoutShellProps {
   scope: CurrentScopeResponse;
   selectedBranchId: string;
   selectedWarehouseId: string;
+  actor?: ActorContextDTO;
+  theme?: PosTheme;
   projection?: CatalogPosProjectionResponse;
   apiClient?: ApiClient;
   sessionToken?: string;
+  shellMode?: PosShellMode;
+  onNavigateDashboard?(): void;
+  onScopeChange?(input: { branchId?: string; warehouseId?: string }): void;
+  onThemeToggle?(): void;
 }
 
 const localPreviewProjection: CatalogPosProjectionResponse = {
-  projectionVersion: 'local-preview-catalog-v1',
+  projectionVersion: 'local-preview-catalog-v2',
   branchId: 'branch-default',
   warehouseId: 'warehouse-default',
   generatedAt: '2026-07-27T00:00:00.000Z',
@@ -40,7 +50,7 @@ const localPreviewProjection: CatalogPosProjectionResponse = {
       barcode: '893000000001',
       unitVersionId: 'unit-bottle-v1',
       unitName: 'chai',
-      unitPriceVnd: 42000,
+      unitPriceVnd: 42_000,
       saleEnabled: true,
       inventoryMode: 'Tracked',
       lotTracking: false,
@@ -55,7 +65,37 @@ const localPreviewProjection: CatalogPosProjectionResponse = {
       barcode: '893000000002',
       unitVersionId: 'unit-bag-v1',
       unitName: 'túi',
-      unitPriceVnd: 185000,
+      unitPriceVnd: 185_000,
+      saleEnabled: true,
+      inventoryMode: 'Tracked',
+      lotTracking: false,
+      serialTracking: false,
+      isActive: true,
+    },
+    {
+      variantId: 'variant-filter-210',
+      productId: 'product-filter',
+      sku: 'GD-FL-210',
+      displayName: 'Lõi lọc nước gia dụng',
+      barcode: '893000000003',
+      unitVersionId: 'unit-set-v1',
+      unitName: 'bộ',
+      unitPriceVnd: 285_000,
+      saleEnabled: true,
+      inventoryMode: 'Tracked',
+      lotTracking: false,
+      serialTracking: true,
+      isActive: true,
+    },
+    {
+      variantId: 'variant-shirt-basic',
+      productId: 'product-shirt',
+      sku: 'FA-TS-018',
+      displayName: 'Áo thun cổ tròn basic',
+      barcode: '893000000004',
+      unitVersionId: 'unit-piece-v1',
+      unitName: 'cái',
+      unitPriceVnd: 159_000,
       saleEnabled: true,
       inventoryMode: 'Tracked',
       lotTracking: false,
@@ -66,75 +106,152 @@ const localPreviewProjection: CatalogPosProjectionResponse = {
 };
 
 const tenderMethods = [
-  { id: 'cash', label: 'Tiền mặt' },
-  { id: 'bank-transfer', label: 'Chuyển khoản thủ công' },
-  { id: 'card', label: 'Thẻ' },
-  { id: 'qr', label: 'QR hiển thị' },
-  { id: 'credit', label: 'Bán chịu' },
+  { id: 'cash', label: 'Tiền mặt', icon: 'currency' },
+  { id: 'bank-transfer', label: 'Chuyển khoản thủ công', icon: 'wallet' },
+  { id: 'card', label: 'Thẻ', icon: 'wallet' },
+  { id: 'qr', label: 'QR hiển thị', icon: 'refresh' },
+  { id: 'credit', label: 'Bán chịu', icon: 'clock' },
 ] as const;
+
+const categories = ['Tất cả', 'Sữa & đồ uống', 'Mỹ phẩm', 'Gia dụng', 'Thời trang'] as const;
 
 const recoveryStates = [
   {
     id: 'shift',
     label: 'Chưa mở ca',
     title: 'Chưa có ca POS đang mở',
-    description: 'Mở ca trước khi hoàn tất để khoản thu được ghi nhận đúng quầy.',
+    description: 'Chọn “Mở ca” trước khi bán để khoản thu được ghi nhận đúng quầy.',
+    detail: 'Yêu cầu trước khi hoàn tất: xác nhận ca đang mở trong scope Branch/Warehouse hiện tại.',
     tone: 'warning' as const,
+    icon: 'clock' as const,
+    action: 'Mở ca',
   },
   {
     id: 'empty',
     label: 'Giỏ trống',
     title: 'Giỏ hàng đang trống',
-    description: 'Quét mã vạch, nhập SKU hoặc tìm tên để thêm mặt hàng. Không autosave giỏ.',
+    description: 'Quét mã vạch, nhập SKU hoặc tìm tên để thêm mặt hàng. Không tự lưu giỏ nếu chưa chọn Lưu nháp.',
     tone: 'neutral' as const,
+    icon: 'orders' as const,
+    action: 'Tập trung ô quét',
   },
   {
     id: 'not-found',
     label: 'Không tìm thấy',
     title: 'Không tìm thấy mã hoặc từ khóa',
-    description: 'Không tự thêm sản phẩm khi barcode/từ khóa không khớp duy nhất.',
+    description: 'Kiểm tra lại mã quét, đơn vị bán hoặc tìm theo tên. Không tạo mới sản phẩm ngay trong POS.',
+    detail: 'Mã chưa có trong danh mục đã tải trên máy này.',
     tone: 'danger' as const,
+    icon: 'warning' as const,
+    action: 'Quét lại',
+  },
+  {
+    id: 'matches',
+    label: 'Nhiều kết quả',
+    title: 'Có nhiều biến thể phù hợp',
+    description: 'Chọn đúng màu, size hoặc đơn vị trước khi thêm giỏ; không suy đoán biến thể từ mã rút gọn.',
+    detail: 'Ví dụ: Đen · M · 159.000 ₫ · Trắng · M · 159.000 ₫ · Đen · L · 159.000 ₫',
+    tone: 'neutral' as const,
+    icon: 'catalog' as const,
+    action: 'Chọn biến thể',
+  },
+  {
+    id: 'stock',
+    label: 'Thiếu tồn',
+    title: 'Tồn kho không đủ',
+    description: 'Điều chỉnh số lượng hoặc bỏ dòng hàng khi tồn khả dụng không đáp ứng tại thời điểm hoàn tất.',
+    detail: 'Kiểm tra này được thực hiện lại bởi backend khi complete command.',
+    tone: 'danger' as const,
+    icon: 'warning' as const,
+    action: 'Điều chỉnh',
+  },
+  {
+    id: 'serial',
+    label: 'Lô / serial',
+    title: 'Cần chọn lô / serial',
+    description: 'Hàng theo dõi lô hoặc serial phải chọn giá trị hợp lệ trước khi hoàn tất.',
+    detail: 'Chỉ lô/serial còn khả dụng trong Warehouse bán mới được chấp nhận.',
+    tone: 'warning' as const,
+    icon: 'box' as const,
+    action: 'Chọn serial',
+  },
+  {
+    id: 'approval',
+    label: 'Cần duyệt',
+    title: 'Cần phê duyệt giá hoặc giảm giá',
+    description: 'Giá hoặc giảm giá vượt quyền thu ngân phải gửi yêu cầu duyệt trước khi hoàn tất.',
+    detail: 'Lý do và người duyệt được lưu cùng phiếu bán sau commit.',
+    tone: 'warning' as const,
+    icon: 'admin' as const,
+    action: 'Gửi yêu cầu',
+  },
+  {
+    id: 'timeout',
+    label: 'Chờ xác nhận',
+    title: 'Đang kiểm tra kết quả hoàn tất',
+    description: 'Yêu cầu đã gửi nhưng chưa nhận phản hồi. Tra trạng thái bằng commandId trước khi retry.',
+    detail: 'Không tạo lại khoản thu hoặc phiếu bán thứ hai khi timeout.',
+    tone: 'neutral' as const,
+    icon: 'refresh' as const,
+    action: 'Tra trạng thái',
   },
   {
     id: 'conflict',
     label: 'Dữ liệu thay đổi',
     title: 'Dữ liệu bán đã thay đổi',
-    description: 'Checkout trả conflict ổn định khi giá, promotion hoặc tồn thay đổi.',
+    description: 'Giá, promotion hoặc tồn đã khác dữ liệu cache. Thu ngân cần xác nhận dữ liệu mới trước command mới.',
+    detail: 'Ví dụ: PRICE_CHANGED · PROMOTION_CHANGED · INSUFFICIENT_STOCK.',
     tone: 'danger' as const,
+    icon: 'warning' as const,
+    action: 'Áp dụng báo giá mới',
   },
   {
     id: 'success',
     label: 'Đã hoàn tất',
     title: 'Đã hoàn tất phiếu bán',
-    description: 'Receipt snapshot đã sẵn sàng. In hoặc in lại không tạo ledger mới.',
-    tone: 'info' as const,
+    description: 'Receipt snapshot đã sẵn sàng. In hoặc in lại là action riêng và không tạo ledger mới.',
+    tone: 'success' as const,
+    icon: 'check' as const,
+    action: 'Bán mới',
   },
 ];
 
 export function PosCheckoutShell({
+  actor,
   apiClient,
+  onNavigateDashboard,
+  onScopeChange,
+  onThemeToggle,
   projection = localPreviewProjection,
-  sessionToken,
   scope,
   selectedBranchId,
   selectedWarehouseId,
+  sessionToken,
+  shellMode = 'standalone',
+  theme = 'light',
 }: PosCheckoutShellProps) {
   const [activeProjection, setActiveProjection] = useState(projection);
   const [query, setQuery] = useState('');
   const [cartLines, setCartLines] = useState<PosCartLine[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<(typeof tenderMethods)[number]['id']>('cash');
   const [receivedAmountText, setReceivedAmountText] = useState('');
-  const [message, setMessage] = useState('POS sẵn sàng. Scan/search/cart xử lý tại browser cache.');
   const [activeStateId, setActiveStateId] = useState('empty');
+  const [selectedCategory, setSelectedCategory] = useState<(typeof categories)[number]>('Tất cả');
+  const [message, setMessage] = useState('POS sẵn sàng. Quét, tìm hàng và chỉnh giỏ được xử lý nhanh trên máy này.');
   const [isCompleting, setIsCompleting] = useState(false);
   const [receipt, setReceipt] = useState<SalesPosCompleteResponse['receipt']>();
   const branch = scope.branches.find((candidate) => candidate.branchId === selectedBranchId);
   const warehouse = scope.warehouses.find((candidate) => candidate.warehouseId === selectedWarehouseId);
+  const activeActor = actor ?? createFallbackActor();
   const cache = useMemo(() => createPosCatalogCache(activeProjection), [activeProjection]);
   const productSuggestions = query.trim().length > 0 ? cache.search(query) : activeProjection.variants;
+  const visibleProducts = productSuggestions.slice(0, 6);
   const totals = useMemo(() => calculateTotals(cartLines), [cartLines]);
   const receivedAmountVnd = parseVnd(receivedAmountText) ?? totals.totalVnd;
   const missingTrackedSelection = cartLines.find((line) => line.lotTracking || line.serialTracking);
+  const activeState = recoveryStates.find((state) => state.id === activeStateId) ?? recoveryStates[1];
+  const isStandaloneShell = shellMode === 'standalone';
+  const MainTag = isStandaloneShell ? 'main' : 'div';
 
   useEffect(() => {
     if (apiClient === undefined || sessionToken === undefined) {
@@ -153,13 +270,13 @@ export function PosCheckoutShell({
       .then((nextProjection) => {
         if (isActive) {
           setActiveProjection(nextProjection);
-          setMessage(`Cache ${nextProjection.projectionVersion} đã sẵn sàng.`);
+          setMessage(`Dữ liệu hàng hóa đã cập nhật phiên bản ${nextProjection.projectionVersion}.`);
         }
       })
       .catch(() => {
         if (isActive) {
           setActiveProjection(projection);
-          setMessage('Không tải được projection mới; đang dùng projection fallback của màn hình.');
+          setMessage('Không tải được dữ liệu hàng hóa mới; đang dùng dữ liệu dự phòng của màn hình.');
         }
       });
 
@@ -171,7 +288,7 @@ export function PosCheckoutShell({
   const addVariant = useCallback((variant: CatalogPosVariantDTO) => {
     setCartLines((current) => upsertCartLine(current, variant));
     setQuery('');
-    setActiveStateId('empty');
+    setActiveStateId(variant.lotTracking || variant.serialTracking ? 'serial' : 'empty');
     setMessage(`Đã thêm ${variant.displayName} vào giỏ trên máy này.`);
   }, []);
 
@@ -188,7 +305,7 @@ export function PosCheckoutShell({
       addVariant(matches[0]);
       return;
     }
-    setActiveStateId(matches.length === 0 ? 'not-found' : 'conflict');
+    setActiveStateId(matches.length === 0 ? 'not-found' : 'matches');
     setMessage(matches.length === 0 ? `Không tìm thấy “${trimmed}”.` : `Có ${matches.length} kết quả, cần chọn đúng biến thể.`);
   }, [addVariant, cache, query]);
 
@@ -203,13 +320,22 @@ export function PosCheckoutShell({
         idempotencyKey: `idem-draft-${Date.now()}`,
         branchId: selectedBranchId,
         warehouseId: selectedWarehouseId,
-        cashierId: 'user-admin',
+        cashierId: activeActor.userId,
         lines: toSalesLineInputs(cartLines),
         tenders: toTenderInputs(selectedTenderId, receivedAmountVnd),
       },
     });
     setMessage(result.ok ? `Đã lưu nháp ${result.data.order.businessNumber}.` : result.error.message);
-  }, [apiClient, cartLines, receivedAmountVnd, selectedBranchId, selectedTenderId, selectedWarehouseId, sessionToken]);
+  }, [
+    activeActor.userId,
+    apiClient,
+    cartLines,
+    receivedAmountVnd,
+    selectedBranchId,
+    selectedTenderId,
+    selectedWarehouseId,
+    sessionToken,
+  ]);
 
   const openDraft = useCallback(async () => {
     if (apiClient === undefined || sessionToken === undefined) return;
@@ -225,7 +351,7 @@ export function PosCheckoutShell({
   const completeSale = useCallback(async () => {
     if (apiClient === undefined || sessionToken === undefined || cartLines.length === 0) return;
     if (missingTrackedSelection !== undefined) {
-      setActiveStateId('conflict');
+      setActiveStateId('serial');
       setMessage(`${missingTrackedSelection.displayName} cần chọn lô/serial trước khi hoàn tất.`);
       return;
     }
@@ -239,7 +365,7 @@ export function PosCheckoutShell({
         idempotencyKey: `idem-pos-${Date.now()}`,
         branchId: selectedBranchId,
         warehouseId: selectedWarehouseId,
-        cashierId: 'user-admin',
+        cashierId: activeActor.userId,
         cashDrawerId: 'drawer-main',
         shiftId: 'shift-local-open',
         quoteVersion: `quote-${selectedBranchId}-${totals.totalVnd}-0`,
@@ -259,6 +385,7 @@ export function PosCheckoutShell({
     setActiveStateId('success');
     setMessage(`Đã hoàn tất ${result.data.order.businessNumber}.`);
   }, [
+    activeActor.userId,
     apiClient,
     cartLines,
     missingTrackedSelection,
@@ -271,191 +398,442 @@ export function PosCheckoutShell({
   ]);
 
   return (
-    <div className="cn-pos-shell">
-      <header className="cn-dashboard-head">
-        <div>
-          <p className="cn-breadcrumb">Sales / POS tại quầy</p>
-          <h1>POS tại quầy</h1>
-          <p>
-            {branch?.name ?? 'Chi nhánh chưa hợp lệ'} · {warehouse?.name ?? 'Kho chưa hợp lệ'} ·
-            ca/két tiền được backend kiểm tra khi hoàn tất.
-          </p>
-        </div>
-        <div className="cn-dashboard-actions">
-          <Badge tone="success">Cache sẵn sàng</Badge>
-          <Badge tone="success">Ca POS đang mở</Badge>
-        </div>
-      </header>
-
-      <div className="cn-pos-grid">
-        <section className="cn-pos-workspace">
-          <div className="cn-scan-panel">
-            <div className="cn-scan-label">
-              <strong>Quét mã vạch, SKU hoặc tên hàng</strong>
-              <span>Không gọi backend từng lần quét khi cache warm</span>
-            </div>
-            <div className="cn-scan-input-shell">
-              <span aria-hidden="true">⌕</span>
-              <input
-                aria-label="Quét mã vạch, SKU hoặc tên hàng"
-                autoFocus
-                onChange={(event) => setQuery(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleScanSubmit();
-                }}
-                placeholder="Quét mã hoặc nhập tên hàng..."
-                value={query}
+    <div className={isStandaloneShell ? 'cn-pos-page' : 'cn-pos-page cn-pos-page-embedded'}>
+      {isStandaloneShell ? (
+        <header className="cn-pos-header">
+          <div className="cn-pos-header-left">
+            <button className="cn-pos-brand" onClick={onNavigateDashboard} type="button">
+              <CenioBrandMark className="cn-pos-brand-mark" />
+              <span>
+                <strong>Cenio Sales</strong>
+                <span>Retail operations</span>
+              </span>
+            </button>
+            <div className="cn-pos-context-row">
+              <Listbox
+                className="cn-pos-context-control"
+                label="Chi nhánh"
+                onChange={(branchId) => onScopeChange?.({ branchId })}
+                options={scope.branches.map((candidate) => ({ value: candidate.branchId, label: candidate.name }))}
+                value={selectedBranchId}
               />
-              <kbd>Enter</kbd>
+              <Listbox
+                className="cn-pos-context-control"
+                label="Kho"
+                onChange={(warehouseId) => onScopeChange?.({ warehouseId })}
+                options={scope.warehouses.map((candidate) => ({
+                  value: candidate.warehouseId,
+                  label: candidate.name,
+                  disabled: !candidate.directSaleEnabled,
+                }))}
+                value={selectedWarehouseId}
+              />
+              <span className="cn-pos-chip success">
+                <span className="cn-chip-dot" />
+                Ca POS đang mở
+              </span>
             </div>
           </div>
-
-          <Panel
-            description={`Projection ${cache.projectionVersion}; search chạy local từ browser cache.`}
-            title="Gợi ý hàng hóa"
-          >
-            <div className="cn-product-grid">
-              {productSuggestions.slice(0, 6).map((variant) => (
-                <article className="cn-product-placeholder" key={variant.variantId}>
-                  <span aria-hidden="true">◇</span>
-                  <strong>{variant.displayName}</strong>
-                  <p>
-                    SKU {variant.sku} · {variant.unitName} · {formatVnd(variant.unitPriceVnd)}
-                  </p>
-                  <Button onClick={() => addVariant(variant)} variant="secondary">Thêm vào giỏ</Button>
-                </article>
-              ))}
+          <div className="cn-pos-header-right">
+            <span className="cn-pos-chip success">Dữ liệu quầy sẵn sàng</span>
+            <IconButton
+              className="cn-pos-icon-button"
+              label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+              onClick={onThemeToggle}
+            >
+              <AppIcon name={theme === 'dark' ? 'sun' : 'moon'} />
+            </IconButton>
+            <IconButton className="cn-pos-icon-button" label="Thông báo">
+              <AppIcon name="bell" />
+            </IconButton>
+            <div className="cn-pos-user">
+              <TextAvatar initials={getInitials(activeActor.displayName)} label={activeActor.displayName} size="sm" />
+              <span>
+                <strong>{activeActor.displayName}</strong>
+                <span>{activeActor.loginId}</span>
+              </span>
             </div>
-          </Panel>
+          </div>
+        </header>
+      ) : null}
 
-          <Panel description="Tạo/chọn khách nhanh theo quyền; cảnh báo credit/công nợ xử lý từ backend." title="Khách hàng">
-            <div className="cn-customer-row">
-              <strong>Khách lẻ</strong>
-              <span>Chọn khách để dùng điểm, hạn mức nợ hoặc chính sách giá.</span>
-              <Button variant="secondary">Tìm / tạo khách</Button>
-            </div>
-          </Panel>
+      <MainTag className="cn-pos-main">
+        <section className="cn-pos-page-heading">
+          <div>
+            <p className="cn-pos-crumb">Sales / POS tại quầy</p>
+            <h1>POS tại quầy</h1>
+          </div>
         </section>
 
-        <aside className="cn-pos-checkout">
-          <Panel
-            description="Giỏ browser-local; chỉ save draft/complete mới đi qua command."
-            title={`Giỏ hàng · ${cartLines.length} dòng`}
-          >
-            {cartLines.length === 0 ? (
-              <div className="cn-cart-empty">
-                <StateBlock
-                  description="Chưa có dòng hàng. Reload có thể mất giỏ chưa lưu; Draft đã lưu mở lại theo scope."
-                  title="Giỏ hàng đang trống"
-                  tone="neutral"
+        <div className="cn-pos-layout-grid">
+          <section className="cn-pos-workspace">
+            <section className="cn-scan-panel">
+              <div className="cn-scan-label">
+                <strong>Quét mã vạch, SKU hoặc tên hàng</strong>
+                <span>Sẵn sàng nhận scanner</span>
+              </div>
+              <div className="cn-scan-input-wrap">
+                <AppIcon aria-hidden="true" name="barcodeScan" />
+                <input
+                  aria-label="Quét mã vạch, SKU hoặc tên hàng"
+                  autoFocus
+                  className="cn-scan-input"
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleScanSubmit();
+                  }}
+                  placeholder="Quét mã hoặc nhập tên hàng..."
+                  value={query}
                 />
+                <span className="cn-shortcut">
+                  Nhấn <kbd>Enter</kbd>
+                </span>
               </div>
-            ) : (
-              <div className="cn-cart-lines">
-                {cartLines.map((line) => (
-                  <article className="cn-cart-line" key={line.variantId}>
-                    <div>
-                      <strong>{line.displayName}</strong>
-                      <p>{line.unitName} · {line.sku} · {formatVnd(line.unitPriceVnd)}</p>
-                      <div className="cn-line-tools">
-                        <button onClick={() => setCartLines((current) => changeCartQuantity(current, line.variantId, line.quantity - 1))} type="button">−</button>
-                        <span className="num">{line.quantity}</span>
-                        <button onClick={() => setCartLines((current) => changeCartQuantity(current, line.variantId, line.quantity + 1))} type="button">+</button>
-                        {(line.lotTracking || line.serialTracking) ? <span className="cn-line-warning">Cần chọn lô/serial</span> : null}
-                      </div>
-                    </div>
-                    <div className="cn-cart-line-side">
-                      <strong className="num">{formatVnd(line.lineTotalVnd)}</strong>
-                      <button onClick={() => setCartLines((current) => current.filter((candidate) => candidate.variantId !== line.variantId))} type="button">Bỏ</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-            <section className="cn-commerce-section">
-              <h3>Khuyến mãi & ưu đãi</h3>
-              <p>Promotion/voucher/điểm được revalidate khi hoàn tất; conflict sẽ hiển thị bằng mã ổn định.</p>
-            </section>
-            <section className="cn-commerce-section">
-              <div className="cn-total-row">
-                <span>Tạm tính</span>
-                <strong className="num">{formatVnd(totals.subtotalVnd)}</strong>
-              </div>
-              <div className="cn-total-row">
-                <span>Giảm giá</span>
-                <strong className="num">{formatVnd(totals.discountVnd)}</strong>
-              </div>
-              <div className="cn-total-row cn-total-final">
-                <span>Tổng thanh toán</span>
-                <strong className="num">{formatVnd(totals.totalVnd)}</strong>
-              </div>
-            </section>
-            <section className="cn-commerce-section">
-              <h3>Phương thức thanh toán</h3>
-              <div className="cn-tender-grid" role="tablist" aria-label="Phương thức thanh toán">
-                {tenderMethods.map((tender) => (
-                  <button
-                    aria-selected={selectedTenderId === tender.id}
-                    className={selectedTenderId === tender.id ? 'cn-tender-button active' : 'cn-tender-button'}
-                    key={tender.id}
-                    onClick={() => setSelectedTenderId(tender.id)}
-                    role="tab"
-                    type="button"
-                  >
-                    {tender.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                aria-label="Số tiền khách đưa"
-                className="cn-pos-amount-input num"
-                onChange={(event) => setReceivedAmountText(event.currentTarget.value)}
-                placeholder={formatVnd(totals.totalVnd)}
-                value={receivedAmountText}
-              />
-              <p className="cn-pos-change num">
-                {receivedAmountVnd >= totals.totalVnd
-                  ? `Tiền thừa: ${formatVnd(receivedAmountVnd - totals.totalVnd)}`
-                  : `Còn phải thu: ${formatVnd(totals.totalVnd - receivedAmountVnd)}`}
+              <p className="cn-scan-hint">
+                <AppIcon name="check" />
+                Scan, tìm và chỉnh quantity không gọi Apps Script từng thao tác.
               </p>
             </section>
-            <div className="cn-cart-actions">
-              <Button disabled={cartLines.length === 0} onClick={saveDraft} variant="secondary">Lưu nháp</Button>
-              <Button onClick={openDraft} variant="secondary">Mở nháp</Button>
-              <Button onClick={() => { setCartLines([]); setMessage('Đã hủy giỏ trên trình duyệt.'); }} variant="secondary">Hủy giỏ</Button>
-            </div>
-            <Button
-              className="cn-complete-sale"
-              disabled={cartLines.length === 0}
-              isLoading={isCompleting}
-              onClick={completeSale}
-              variant="primary"
-            >
-              Hoàn tất bán hàng
-            </Button>
-          </Panel>
-        </aside>
-      </div>
 
-      <Panel description={message} title="Tình huống POS & phục hồi">
-        <Tabs
-          items={recoveryStates.map((state) => ({
-            id: state.id,
-            label: state.label,
-            content: (
-              <StateBlock
-                description={state.id === 'success' && receipt ? `${state.description} ${receipt.businessNumber} · ${formatVnd(receipt.totals.totalVnd)}.` : state.description}
-                title={state.title}
-                tone={state.tone}
-              />
-            ),
-          }))}
-          onChange={setActiveStateId}
-          selectedId={activeStateId}
-        />
-      </Panel>
+            <div className="cn-category-row" aria-label="Danh mục gợi ý">
+              {categories.map((category) => (
+                <button
+                  className={category === selectedCategory ? 'cn-category active' : 'cn-category'}
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  type="button"
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            <section className="cn-pos-panel">
+              <header className="cn-pos-panel-head">
+                <div>
+                  <h2>Gợi ý hàng hóa</h2>
+                  <p>Có {visibleProducts.length} gợi ý trong dữ liệu đã tải; tồn được kiểm tra lại khi hoàn tất.</p>
+                </div>
+              </header>
+              <div className="cn-pos-panel-body">
+                <div className="cn-product-grid">
+                  {visibleProducts.map((variant, index) => (
+                    <article className="cn-product-card" key={variant.variantId}>
+                      <div className="cn-product-top">
+                        <span className={`cn-product-icon cn-product-icon-${index % 4}`} aria-hidden="true">
+                          <AppIcon name="box" />
+                        </span>
+                        <span className="cn-stock num">{getStockPreview(variant)}</span>
+                      </div>
+                      <h3 className="cn-product-name">{variant.displayName}</h3>
+                      <p className="cn-product-meta num">
+                        SKU {variant.sku} · {variant.unitName}
+                      </p>
+                      <strong className="cn-product-price num">{formatVnd(variant.unitPriceVnd)}</strong>
+                      <div className="cn-product-foot">
+                        <span className="cn-indicator">
+                          <AppIcon name={variant.serialTracking ? 'warning' : variant.lotTracking ? 'orders' : 'catalog'} />
+                          {getProductIndicator(variant)}
+                        </span>
+                        <Button onClick={() => addVariant(variant)} variant="secondary">
+                          Thêm
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section aria-label="Khách hàng" className="cn-pos-panel">
+              <div className="cn-customer-panel">
+                <span className="cn-customer-icon" aria-hidden="true">
+                  <AppIcon name="customers" />
+                </span>
+                <div className="cn-customer-copy">
+                  <strong>Khách lẻ</strong>
+                  <span>Chưa chọn khách hàng · có thể tích điểm sau khi chọn</span>
+                </div>
+                <div className="cn-customer-actions">
+                  <Button variant="ghost">Tìm khách</Button>
+                  <Button variant="secondary">Tạo nhanh</Button>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <aside className="cn-checkout-panel">
+            <section className="cn-pos-panel">
+              <header className="cn-pos-panel-head">
+                <div className="cn-cart-title">
+                  <h2>Giỏ hàng</h2>
+                  <span className="cn-cart-count">{cartLines.length} mặt hàng</span>
+                  <span className="cn-pos-chip warning">Chưa lưu</span>
+                </div>
+              </header>
+              <div className="cn-scope-snapshot">
+                <AppIcon name="inventory" />
+                <span>{formatScopeSnapshot(branch?.name, warehouse?.name)}</span>
+              </div>
+
+              {cartLines.length === 0 ? (
+                <div className="cn-cart-empty-state">
+                  <span className="cn-state-symbol">
+                    <AppIcon name="orders" />
+                  </span>
+                  <strong>Giỏ hàng đang trống</strong>
+                  <p>Quét mã vạch, nhập SKU hoặc tìm tên để thêm mặt hàng. Không autosave giỏ chưa lưu.</p>
+                </div>
+              ) : (
+                <div className="cn-cart-lines">
+                  {cartLines.map((line) => (
+                    <article className="cn-cart-line" key={line.variantId}>
+                      <div className="cn-cart-line-main">
+                        <div className="cn-cart-line-name">
+                          {line.displayName}
+                          {line.lineDiscountVnd > 0 ? <span className="cn-pos-chip success">KM</span> : null}
+                        </div>
+                        <p className="cn-cart-line-meta num">
+                          {line.unitName} · {line.sku} · {formatVnd(line.unitPriceVnd)}
+                        </p>
+                        <div className="cn-line-tools">
+                          <div className="cn-stepper" aria-label={`Số lượng ${line.displayName}`}>
+                            <button
+                              aria-label="Giảm số lượng"
+                              onClick={() => setCartLines((current) => changeCartQuantity(current, line.variantId, line.quantity - 1))}
+                              type="button"
+                            >
+                              −
+                            </button>
+                            <span className="num">{line.quantity}</span>
+                            <button
+                              aria-label="Tăng số lượng"
+                              onClick={() => setCartLines((current) => changeCartQuantity(current, line.variantId, line.quantity + 1))}
+                              type="button"
+                            >
+                              +
+                            </button>
+                          </div>
+                          {(line.lotTracking || line.serialTracking) ? (
+                            <button className="cn-line-link" onClick={() => setActiveStateId('serial')} type="button">
+                              {line.serialTracking ? 'Chọn serial' : 'Chọn lô'}
+                            </button>
+                          ) : (
+                            <button className="cn-line-link" type="button">Giảm giá</button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="cn-cart-line-side">
+                        <strong className="cn-line-total num">{formatVnd(line.lineTotalVnd)}</strong>
+                        <button
+                          className="cn-remove-line"
+                          onClick={() => setCartLines((current) => current.filter((candidate) => candidate.variantId !== line.variantId))}
+                          type="button"
+                        >
+                          Bỏ
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              {missingTrackedSelection !== undefined ? (
+                <div className="cn-inline-warning">
+                  <AppIcon name="warning" />
+                  <span>{missingTrackedSelection.displayName} cần chọn lô/serial trước khi hoàn tất.</span>
+                </div>
+              ) : null}
+
+              <section className="cn-commerce-section">
+                <div className="cn-commerce-heading">
+                  <strong>Khuyến mãi & ưu đãi</strong>
+                  <span>Tự động áp dụng khi có policy hợp lệ</span>
+                </div>
+                <div className="cn-field-row">
+                  <input aria-label="Mã giảm giá" className="cn-field-input" placeholder="Nhập mã giảm giá" />
+                  <Button variant="secondary">Áp dụng</Button>
+                </div>
+                <div className="cn-points-row">
+                  <span>Điểm thành viên</span>
+                  <strong>Chọn khách để dùng điểm</strong>
+                </div>
+              </section>
+
+              <section className="cn-commerce-section">
+                <div className="cn-total-row">
+                  <span>Tạm tính</span>
+                  <strong className="num">{formatVnd(totals.subtotalVnd)}</strong>
+                </div>
+                <div className="cn-total-row">
+                  <span>Giảm giá</span>
+                  <strong className="num">{formatVnd(totals.discountVnd)}</strong>
+                </div>
+                <div className="cn-total-row">
+                  <span>VAT</span>
+                  <strong className="num">0 đ</strong>
+                </div>
+                <div className="cn-total-row">
+                  <span>Phí giao hàng</span>
+                  <strong className="num">0 đ</strong>
+                </div>
+                <div className="cn-total-row cn-total-final">
+                  <span>Tổng thanh toán</span>
+                  <strong className="num">{formatVnd(totals.totalVnd)}</strong>
+                </div>
+              </section>
+
+              <section className="cn-commerce-section">
+                <div className="cn-commerce-heading">
+                  <strong>Phương thức thanh toán</strong>
+                  <span>Có thể ghi nhiều khoản thu</span>
+                </div>
+                <div className="cn-tender-tabs" role="tablist" aria-label="Phương thức thanh toán">
+                  {tenderMethods.map((tender) => (
+                    <button
+                      aria-selected={selectedTenderId === tender.id}
+                      className={selectedTenderId === tender.id ? 'cn-tender active' : 'cn-tender'}
+                      key={tender.id}
+                      onClick={() => setSelectedTenderId(tender.id)}
+                      role="tab"
+                      type="button"
+                    >
+                      <AppIcon name={tender.icon} />
+                      {tender.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="cn-received-grid">
+                  <input
+                    aria-label="Số tiền khách đưa"
+                    className="cn-field-input num"
+                    onChange={(event) => setReceivedAmountText(event.currentTarget.value)}
+                    placeholder={formatVnd(totals.totalVnd)}
+                    value={receivedAmountText}
+                  />
+                  <button
+                    className="cn-quick-amount"
+                    onClick={() => setReceivedAmountText(String(totals.totalVnd))}
+                    type="button"
+                  >
+                    Đủ tiền
+                  </button>
+                </div>
+                <div className="cn-amount-result">
+                  <span>{receivedAmountVnd >= totals.totalVnd ? 'Tiền thừa trả khách' : 'Còn phải thu'}</span>
+                  <strong className="num">
+                    {receivedAmountVnd >= totals.totalVnd
+                      ? formatVnd(receivedAmountVnd - totals.totalVnd)
+                      : formatVnd(totals.totalVnd - receivedAmountVnd)}
+                  </strong>
+                </div>
+              </section>
+
+              <div className="cn-cart-actions">
+                <Button disabled={cartLines.length === 0} onClick={saveDraft} variant="secondary">Lưu nháp</Button>
+                <Button onClick={openDraft} variant="secondary">Mở nháp</Button>
+                <Button onClick={() => { setCartLines([]); setMessage('Đã hủy giỏ trên trình duyệt.'); }} variant="secondary">Hủy giỏ</Button>
+              </div>
+              <div className="cn-complete-wrap">
+                <Button
+                  className="cn-complete"
+                  disabled={cartLines.length === 0}
+                  isLoading={isCompleting}
+                  onClick={completeSale}
+                  variant="primary"
+                >
+                  Hoàn tất bán hàng
+                </Button>
+              </div>
+              <div className="cn-checkout-contract">
+                <AppIcon name="admin" />
+                <span>Khi hoàn tất, hệ thống kiểm tra lại phạm vi, ca mở, tồn, lô/serial, giá, ưu đãi, điểm, thuế, công nợ và khoản thu trước khi ghi nhận phiếu bán.</span>
+              </div>
+            </section>
+          </aside>
+        </div>
+
+        <section className="cn-pos-panel cn-state-lab">
+          <header className="cn-pos-panel-head">
+            <div>
+              <h2>Tình huống POS & phục hồi</h2>
+              <p>{message}</p>
+            </div>
+            <span className="cn-pos-chip info">10 trạng thái</span>
+          </header>
+          <div className="cn-state-tabs" role="tablist" aria-label="Trạng thái POS">
+            {recoveryStates.map((state) => (
+              <button
+                aria-selected={state.id === activeStateId}
+                className="cn-state-tab"
+                key={state.id}
+                onClick={() => setActiveStateId(state.id)}
+                role="tab"
+                type="button"
+              >
+                {state.label}
+              </button>
+            ))}
+          </div>
+          <div className={`cn-state-content cn-state-${activeState.tone}`} role="tabpanel">
+            <span className="cn-state-symbol">
+              <AppIcon name={activeState.icon} />
+            </span>
+            <div className="cn-state-copy">
+              <h3>{activeState.title}</h3>
+              <p>{activeState.id === 'success' && receipt ? `${activeState.description} ${receipt.businessNumber} · ${formatVnd(receipt.totals.totalVnd)}.` : activeState.description}</p>
+              {activeState.detail ? <div className="cn-state-detail">{activeState.detail}</div> : null}
+            </div>
+            <Button variant={activeState.id === 'conflict' ? 'primary' : 'secondary'}>{activeState.action}</Button>
+          </div>
+        </section>
+      </MainTag>
     </div>
   );
+}
+
+function createFallbackActor(): ActorContextDTO {
+  return {
+    userId: 'user-admin',
+    loginId: 'admin',
+    displayName: 'Admin Local',
+    tenantId: 'tenant-default',
+    authVersion: 1,
+    actions: [],
+    scope: {
+      tenantId: 'tenant-default',
+      branchIds: ['branch-default'],
+      warehouseIds: ['warehouse-default'],
+    },
+  };
+}
+
+function getStockPreview(variant: CatalogPosVariantDTO): string {
+  if (variant.serialTracking) return 'Còn 8 bộ';
+  if (variant.lotTracking) return 'Còn 36 chai';
+  if (variant.sku.includes('TS')) return 'Còn 19 cái';
+  return 'Còn 24 chai';
+}
+
+function getProductIndicator(variant: CatalogPosVariantDTO): string {
+  if (variant.serialTracking) return 'Chọn serial';
+  if (variant.lotTracking) return 'Lô theo dõi';
+  if (variant.sku.includes('TS')) return 'Màu / size';
+  return 'Có thể bán';
+}
+
+function formatScopeSnapshot(branchName?: string, warehouseName?: string): string {
+  return `${branchName ?? 'Chi nhánh chưa hợp lệ'} · ${warehouseName ?? 'Kho chưa hợp lệ'} · Ca POS #CA-017`;
+}
+
+function getInitials(displayName: string): string {
+  return displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(-2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'U';
 }
 
 function upsertCartLine(current: readonly PosCartLine[], variant: CatalogPosVariantDTO): PosCartLine[] {

@@ -57,6 +57,7 @@ export const operationNames = [
   'sales.warranty.transition',
   'reporting.dashboard.get',
   'reporting.report.query',
+  'reporting.drillDown.resolve',
   'reporting.export.request',
   'reporting.export.getStatus',
   'operations.import.template',

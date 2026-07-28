@@ -34,6 +34,8 @@ import type {
 } from '@shared/contracts/operations/operations';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { AuditOutboxRepository } from '../../repositories/platform/audit-outbox-repository';
+import { runAuditDeliveryChunk } from './audit-delivery-worker';
+import { runImportCommitChunk } from './import-commit-worker';
 import type {
   OperationsPartitionRecord,
   OperationsRepository,
@@ -175,25 +177,16 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
         return failure('INVALID_INPUT', 'Batch có dòng lỗi nên không thể commit theo chế độ AllOrNothing.');
       }
 
-      const committedAt = deps.now().toISOString();
-      const rows = existingRows.map((row) => {
-        if (row.validationStatus !== 'Valid') {
-          return { ...row, commitStatus: 'Skipped' as const };
-        }
-        return {
-          ...row,
-          commitStatus: 'Committed' as const,
-          sourceObjectId: row.sourceObjectId ?? deps.newId(`imported-${batch.importType.toLowerCase()}`),
-        };
-      });
-      const updatedBatch = {
-        ...batch,
-        status: 'Completed' as const,
+      runImportCommitChunk({
+        repository: deps.repository,
+        now: deps.now,
+        newId: deps.newId,
+        batchId: batch.batchId,
         selectionMode: input.request.selectionMode,
-        committedAt,
-      };
-      deps.repository.saveImportRows(batch.batchId, rows);
-      deps.repository.saveImportBatch(updatedBatch);
+        maxRows: Number.MAX_SAFE_INTEGER,
+      });
+      const updatedBatch = deps.repository.getImportBatch(batch.batchId) ?? batch;
+      const rows = deps.repository.listImportRows(batch.batchId);
       return {
         ok: true,
         data: {
@@ -274,11 +267,19 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
     deliverAudit(input) {
       const permissionError = requireAction(input.actor, 'operations.audit.deliver');
       if (permissionError !== undefined) return permissionError;
-      const deliveredCount = deps.auditOutboxRepository
-        .list()
-        .filter((event) => event.status === 'Pending')
-        .slice(0, input.request.maxEvents).length;
-      return { ok: true, data: { runId: input.request.runId, deliveredCount, failedCount: 0 } };
+      const result = runAuditDeliveryChunk({
+        auditOutboxRepository: deps.auditOutboxRepository,
+        operationsRepository: deps.repository,
+        maxEvents: input.request.maxEvents,
+      });
+      return {
+        ok: true,
+        data: {
+          runId: input.request.runId,
+          deliveredCount: result.deliveredCount,
+          failedCount: result.failedCount,
+        },
+      };
     },
     requestBackup(input) {
       const permissionError = requireAction(input.actor, 'operations.backup.manage');

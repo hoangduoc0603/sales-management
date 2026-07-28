@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { AppIcon } from './icons';
 
 export interface ListboxOption {
   value: string;
@@ -19,7 +20,28 @@ export interface ListboxProps {
 export function Listbox({ className, label, onChange, options, value }: ListboxProps) {
   const id = useId();
   const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setIsOpen(false);
+    };
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
 
   const choose = (nextValue: string) => {
     onChange(nextValue);
@@ -46,7 +68,7 @@ export function Listbox({ className, label, onChange, options, value }: ListboxP
   };
 
   return (
-    <div className={['cn-listbox-field', className].filter(Boolean).join(' ')}>
+    <div className={['cn-listbox-field', className].filter(Boolean).join(' ')} ref={rootRef}>
       <span className="cn-listbox-label" id={`${id}-label`}>
         {label}
       </span>
@@ -54,6 +76,7 @@ export function Listbox({ className, label, onChange, options, value }: ListboxP
         <button
           aria-expanded={isOpen}
           aria-haspopup="listbox"
+          aria-controls={`${id}-listbox`}
           aria-labelledby={`${id}-label ${id}-trigger`}
           className="cn-listbox-trigger"
           id={`${id}-trigger`}
@@ -61,10 +84,10 @@ export function Listbox({ className, label, onChange, options, value }: ListboxP
           onKeyDown={handleKeyDown}
           type="button"
         >
-          <span>{selected?.label ?? 'Chưa chọn'}</span>
-          <span aria-hidden="true">⌄</span>
+          <span className="cn-listbox-trigger-label">{selected?.label ?? 'Chưa chọn'}</span>
+          <AppIcon className="cn-listbox-chevron" name="chevronDown" />
         </button>
-        <div className="cn-listbox-popover" hidden={!isOpen} role="listbox">
+        <div className="cn-listbox-popover" hidden={!isOpen} id={`${id}-listbox`} role="listbox">
           {options.map((option) => (
             <button
               aria-selected={option.value === value}

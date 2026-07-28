@@ -7,7 +7,7 @@ import {
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 
 describe('Sheet-backed AuditOutbox repository', () => {
-  it('persists AuditOutbox records through SheetGateway using registry primary key', () => {
+  it('persists AuditOutbox records as append-only versions through SheetGateway', () => {
     const gateway = new FakeSheetGateway();
     const repository = createSheetAuditOutboxRepository({
       gateway,
@@ -23,7 +23,7 @@ describe('Sheet-backed AuditOutbox repository', () => {
         partitionKey: 'FY2026-P01',
         rows: [
           {
-            id: 'audit-1',
+            id: 'audit-1:v1',
             eventId: 'audit-1',
             commandId: 'cmd-1',
             actorId: 'user-1',
@@ -37,10 +37,10 @@ describe('Sheet-backed AuditOutbox repository', () => {
     expect(repository.list()).toEqual([auditRecord]);
   });
 
-  it('rejects duplicate eventId values before appending another row', () => {
+  it('allows a later event state version and returns latest state per eventId', () => {
     const gateway = new FakeSheetGateway([
       {
-        id: 'audit-1',
+        id: 'audit-1:v1',
         eventId: 'audit-1',
         commandId: 'cmd-1',
         actorId: 'user-1',
@@ -55,8 +55,26 @@ describe('Sheet-backed AuditOutbox repository', () => {
       partitionKey: 'FY2026-P01',
     });
 
-    expect(() => repository.append(auditRecord)).toThrow(/DuplicatePrimaryKey:AuditOutbox.id:audit-1/);
-    expect(gateway.appendRequests).toEqual([]);
+    repository.append({ ...auditRecord, status: 'Delivered' });
+
+    expect(gateway.appendRequests).toEqual([
+      {
+        tableName: 'AuditOutbox',
+        partitionKey: 'FY2026-P01',
+        rows: [
+          {
+            id: 'audit-1:v2',
+            eventId: 'audit-1',
+            commandId: 'cmd-1',
+            actorId: 'user-1',
+            action: 'sales.checkout.complete',
+            status: 'Delivered',
+            createdAt: '2026-07-27T00:00:00.000Z',
+          },
+        ],
+      },
+    ]);
+    expect(repository.list()).toEqual([{ ...auditRecord, status: 'Delivered' }]);
   });
 });
 

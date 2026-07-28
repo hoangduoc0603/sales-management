@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProductionRepositories } from '../../../apps-script/src/bootstrap/create-production-repositories';
+import type { CredentialVerifierStore } from '../../../apps-script/src/repositories/platform/auth-repository';
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
 
@@ -11,6 +12,7 @@ describe('Production repository aggregate', () => {
       tableDefinitions: createPlatformTableDefinitions(),
       transactionPartitionKey: 'FY2026-P01',
       auditPartitionKey: 'AUDIT-2026-07',
+      credentialVerifierStore: new FakeCredentialVerifierStore(),
     });
 
     repositories.commandRepository.save({
@@ -105,6 +107,27 @@ describe('Production repository aggregate', () => {
       message: 'ok',
     });
     repositories.reportingRepository.saveReportRows('sales-summary', [{ netRevenueVnd: 100000 }]);
+    repositories.authRepository.saveUser({
+      userId: 'user-admin',
+      loginId: 'admin',
+      displayName: 'Admin',
+      tenantId: 'tenant-default',
+      authVersion: 1,
+      disabled: false,
+      passwordChangeRequired: true,
+      passwordVerifier: 'pbkdf2:secret-verifier',
+      failedLoginCount: 0,
+      actions: ['platform.session.view'],
+      branchIds: ['branch-default'],
+      warehouseIds: ['warehouse-default'],
+    });
+    repositories.administrationRepository.saveTenant({
+      tenantId: 'tenant-default',
+      displayName: 'Cửa hàng mặc định',
+      status: 'Active',
+      timezone: 'Asia/Ho_Chi_Minh',
+      activeConfigVersionId: 'config-default',
+    });
 
     expect(gateway.appendRequests.map((request) => [request.tableName, request.partitionKey])).toEqual([
       ['CommandTransaction', 'FY2026-P01'],
@@ -117,7 +140,10 @@ describe('Production repository aggregate', () => {
       ['SaleOrder', 'FY2026-P01'],
       ['HealthCheck', undefined],
       ['ReportRow', 'FY2026-P01'],
+      ['UserAccount', undefined],
+      ['Tenant', undefined],
     ]);
+    expect(JSON.stringify(gateway.appendRequests)).not.toContain('pbkdf2:secret-verifier');
   });
 
   it('fails fast when required sellable domain table definitions are missing', () => {
@@ -129,10 +155,23 @@ describe('Production repository aggregate', () => {
         tableDefinitions,
         transactionPartitionKey: 'FY2026-P01',
         auditPartitionKey: 'AUDIT-2026-07',
+        credentialVerifierStore: new FakeCredentialVerifierStore(),
       }),
     ).toThrow(/Missing sales table definition: SaleOrder/);
   });
 });
+
+class FakeCredentialVerifierStore implements CredentialVerifierStore {
+  private readonly values = new Map<string, string>();
+
+  getVerifier(userId: string): string | undefined {
+    return this.values.get(userId);
+  }
+
+  saveVerifier(userId: string, verifier: string): void {
+    this.values.set(userId, verifier);
+  }
+}
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];

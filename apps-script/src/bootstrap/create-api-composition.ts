@@ -39,6 +39,7 @@ import type {
 } from '@shared/contracts/purchasing/purchasing';
 import type {
   ReportingDashboardRequest,
+  ReportingDrillDownRequest,
   ReportingExportRequest,
   ReportingExportStatusRequest,
   ReportingReportQueryRequest,
@@ -124,6 +125,7 @@ import {
 } from '@shared/schemas/purchasing/purchasing';
 import {
   parseReportingDashboardRequest,
+  parseReportingDrillDownRequest,
   parseReportingExportRequest,
   parseReportingExportStatusRequest,
   parseReportingReportQueryRequest,
@@ -174,7 +176,10 @@ import { createInMemoryAuditOutboxRepository } from '../repositories/platform/au
 import { createInMemoryAuthRepository } from '../repositories/platform/auth-repository';
 import { createInMemoryCommandRepository } from '../repositories/platform/command-repository';
 import { createStaticTableRegistryRepository } from '../repositories/platform/table-registry-repository';
-import { createImmediateLockProvider } from '../infrastructure/platform/runtime';
+import {
+  createImmediateLockProvider,
+  type LockProvider,
+} from '../infrastructure/platform/runtime';
 import { createAdministrationService } from '../services/administration/administration-service';
 import { createAuthorizationService } from '../services/platform/authorization/authorization-service';
 import { createInMemoryAuthorizationRepository } from '../repositories/platform/authorization-repository';
@@ -184,7 +189,10 @@ import {
   actorFromSessionResult,
   createSessionService,
 } from '../services/platform/auth/session-service';
-import { createDeterministicPasswordServiceForTest } from '../services/platform/auth/password-service';
+import {
+  createDeterministicPasswordServiceForTest,
+  type PasswordService,
+} from '../services/platform/auth/password-service';
 import {
   createPlatformTableDefinitions,
   createTableRegistryService,
@@ -196,33 +204,57 @@ import { createFinanceService } from '../services/finance/finance-service';
 import { createInventoryService } from '../services/inventory/inventory-service';
 import { createPurchasingService } from '../services/purchasing/purchasing-service';
 import { createReportingService } from '../services/reporting/reporting-service';
+import { createReportingPartitionCoverageResolver } from '../services/reporting/reporting-partition-coverage';
 import { createOperationsService } from '../services/operations/operations-service';
 import { createSalesService } from '../services/sales/sales-service';
+import type { ProductionRepositories } from './create-production-repositories';
+
+export interface ApiCompositionDependencies {
+  clock: Clock;
+  repositories?: Partial<ProductionRepositories>;
+  passwordService?: PasswordService;
+  lockProvider?: LockProvider;
+  tableDefinitions?: ReturnType<typeof createPlatformTableDefinitions>;
+  tenantId?: string;
+  bootstrapOnStart?: boolean;
+  seedDemoReadModels?: boolean;
+}
 
 export function createApiComposition(clock: Clock) {
+  return createApiCompositionFromDependencies({ clock });
+}
+
+export function createApiCompositionFromDependencies(input: ApiCompositionDependencies) {
+  const { clock } = input;
   let idSequence = 0;
   const newId = (prefix: string) => {
     idSequence += 1;
     return `${prefix}-${idSequence}`;
   };
-  const authRepository = createInMemoryAuthRepository([]);
-  const administrationRepository = createInMemoryAdministrationRepository();
+  const tenantId = input.tenantId ?? 'tenant-default';
+  const passwordService = input.passwordService ?? createDeterministicPasswordServiceForTest();
+  const authRepository = input.repositories?.authRepository ?? createInMemoryAuthRepository([]);
+  const administrationRepository =
+    input.repositories?.administrationRepository ?? createInMemoryAdministrationRepository();
   const bootstrapService = createBootstrapService({
     repository: administrationRepository,
     authRepository,
+    passwordService,
   });
-  bootstrapService.install({
-    tenantDisplayName: 'Cửa hàng mặc định',
-    adminLoginId: 'admin',
-    temporaryPassword: 'admin123',
-  });
+  if (input.bootstrapOnStart ?? true) {
+    bootstrapService.install({
+      tenantDisplayName: 'Cửa hàng mặc định',
+      adminLoginId: 'admin',
+      temporaryPassword: 'admin123',
+    });
+  }
   const sessionService = createSessionService({
     clock,
     idGenerator: {
       newId,
     },
     repository: authRepository,
-    passwordService: createDeterministicPasswordServiceForTest(),
+    passwordService,
   });
   const authorizationService = createAuthorizationService(
     createInMemoryAuthorizationRepository([]),
@@ -230,34 +262,36 @@ export function createApiComposition(clock: Clock) {
   const administrationService = createAdministrationService({
     repository: administrationRepository,
   });
-  const catalogRepository = createInMemoryCatalogRepository();
-  const inventoryRepository = createInMemoryInventoryRepository();
-  const financeRepository = createInMemoryFinanceRepository();
-  const purchasingRepository = createInMemoryPurchasingRepository();
-  const reportingRepository = createInMemoryReportingRepository();
-  const salesRepository = createInMemorySalesRepository();
-  const operationsRepository = createInMemoryOperationsRepository();
-  const auditOutboxRepository = createInMemoryAuditOutboxRepository();
+  const catalogRepository = input.repositories?.catalogRepository ?? createInMemoryCatalogRepository();
+  const customerRepository = input.repositories?.customerRepository ?? createInMemoryCustomerRepository();
+  const inventoryRepository = input.repositories?.inventoryRepository ?? createInMemoryInventoryRepository();
+  const financeRepository = input.repositories?.financeRepository ?? createInMemoryFinanceRepository();
+  const purchasingRepository = input.repositories?.purchasingRepository ?? createInMemoryPurchasingRepository();
+  const reportingRepository = input.repositories?.reportingRepository ?? createInMemoryReportingRepository();
+  const salesRepository = input.repositories?.salesRepository ?? createInMemorySalesRepository();
+  const operationsRepository = input.repositories?.operationsRepository ?? createInMemoryOperationsRepository();
+  const auditOutboxRepository =
+    input.repositories?.auditOutboxRepository ?? createInMemoryAuditOutboxRepository();
   const catalogService = createCatalogService({
     repository: catalogRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
   });
   const customerService = createCustomerService({
-    repository: createInMemoryCustomerRepository(),
-    tenantId: 'tenant-default',
+    repository: customerRepository,
+    tenantId,
     newId,
   });
   const inventoryService = createInventoryService({
     repository: inventoryRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
   });
   const financeService = createFinanceService({
     repository: financeRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
   });
@@ -266,36 +300,41 @@ export function createApiComposition(clock: Clock) {
     inventoryService,
     financeService,
     auditOutboxRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
   });
-  seedReportingRepository(reportingRepository);
+  if (input.seedDemoReadModels ?? true) {
+    seedReportingRepository(reportingRepository);
+    seedOperationsRepository(operationsRepository);
+  }
   const reportingService = createReportingService({
     repository: reportingRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
+    resolvePartitionCoverage: createReportingPartitionCoverageResolver({
+      repository: operationsRepository,
+    }),
   });
-  seedOperationsRepository(operationsRepository);
   const operationsService = createOperationsService({
     repository: operationsRepository,
     auditOutboxRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     appVersion: '0.1.0',
     schemaVersion: 1,
     now: () => clock.now(),
     newId,
   });
   const commandCoordinator = createCommandCoordinator({
-    commandRepository: createInMemoryCommandRepository(),
+    commandRepository: input.repositories?.commandRepository ?? createInMemoryCommandRepository(),
     auditOutboxRepository,
-    lockProvider: createImmediateLockProvider(),
+    lockProvider: input.lockProvider ?? createImmediateLockProvider(),
     now: () => clock.now(),
     newId,
   });
   const tableRegistryService = createTableRegistryService(
-    createStaticTableRegistryRepository(createPlatformTableDefinitions()),
+    createStaticTableRegistryRepository(input.tableDefinitions ?? createPlatformTableDefinitions()),
   );
   const salesService = createSalesService({
     catalogService,
@@ -304,7 +343,7 @@ export function createApiComposition(clock: Clock) {
     financeService,
     inventoryService,
     repository: salesRepository,
-    tenantId: 'tenant-default',
+    tenantId,
     now: () => clock.now(),
     newId,
     requireOpenShift: true,
@@ -742,6 +781,17 @@ export function createApiComposition(clock: Clock) {
         reportingService.queryReport({
           actor: requireActor(context.actor),
           request: input as ReportingReportQueryRequest,
+        }),
+    },
+    {
+      name: 'reporting.drillDown.resolve',
+      kind: 'query',
+      requiredAction: 'reporting.report.view',
+      parsePayload: parseReportingDrillDownRequest,
+      handler: (input, context) =>
+        reportingService.resolveDrillDown({
+          actor: requireActor(context.actor),
+          request: input as ReportingDrillDownRequest,
         }),
     },
     {

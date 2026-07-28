@@ -42,8 +42,8 @@ Mỗi phase dưới đây phải được tách thành implementation plan chi t
 | Phase 7 — POS Checkout End-to-End | Hoàn thành POS local/UI/service baseline; orchestration/receipt/performance cần acceptance audit Phase 12 | [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md) đã tick; verify pass. |
 | Phase 8 — Sales Orders, Returns & Warranty | Hoàn thành sales/return/exchange/warranty baseline; deposit cancellation/attachment Drive/policy reversal còn là release scope gap | [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md) và [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md) đã tick; verify pass. |
 | Phase 9 — Purchasing & Supplier Operations | Hoàn thành purchasing backend baseline; purchasing UI/full production adapter thuộc release hardening | [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md) đã tick; verify pass. |
-| Phase 10 — Dashboard, Reporting & Export | Hoàn thành dashboard/report/export baseline; worker-backed export, drill-down resolver và archive coverage còn là release hardening gap | [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md) đã tick; verify pass. |
-| Phase 11 — Operations, Backup, Archive & Health | Hoàn thành operations baseline; Drive adapter, worker, retention, replacement restore và archive routing thật còn là release hardening gap | [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md) đã tick; verify pass. |
+| Phase 10 — Dashboard, Reporting & Export | Hoàn thành dashboard/report/export baseline; worker-backed export, drill-down resolver và archive coverage đã có local hardening; production export/archive drill còn là release gap | [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md) đã tick; verify pass. |
+| Phase 11 — Operations, Backup, Archive & Health | Hoàn thành operations local baseline; Drive adapter, restore replacement/session revoke production và Apps Script dry-run còn là release hardening gap | [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md) đã tick; verify pass. |
 | Phase 12 — Release Hardening & Acceptance | Local hardening gates đã chạy; release vẫn Blocked vì còn thiếu production/dry-run evidence | [`2026-07-27-release-hardening-acceptance-phase-12.md`](2026-07-27-release-hardening-acceptance-phase-12.md), `docs/architecture/release-hardening.md`. |
 
 ## Current Baseline
@@ -178,7 +178,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Tạo session provider, logout, auto idle timeout và absolute timeout.
 - [x] Tạo Branch/Warehouse scope provider và chặn scope không hợp lệ.
 - [x] Test không disable Warehouse khi còn blocker bằng fake blocker service.
-- [ ] Test reset password/disable/role change revoke session.
+- [x] Test reset password/disable/role change revoke session.
 
 **Exit gate:** App có thể bootstrap tenant, login admin, đổi mật khẩu, xem scope mặc định, logout và revoke session đúng.
 
@@ -314,7 +314,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [ ] Return immutable receipt snapshot for K80/A4 browser print; print/reprint không tạo ledger.
 - [x] Implement POS UI from `app-pos-checkout.html` only after opening artifact/local preview.
 - [ ] Test full payment, partial payment, insufficient stock, missing serial, quote conflict, timeout retry, duplicate prevention, print no-ledger.
-- [ ] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
+- [x] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
 
 **Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + AuditOutbox một lần, receipt in được và retry không duplicate.
 
@@ -391,11 +391,11 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement export small/large routing: small sync ngoài lock, large worker/checkpoint baseline.
 - [x] Implement Sales Dashboard UI từ `app-shell-dashboard.html`, không thêm recent activity thật nếu chưa có query/projection contract.
 - [x] Test scope denial, sensitive field removed, API/local fake reporting operations và export routing baseline.
-- [ ] Test archive coverage partial, drill-down token revalidates permission, worker-backed export không giữ ScriptLock.
+- [x] Test archive coverage partial, drill-down token revalidates permission, worker-backed export không giữ ScriptLock.
 
 **Exit gate:** Dashboard hiển thị đúng 4 KPI, chart, queue, manual order table, metadata freshness/coverage và restricted state từ backend.
 
-**Tracking hiện tại:** Phase 10A đã triển khai trong [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md): shared Reporting contracts/schema, `reporting.dashboard.get`, `reporting.report.query`, `reporting.export.request`, `reporting.export.getStatus`, in-memory DashboardProjection/ExportRun repository, service scope guard, sensitive-field filtering, API composition, local fake backend, và Sales Dashboard UI nối `reporting.dashboard.get` theo artifact Approved. Worker-backed export thật và drill-down token full resolver vẫn để mở.
+**Tracking hiện tại:** Phase 10A đã triển khai trong [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md): shared Reporting contracts/schema, `reporting.dashboard.get`, `reporting.report.query`, `reporting.export.request`, `reporting.export.getStatus`, in-memory DashboardProjection/ExportRun repository, service scope guard, sensitive-field filtering, API composition, local fake backend, và Sales Dashboard UI nối `reporting.dashboard.get` theo artifact Approved. Đã bổ sung local worker-backed export baseline (`runReportingExportChunk`) và scheduled worker wiring cho `LargeWorker` export run; đã bổ sung `reporting.drillDown.resolve` revalidate actor scope/quyền sensitive từ token qua single API gateway; đã bổ sung partition coverage resolver để report query trả `Partial` khi chạm archived partition mà chưa include archive. Phase 10 local baseline đã đủ checklist; Drive export production drill vẫn theo dõi ở Phase 12/release-hardening.
 
 ## Phase 11: Import, Attachment, Audit, Backup, Restore, Archive & Health
 
@@ -405,18 +405,18 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement ImportBatch/ImportStagingRow canonical flow: template, upload, validate, confirm, commit by worker/chunk.
+- [x] Implement ImportBatch/ImportStagingRow canonical flow: template, upload, validate, confirm, commit by worker/chunk.
 - [ ] Implement attachment metadata and private Drive access; không trả public URL.
-- [ ] Implement AuditOutbox delivery worker to AuditLog with idempotency.
-- [ ] Implement daily/manual backup manifest with checksums and retention 30 newest daily.
+- [x] Implement AuditOutbox delivery worker to AuditLog with idempotency.
+- [x] Implement daily/manual backup manifest with checksums and retention 30 newest daily.
 - [ ] Implement restore prepare -> replacement resources -> Owner switch -> revoke sessions -> health check; không overwrite production.
-- [ ] Implement active partition capacity alert, create next partition, archive read-only routing.
+- [x] Implement active partition capacity alert, create next partition, archive read-only routing.
 - [x] Implement runtime TTL cleanup only for technical expired data, never business/audit/ledger history.
-- [ ] Test import retry no duplicate, attachment permission, audit pending+delivered search, backup manifest checksum, restore switch, archive query routing.
+- [x] Test import retry no duplicate, attachment permission, audit pending+delivered search, backup manifest checksum, restore switch, archive query routing.
 
 **Exit gate:** App có backup/restore/archive/health story đủ để bán một lần và vận hành dài hạn.
 
-**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Audit/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, audit search pending+delivered, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Các checkbox master còn mở vì cần production worker/Drive adapter/backup retention/restore replacement resources/session revoke/archive read-only routing thật.
+**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Audit/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, audit search pending+delivered, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Đã bổ sung `runImportCommitChunk` để commit import theo chunk/idempotent và scheduled worker wiring cho batch `Committing`; đã bổ sung `runAuditDeliveryChunk` để chuyển `AuditOutbox` sang `AuditLog` idempotent, versioned Sheet AuditOutbox state và scheduled worker wiring; đã bổ sung `runArchiveChunk` và scheduled archive job cho closed transaction partition. Các checkbox master còn mở vì cần production Drive adapter cho attachment/backup/restore replacement resources, session revoke thật khi restore switch và Apps Script drill trên tài nguyên Google thật.
 
 ## Phase 12: Full Release Hardening
 

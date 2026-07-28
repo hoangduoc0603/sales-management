@@ -40,6 +40,8 @@ export interface DashboardKpiDTO {
   label: string;
   valueVnd?: number;
   valueCount?: number;
+  secondaryValueVnd?: number;
+  statusLabel?: string;
   trendPct?: number;
   restricted?: boolean;
 }
@@ -63,7 +65,9 @@ export interface DashboardManualOrderDTO {
   orderId: string;
   source: 'Phone' | 'CustomerMessage' | 'Preorder' | 'StaffCreated';
   customerName: string;
+  customerSubtitle?: string;
   ageMinutes: number;
+  slaTargetMinutes?: number;
   status: 'PendingConfirmation' | 'Picking' | 'NeedStock';
   valueVnd: number;
 }
@@ -86,6 +90,7 @@ export interface ReportingReportQueryRequest {
   dateField: ReportingDateField;
   dateRange: ReportingDateRangeDTO;
   scope: ReportingScopeDTO;
+  includeArchive?: boolean;
   filters?: Record<string, unknown>;
   dimensions?: readonly string[];
   cursor?: string;
@@ -94,6 +99,31 @@ export interface ReportingReportQueryRequest {
 
 export interface ReportingReportQueryResponse {
   metadata: ReportingMetadataDTO;
+  reportId: string;
+  rows: readonly Record<string, unknown>[];
+  nextCursor?: string;
+}
+
+export interface ReportingDrillDownTokenDTO {
+  tokenId: string;
+  reportId: string;
+  dateField: ReportingDateField;
+  dateRange: ReportingDateRangeDTO;
+  scope: ReportingScopeDTO;
+  filters?: Record<string, unknown>;
+  issuedAt: string;
+  asOf: string;
+}
+
+export interface ReportingDrillDownRequest {
+  token: ReportingDrillDownTokenDTO;
+  cursor?: string;
+  pageSize: number;
+}
+
+export interface ReportingDrillDownResponse {
+  metadata: ReportingMetadataDTO;
+  tokenId: string;
   reportId: string;
   rows: readonly Record<string, unknown>[];
   nextCursor?: string;

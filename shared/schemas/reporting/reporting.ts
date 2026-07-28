@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type {
   ReportingDashboardRequest,
+  ReportingDrillDownRequest,
   ReportingExportRequest,
   ReportingExportStatusRequest,
   ReportingReportQueryRequest,
@@ -8,6 +9,7 @@ import type {
 
 const nonEmptyTrimmed = z.string().trim().min(1);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const isoDateTime = z.string().datetime({ offset: true });
 
 const dateRangeSchema = z
   .object({
@@ -33,6 +35,7 @@ const reportQuerySchema = z
     dateField: z.enum(['createdAt', 'completedOrShippedAt', 'deliveredAt', 'paidAt', 'effectiveAt']),
     dateRange: dateRangeSchema,
     scope: reportingScopeSchema,
+    includeArchive: z.boolean().default(false),
     filters: z.record(z.string(), z.unknown()).optional(),
     dimensions: z.array(nonEmptyTrimmed).default([]),
     cursor: nonEmptyTrimmed.optional(),
@@ -55,6 +58,29 @@ export function parseReportingDashboardRequest(value: unknown): ReportingDashboa
 
 export function parseReportingReportQueryRequest(value: unknown): ReportingReportQueryRequest {
   return reportQuerySchema.parse(value);
+}
+
+export const reportingDrillDownRequestSchema = z
+  .object({
+    token: z
+      .object({
+        tokenId: nonEmptyTrimmed,
+        reportId: nonEmptyTrimmed,
+        dateField: z.enum(['createdAt', 'completedOrShippedAt', 'deliveredAt', 'paidAt', 'effectiveAt']),
+        dateRange: dateRangeSchema,
+        scope: reportingScopeSchema,
+        filters: z.record(z.string(), z.unknown()).optional(),
+        issuedAt: isoDateTime,
+        asOf: isoDateTime,
+      })
+      .strict(),
+    cursor: nonEmptyTrimmed.optional(),
+    pageSize: z.number().int().min(1).max(500),
+  })
+  .strict();
+
+export function parseReportingDrillDownRequest(value: unknown): ReportingDrillDownRequest {
+  return reportingDrillDownRequestSchema.parse(value);
 }
 
 export const reportingExportRequestSchema = z

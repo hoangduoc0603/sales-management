@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
 import type {
   DashboardDecisionItemDTO,
@@ -7,10 +8,13 @@ import type {
   DashboardRevenuePointDTO,
   ReportingDashboardResponse,
 } from '@shared/contracts/reporting/reporting';
-import { Badge } from '../../components/ui/badge';
+import { Badge, type BadgeTone } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { AppIcon, type AppIconName } from '../../components/ui/icons';
+import { Listbox } from '../../components/ui/listbox';
 import { Panel } from '../../components/ui/panel';
 import { StateBlock } from '../../components/ui/state-block';
+import { Tabs } from '../../components/ui/tabs';
 import type { ApiClient } from '../../lib/api/client';
 
 export interface DashboardHomeProps {
@@ -24,6 +28,7 @@ export interface DashboardHomeProps {
 }
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+type DateRangePreset = 'today' | 'yesterday' | 'last7';
 
 export function DashboardHome({
   apiClient,
@@ -39,7 +44,18 @@ export function DashboardHome({
   const [dashboard, setDashboard] = useState<ReportingDashboardResponse | undefined>(initialDashboard);
   const [status, setStatus] = useState<LoadStatus>(initialDashboard ? 'ready' : 'idle');
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [selectedStateId, setSelectedStateId] = useState('loading');
   const today = useMemo(() => formatISODate(new Date()), []);
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('today');
+  const dateRange = useMemo(() => resolveDateRange(dateRangePreset, today), [dateRangePreset, today]);
+  const dateRangeOptions = useMemo(
+    () => [
+      { value: 'today', label: `Hôm nay · ${formatShortDate(dateRange.today)}` },
+      { value: 'yesterday', label: `Hôm qua · ${formatShortDate(dateRange.yesterday)}` },
+      { value: 'last7', label: '7 ngày gần nhất' },
+    ],
+    [dateRange.today, dateRange.yesterday],
+  );
 
   const loadDashboard = useCallback(async () => {
     if (!apiClient || !sessionToken) {
@@ -57,7 +73,7 @@ export function DashboardHome({
       payload: {
         branchId: selectedBranchId,
         warehouseId: selectedWarehouseId,
-        dateRange: { from: today, to: today },
+        dateRange: { from: dateRange.from, to: dateRange.to },
         requestedSensitiveFields: ['cogsVnd', 'grossProfitVnd', 'grossMarginPct'],
       },
     });
@@ -70,7 +86,7 @@ export function DashboardHome({
 
     setDashboard(result.data);
     setStatus('ready');
-  }, [apiClient, selectedBranchId, selectedWarehouseId, sessionToken, today]);
+  }, [apiClient, dateRange.from, dateRange.to, selectedBranchId, selectedWarehouseId, sessionToken]);
 
   useEffect(() => {
     void loadDashboard();
@@ -89,22 +105,23 @@ export function DashboardHome({
         <div>
           <p className="cn-breadcrumb">Sales / Tổng quan vận hành</p>
           <h1>Tổng quan vận hành</h1>
-          <p>Scope hiện tại: {branch?.name ?? 'Chưa có chi nhánh hợp lệ'} · {warehouse?.name ?? 'Chưa có kho hợp lệ'}</p>
           {dashboard ? (
             <p className="cn-dashboard-metadata">
-              Cập nhật lúc {formatDateTime(dashboard.metadata.generatedAt)} · Số liệu chốt đến{' '}
-              {formatDateTime(dashboard.metadata.asOf)} · Phủ dữ liệu{' '}
-              {formatCoverage(dashboard.metadata.partitionCoverage.activeFrom, dashboard.metadata.partitionCoverage.activeTo)}
-              {dashboard.metadata.archiveIncluded ? ' · gồm dữ liệu lưu trữ' : ''}
-              {dashboard.metadata.partitionCoverage.status === 'Partial' ? ' · dữ liệu một phần' : ''}
+              Hiệu lực: chứng từ đã ghi nhận · Cập nhật lúc{' '}
+              <span className="num">{formatDateTime(dashboard.metadata.generatedAt)}</span>
             </p>
           ) : null}
         </div>
         <div className="cn-dashboard-actions">
-          <Badge tone={status === 'error' ? 'danger' : status === 'loading' ? 'info' : 'success'}>
-            {status === 'error' ? 'Cần thử lại' : status === 'loading' ? 'Đang tải' : 'Dữ liệu sẵn sàng'}
-          </Badge>
+          <Listbox
+            className="cn-dashboard-date-range"
+            label="Khoảng thời gian"
+            onChange={(value) => setDateRangePreset(value as DateRangePreset)}
+            options={dateRangeOptions}
+            value={dateRangePreset}
+          />
           <Button isLoading={status === 'loading'} onClick={handleRefresh} variant="primary">
+            <AppIcon name="refresh" />
             Làm mới
           </Button>
         </div>
@@ -137,16 +154,12 @@ export function DashboardHome({
         <>
           <section className="cn-kpi-grid" aria-label="KPI chính">
             {normalizeKpis(dashboard.kpis).map((kpi) => (
-              <KpiCard key={kpi.kpiId} kpi={kpi} />
+              <KpiCard key={kpi.kpiId} kpi={kpi} kpis={dashboard.kpis} />
             ))}
           </section>
 
-          <div className="cn-dashboard-grid">
-            <Panel
-              action={<Button variant="ghost">Mở báo cáo</Button>}
-              description="Doanh thu thuần theo thời gian so với kỳ trước"
-              title="Xu hướng doanh thu"
-            >
+          <div className="cn-dashboard-grid cn-dashboard-primary-grid">
+            <Panel action={<Button variant="ghost">Mở báo cáo</Button>} description="So sánh kỳ đang xem với kỳ trước" title="Doanh thu theo thời gian">
               <RevenueTrend series={dashboard.revenueSeries} totalNetRevenueVnd={readKpiValue(dashboard.kpis, 'netRevenue')} />
             </Panel>
             <Panel
@@ -171,30 +184,16 @@ export function DashboardHome({
             </Panel>
           </div>
 
-          <Panel description="Mẫu trạng thái runtime theo handoff Dashboard" title="Trạng thái dữ liệu & phục hồi">
-            <div className="cn-state-grid">
-              <StateBlock
-                description="Skeleton giữ vùng nội dung ổn định trong lúc tải projection."
-                detail={<DashboardSkeleton />}
-                title="Đang tải"
-                tone="info"
-              />
-              <StateBlock
-                description="Không có chứng từ phù hợp trong kỳ đang xem. Người dùng có thể đổi kỳ hoặc quay về hôm nay."
-                title="Không có dữ liệu"
-                tone="neutral"
-              />
-              <StateBlock
-                description="Kết nối bị gián đoạn, có thể thử lại mà không tạo command ghi."
-                title="Lỗi có thể thử lại"
-                tone="danger"
-              />
-              <StateBlock
-                description="Không hiển thị số liệu nhạy cảm khi backend trả danh sách field bị hạn chế."
-                title="Không có quyền"
-                tone="restricted"
-              />
-            </div>
+          <Panel
+            className="cn-state-panel"
+            description="Mẫu phụ trợ cho loading, phạm vi, dữ liệu cũ, lưu trữ và phân quyền"
+            title="Trạng thái dữ liệu & phục hồi"
+          >
+            <Tabs
+              items={dashboardStateTabs(branch?.name ?? 'Chi nhánh hiện tại', warehouse?.name ?? 'Kho hiện tại')}
+              onChange={setSelectedStateId}
+              selectedId={selectedStateId}
+            />
           </Panel>
         </>
       )}
@@ -202,29 +201,32 @@ export function DashboardHome({
   );
 }
 
-function KpiCard({ kpi }: { kpi: DashboardKpiDTO }) {
-  const value = kpi.valueVnd !== undefined ? formatVnd(kpi.valueVnd) : formatCount(kpi.valueCount ?? 0);
+function KpiCard({ kpi, kpis }: { kpi: DashboardKpiDTO; kpis: readonly DashboardKpiDTO[] }) {
+  const value = kpi.valueVnd !== undefined ? formatVnd(kpi.valueVnd) : formatKpiCount(kpi);
+  const meta = kpiMeta(kpi, kpis);
+
   return (
-    <article className={`cn-kpi-card ${kpi.kpiId === 'netRevenue' ? 'lead' : ''}`}>
+    <article className={`cn-kpi-card ${kpi.kpiId}`}>
       <div className="cn-kpi-row">
         <div>
           <div className="cn-kpi-label">{kpi.label}</div>
           <div className="cn-kpi-value num">{kpi.restricted ? 'Không có quyền' : value}</div>
         </div>
         <span aria-hidden="true" className={`cn-kpi-icon ${kpi.kpiId}`}>
-          {kpiIcon(kpi.kpiId)}
+          <AppIcon name={kpiIcon(kpi.kpiId)} />
         </span>
       </div>
-      <p>
-        {kpi.trendPct !== undefined ? (
-          <Badge tone={kpi.trendPct >= 0 ? 'success' : 'danger'}>
-            {kpi.trendPct >= 0 ? '✓ ' : '↓ '}
-            {formatPercent(kpi.trendPct)}
-          </Badge>
-        ) : (
-          kpiDescription(kpi.kpiId)
-        )}
-      </p>
+      <div className="cn-kpi-foot">
+        <Badge className="cn-trend-badge" tone={meta.tone}>
+          <AppIcon name={meta.icon} />
+          {meta.badge}
+        </Badge>
+        <span>{meta.description}</span>
+      </div>
+      <button className="cn-kpi-link" type="button">
+        {meta.actionLabel}
+        <AppIcon name="chevronRight" />
+      </button>
     </article>
   );
 }
@@ -323,7 +325,7 @@ function DecisionQueue({ items }: { items: readonly DashboardDecisionItemDTO[] }
       {items.map((item) => (
         <article className="cn-decision-item" key={item.itemId}>
           <span aria-hidden="true" className={`cn-decision-icon ${priorityTone(item.priority)}`}>
-            {decisionIcon(item.itemType)}
+            <AppIcon name={decisionIcon(item.itemType)} />
           </span>
           <div>
             <h3>{item.title}</h3>
@@ -349,40 +351,110 @@ function ManualOrdersTable({ orders }: { orders: readonly DashboardManualOrderDT
   }
 
   return (
-    <div className="cn-table-wrap">
-      <table className="cn-table">
-        <thead>
-          <tr>
-            <th>Đơn</th>
-            <th>Nguồn nhập tay</th>
-            <th>Khách hàng</th>
-            <th>Tuổi đơn</th>
-            <th>Trạng thái</th>
-            <th className="right">Giá trị</th>
-            <th>Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.orderId}>
-              <td className="num">{order.orderId}</td>
-              <td>{manualOrderSource(order.source)}</td>
-              <td>{order.customerName}</td>
-              <td className="num">{order.ageMinutes} phút</td>
-              <td>
-                <Badge tone={order.status === 'NeedStock' ? 'danger' : order.status === 'Picking' ? 'info' : 'warning'}>
-                  {manualOrderStatus(order.status)}
-                </Badge>
-              </td>
-              <td className="right num">{formatVnd(order.valueVnd)}</td>
-              <td>
-                <Button variant="ghost">Xử lý</Button>
-              </td>
+    <div className="cn-manual-orders-region">
+      <div className="cn-table-wrap">
+        <table className="cn-table cn-manual-orders-table">
+          <thead>
+            <tr>
+              <th>Đơn</th>
+              <th>Khách hàng</th>
+              <th className="right">Giá trị</th>
+              <th>Trạng thái</th>
+              <th>Tuổi / SLA</th>
+              <th>Nguồn nhập tay</th>
+              <th>Thao tác</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {orders.map((order) => (
+              <tr key={order.orderId}>
+                <td>
+                  <span className="cn-cell-main num">{order.orderId}</span>
+                </td>
+                <ManualOrderCustomerCell order={order} />
+                <td className="right">
+                  <span className="cn-cell-main num">{formatVnd(order.valueVnd)}</span>
+                </td>
+                <td>
+                  <ManualOrderStatusPill status={order.status} />
+                </td>
+                <td>
+                  <span className="cn-cell-main num">{order.ageMinutes} phút</span>
+                  <span className="cn-cell-sub">{formatManualOrderSla(order.ageMinutes, order.slaTargetMinutes)}</span>
+                </td>
+                <td>
+                  <span className="cn-cell-main">{manualOrderSource(order.source)}</span>
+                </td>
+                <td>
+                  <Button variant="ghost">Xử lý</Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="cn-table-contract">
+        {orders.length} đơn hợp lệ trong hàng đợi · Mục tiêu xác nhận trong 15 phút.
+      </div>
     </div>
+  );
+}
+
+function ManualOrderCustomerCell({ order }: { order: DashboardManualOrderDTO }) {
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const [hasTooltip, setHasTooltip] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = nameRef.current;
+    if (!element) return undefined;
+
+    const measure = () => {
+      const style = getComputedStyle(element);
+      const lineHeight = parseFloat(style.lineHeight) || 18;
+      const nextHasTooltip =
+        element.getBoundingClientRect().height > lineHeight * 1.45 ||
+        element.scrollWidth > element.clientWidth ||
+        element.scrollHeight > element.clientHeight + 1;
+
+      setHasTooltip((current) => (current === nextHasTooltip ? current : nextHasTooltip));
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.parentElement) {
+      observer.observe(element.parentElement);
+    }
+    window.addEventListener('resize', measure);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [order.customerName]);
+
+  return (
+    <td
+      className="cn-customer-cell"
+      data-has-tooltip={hasTooltip ? 'true' : undefined}
+      data-tooltip={hasTooltip ? order.customerName : undefined}
+      tabIndex={hasTooltip ? 0 : undefined}
+    >
+      <span className="cn-cell-main" ref={nameRef}>{order.customerName}</span>
+      {order.customerSubtitle ? <span className="cn-cell-sub">{order.customerSubtitle}</span> : null}
+    </td>
+  );
+}
+
+function ManualOrderStatusPill({ status }: { status: DashboardManualOrderDTO['status'] }) {
+  const tone = manualOrderStatusTone(status);
+
+  return (
+    <span className={`cn-status cn-status-${tone}`}>
+      <AppIcon name={manualOrderStatusIcon(status)} />
+      {manualOrderStatus(status)}
+    </span>
   );
 }
 
@@ -417,6 +489,142 @@ function DashboardSkeleton() {
   );
 }
 
+function DashboardState({
+  actionLabel,
+  detail,
+  description,
+  icon,
+  title,
+  tone = 'info',
+}: {
+  actionLabel?: string;
+  detail?: ReactNode;
+  description: string;
+  icon: AppIconName;
+  title: string;
+  tone?: BadgeTone | 'restricted';
+}) {
+  return (
+    <div className="cn-dashboard-state-content">
+      <span aria-hidden="true" className={`cn-dashboard-state-icon ${tone}`}>
+        <AppIcon name={icon} />
+      </span>
+      <h3>{title}</h3>
+      <p>{description}</p>
+      {detail ? <div className="cn-dashboard-state-detail">{detail}</div> : null}
+      {actionLabel ? (
+        <Button variant={tone === 'danger' ? 'secondary' : 'ghost'}>{actionLabel}</Button>
+      ) : null}
+    </div>
+  );
+}
+
+function dashboardStateTabs(branchName: string, warehouseName: string) {
+  return [
+    {
+      id: 'loading',
+      label: 'Đang tải',
+      content: (
+        <div className="cn-dashboard-state-content">
+          <DashboardSkeleton />
+        </div>
+      ),
+    },
+    {
+      id: 'empty',
+      label: 'Không có dữ liệu',
+      content: (
+        <DashboardState
+          actionLabel="Đặt lại khoảng thời gian"
+          description="Không có chứng từ hợp lệ trong kỳ đang xem. Có thể đổi kỳ, chọn lại phạm vi hoặc quay về hôm nay."
+          icon="box"
+          title="Không có dữ liệu vận hành"
+          tone="neutral"
+        />
+      ),
+    },
+    {
+      id: 'error',
+      label: 'Lỗi có thể thử lại',
+      content: (
+        <DashboardState
+          actionLabel="Thử lại"
+          description="Kết nối dữ liệu bị gián đoạn. Đây là trạng thái đọc dữ liệu, không tạo command ghi hoặc đồng bộ offline."
+          icon="refresh"
+          title="Chưa tải được DashboardProjection"
+          tone="danger"
+        />
+      ),
+    },
+    {
+      id: 'scope',
+      label: 'Phạm vi không có dữ liệu',
+      content: (
+        <DashboardState
+          actionLabel="Chọn lại phạm vi"
+          description="Backend không trả dữ liệu cho phạm vi này. UI không fallback sang dữ liệu tenant-wide và không giữ dữ liệu cũ."
+          detail={`${branchName} · ${warehouseName}`}
+          icon="warning"
+          title="Không có dữ liệu cho phạm vi đang chọn"
+          tone="warning"
+        />
+      ),
+    },
+    {
+      id: 'stale',
+      label: 'Dữ liệu cũ',
+      content: (
+        <DashboardState
+          actionLabel="Làm mới"
+          description="Dữ liệu đang hiển thị có as-of cũ hơn kỳ vọng. Người dùng cần thấy rõ thời điểm dữ liệu trước khi ra quyết định."
+          detail="Giữ nguyên bộ lọc hiện tại khi thử lại."
+          icon="clock"
+          title="Dữ liệu cần làm mới"
+          tone="warning"
+        />
+      ),
+    },
+    {
+      id: 'archive',
+      label: 'Chưa có dữ liệu lưu trữ',
+      content: (
+        <DashboardState
+          actionLabel="Tải dữ liệu lưu trữ"
+          description="Kỳ báo cáo có phần dữ liệu trong archive nhưng partition lưu trữ chưa sẵn sàng, nên coverage phải hiển thị là một phần."
+          detail="Không trình bày kết quả một phần như báo cáo đầy đủ."
+          icon="reports"
+          title="Archive chưa sẵn sàng"
+          tone="info"
+        />
+      ),
+    },
+    {
+      id: 'processing',
+      label: 'Đang xử lý',
+      content: (
+        <DashboardState
+          description="Command đang chạy phải giữ nguyên nhãn nút, chỉ thêm loading icon và chặn submit trùng theo commandId/idempotency."
+          icon="refresh"
+          title="Tác vụ đang xử lý"
+          tone="info"
+        />
+      ),
+    },
+    {
+      id: 'restricted',
+      label: 'Không có quyền',
+      content: (
+        <DashboardState
+          description="Dữ liệu giá vốn, lợi nhuận hoặc field nhạy cảm phải bị loại ở backend projection; UI chỉ render trạng thái restricted backend trả về."
+          icon="warning"
+          title="Dữ liệu nhạy cảm bị hạn chế"
+          tone="restricted"
+        />
+      ),
+    },
+  ];
+}
+
 function normalizeKpis(kpis: readonly DashboardKpiDTO[]): DashboardKpiDTO[] {
   const byId = new Map(kpis.map((kpi) => [kpi.kpiId, kpi]));
   return (['netRevenue', 'completedOrders', 'collected', 'receivableOverdue'] as const).map((kpiId) => {
@@ -445,6 +653,11 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat('vi-VN').format(value);
 }
 
+function formatKpiCount(kpi: DashboardKpiDTO): string {
+  const count = formatCount(kpi.valueCount ?? 0);
+  return kpi.kpiId === 'completedOrders' ? `${count} đơn` : count;
+}
+
 function formatPercent(value: number): string {
   return `${value > 0 ? '+' : ''}${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}%`;
 }
@@ -454,62 +667,126 @@ function formatShortVnd(value: number): string {
 }
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
+  const date = new Date(value);
+  const time = new Intl.DateTimeFormat('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(date);
+  const day = new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
     month: '2-digit',
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
-  }).format(new Date(value));
-}
+  }).format(date);
 
-function formatCoverage(activeFrom: string, activeTo: string): string {
-  return activeFrom === activeTo ? activeTo : `${activeFrom}–${activeTo}`;
+  return `${time}, ${day}`;
 }
 
 function formatISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function kpiDescription(kpiId: DashboardKpiDTO['kpiId']): string {
-  switch (kpiId) {
-    case 'completedOrders':
-      return 'Đã xác nhận POS, cửa hàng và đơn nhập tay';
-    case 'collected':
-      return 'Theo thanh toán đã ghi nhận';
-    case 'receivableOverdue':
-      return 'Theo công nợ phải thu và quá hạn';
+function formatShortDate(value: string): string {
+  const [, , month, day] = value.match(/^(\d{4})-(\d{2})-(\d{2})$/) ?? [];
+  return day && month ? `${day}/${month}` : value;
+}
+
+function resolveDateRange(preset: DateRangePreset, today: string): { from: string; to: string; today: string; yesterday: string } {
+  const todayDate = new Date(`${today}T00:00:00+07:00`);
+  const yesterdayDate = addDays(todayDate, -1);
+  const last7Start = addDays(todayDate, -6);
+  const yesterday = formatISODate(yesterdayDate);
+
+  if (preset === 'yesterday') {
+    return { from: yesterday, to: yesterday, today, yesterday };
+  }
+
+  if (preset === 'last7') {
+    return { from: formatISODate(last7Start), to: today, today, yesterday };
+  }
+
+  return { from: today, to: today, today, yesterday };
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function kpiMeta(kpi: DashboardKpiDTO, kpis: readonly DashboardKpiDTO[]): {
+  actionLabel: string;
+  badge: string;
+  description: string;
+  icon: AppIconName;
+  tone: BadgeTone;
+} {
+  switch (kpi.kpiId) {
     case 'netRevenue':
-      return 'So với cùng kỳ trước';
+      return {
+        actionLabel: 'Xem doanh thu',
+        badge: kpi.trendPct !== undefined ? formatPercent(kpi.trendPct) : 'Đang theo dõi',
+        description: 'so với kỳ trước',
+        icon: 'check',
+        tone: kpi.trendPct !== undefined && kpi.trendPct < 0 ? 'danger' : 'success',
+      };
+    case 'completedOrders':
+      return {
+        actionLabel: 'Xem đơn hoàn tất',
+        badge: kpi.statusLabel ?? 'Đã xác nhận',
+        description: 'POS + đơn nhập tay',
+        icon: 'check',
+        tone: 'info',
+      };
+    case 'collected': {
+      const netRevenue = kpis.find((candidate) => candidate.kpiId === 'netRevenue')?.valueVnd;
+      const ratio = netRevenue && kpi.valueVnd !== undefined ? `${formatPercent((kpi.valueVnd / netRevenue) * 100).replace('+', '')}` : 'Đã ghi nhận';
+
+      return {
+        actionLabel: 'Đối chiếu thu tiền',
+        badge: ratio,
+        description: 'trên doanh thu thuần',
+        icon: 'check',
+        tone: 'success',
+      };
+    }
+    case 'receivableOverdue':
+      return {
+        actionLabel: 'Xem tuổi nợ',
+        badge: kpi.secondaryValueVnd !== undefined ? `${formatVnd(kpi.secondaryValueVnd)} quá hạn` : 'Cần theo dõi',
+        description: 'cần theo dõi hôm nay',
+        icon: 'warning',
+        tone: kpi.secondaryValueVnd !== undefined ? 'danger' : 'warning',
+      };
   }
 }
 
-function kpiIcon(kpiId: DashboardKpiDTO['kpiId']): string {
+function kpiIcon(kpiId: DashboardKpiDTO['kpiId']): AppIconName {
   switch (kpiId) {
     case 'netRevenue':
-      return '↗';
+      return 'trendUp';
     case 'completedOrders':
-      return '▣';
+      return 'orders';
     case 'collected':
-      return '▤';
+      return 'wallet';
     case 'receivableOverdue':
-      return '◷';
+      return 'clock';
   }
 }
 
-function decisionIcon(itemType: DashboardDecisionItemDTO['itemType']): string {
+function decisionIcon(itemType: DashboardDecisionItemDTO['itemType']): AppIconName {
   switch (itemType) {
     case 'LowStock':
-      return '▧';
+      return 'box';
     case 'ExpiringLot':
-      return '◷';
+      return 'clock';
     case 'ManualOrderSla':
-      return '▤';
+      return 'fileAlert';
     case 'ShiftVariance':
-      return '△';
+      return 'warning';
     case 'OverdueReceivable':
-      return '₫';
+      return 'currency';
   }
 }
 
@@ -553,4 +830,34 @@ function manualOrderStatus(status: DashboardManualOrderDTO['status']): string {
     case 'NeedStock':
       return 'Cần bổ sung tồn';
   }
+}
+
+function manualOrderStatusTone(status: DashboardManualOrderDTO['status']): BadgeTone {
+  switch (status) {
+    case 'PendingConfirmation':
+      return 'warning';
+    case 'Picking':
+      return 'info';
+    case 'NeedStock':
+      return 'danger';
+  }
+}
+
+function manualOrderStatusIcon(status: DashboardManualOrderDTO['status']): AppIconName {
+  switch (status) {
+    case 'PendingConfirmation':
+      return 'warning';
+    case 'Picking':
+      return 'box';
+    case 'NeedStock':
+      return 'warning';
+  }
+}
+
+function formatManualOrderSla(ageMinutes: number, slaTargetMinutes = 15): string {
+  const slaMinutes = slaTargetMinutes;
+  if (ageMinutes > slaMinutes) {
+    return `quá SLA ${ageMinutes - slaMinutes} phút`;
+  }
+  return `còn ${slaMinutes - ageMinutes} phút SLA`;
 }

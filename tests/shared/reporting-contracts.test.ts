@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseReportingDashboardRequest,
+  parseReportingDrillDownRequest,
   parseReportingExportRequest,
   parseReportingReportQueryRequest,
 } from '../../shared/schemas/reporting/reporting';
@@ -12,6 +13,7 @@ describe('reporting shared contracts', () => {
       expect.arrayContaining([
         'reporting.dashboard.get',
         'reporting.report.query',
+        'reporting.drillDown.resolve',
         'reporting.export.request',
         'reporting.export.getStatus',
       ]),
@@ -63,5 +65,38 @@ describe('reporting shared contracts', () => {
         },
       }),
     ).not.toThrow();
+  });
+
+  it('validates drill-down token request envelope', () => {
+    expect(() =>
+      parseReportingDrillDownRequest({
+        token: {
+          tokenId: 'drill-1',
+          reportId: 'sales-summary',
+          dateField: 'completedOrShippedAt',
+          dateRange: { from: '2026-07-01', to: '2026-07-26' },
+          scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+          filters: { kpiId: 'netRevenue' },
+          issuedAt: '2026-07-27T09:00:00.000Z',
+          asOf: '2026-07-27T08:59:30.000Z',
+        },
+        pageSize: 50,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      parseReportingDrillDownRequest({
+        token: {
+          tokenId: 'drill-1',
+          reportId: 'sales-summary',
+          dateField: 'completedOrShippedAt',
+          dateRange: { from: '2026-07-27', to: '2026-07-26' },
+          scope: { branchId: '' },
+          issuedAt: 'not-date',
+          asOf: '2026-07-27T08:59:30.000Z',
+        },
+        pageSize: 0,
+      }),
+    ).toThrow();
   });
 });

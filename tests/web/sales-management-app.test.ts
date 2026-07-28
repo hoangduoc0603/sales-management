@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
+import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { ReportingDashboardResponse } from '@shared/contracts/reporting/reporting';
 import { DashboardHome } from '../../web/src/features/dashboard/dashboard-home';
 import { SalesManagementApp } from '../../web/src/app/sales-management-app';
@@ -41,6 +42,20 @@ const scope: CurrentScopeResponse = {
   activeWarehouseId: 'warehouse-default',
 };
 
+const actor: ActorContextDTO = {
+  userId: 'user-admin',
+  loginId: 'admin',
+  displayName: 'Admin Local',
+  tenantId: 'tenant-default',
+  authVersion: 1,
+  actions: [],
+  scope: {
+    tenantId: 'tenant-default',
+    branchIds: ['branch-default'],
+    warehouseIds: ['warehouse-default'],
+  },
+};
+
 describe('SalesManagementApp', () => {
   it('khởi đầu ở login nội bộ khi chưa có session', () => {
     const html = renderToStaticMarkup(createElement(SalesManagementApp, { initialSessionToken: undefined }));
@@ -64,8 +79,9 @@ describe('SalesManagementApp', () => {
     expect(html).toContain('Phải thu / quá hạn');
     expect(html).toContain('286.450.000');
     expect(html).toContain('1.284');
-    expect(html).toContain('Dữ liệu sẵn sàng');
-    expect(html).toContain('Phủ dữ liệu');
+    expect(html).not.toContain('cn-kpi-card netRevenue lead');
+    expect(html).not.toContain('Dữ liệu sẵn sàng');
+    expect(html).not.toContain('Phủ dữ liệu');
     expect(html).toContain('Giá vốn &amp; lợi nhuận bị hạn chế');
     expect(html).not.toContain('Dashboard projection chưa triển khai');
     expect(html).not.toContain('Hoạt động gần đây');
@@ -74,19 +90,7 @@ describe('SalesManagementApp', () => {
   it('authenticated app có thể render route Catalog/CRM khi được chọn trong AppShell', () => {
     const html = renderToStaticMarkup(
       createElement(SalesManagementApp, {
-        initialActor: {
-          userId: 'user-admin',
-          loginId: 'admin',
-          displayName: 'Admin Local',
-          tenantId: 'tenant-default',
-          authVersion: 1,
-          actions: [],
-          scope: {
-            tenantId: 'tenant-default',
-            branchIds: ['branch-default'],
-            warehouseIds: ['warehouse-default'],
-          },
-        },
+        initialActor: actor,
         initialScope: scope,
         initialSessionToken: 'session-token',
       }),
@@ -94,6 +98,27 @@ describe('SalesManagementApp', () => {
 
     expect(html).toContain('Hàng hóa');
     expect(html).toContain('Khách hàng');
+  });
+
+  it('route POS render trong AppShell chung, không thay bằng full-screen POS header riêng', () => {
+    const html = renderToStaticMarkup(
+      createElement(SalesManagementApp, {
+        initialActor: actor,
+        initialRoute: 'pos',
+        initialScope: scope,
+        initialSessionToken: 'session-token',
+      }),
+    );
+
+    expect(html).toContain('cn-app-shell');
+    expect(html).toContain('cn-sidebar');
+    expect(html).toContain('Tổng quan');
+    expect(html).toContain('Bán hàng');
+    expect(html).toContain('POS tại quầy');
+    expect(html).toContain('cn-pos-page cn-pos-page-embedded');
+    expect(html).not.toContain('cn-pos-header');
+    expect(html).not.toContain('Ca POS đang mở');
+    expect(html).not.toContain('Dữ liệu quầy sẵn sàng');
   });
 });
 

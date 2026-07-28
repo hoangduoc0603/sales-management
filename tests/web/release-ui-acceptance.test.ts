@@ -134,6 +134,10 @@ describe('release UI acceptance from Approved Open Design handoffs', () => {
       }),
     );
     const listboxSource = readText('web/src/components/ui/listbox.tsx');
+    const appShellSource = readText('web/src/app/app-shell/app-shell.tsx');
+    const dashboardSource = readText('web/src/features/dashboard/dashboard-home.tsx');
+    const posCheckoutSource = readText('web/src/features/pos/pos-checkout-shell.tsx');
+    const globalCss = readText('web/src/styles/index.css');
     const posSource = readText('web/src/features/pos/pos-checkout-shell.tsx');
     const loadingButtonHtml = renderToStaticMarkup(
       createElement(Button, { isLoading: true, variant: 'primary' }, 'Hoàn tất bán hàng'),
@@ -169,6 +173,7 @@ describe('release UI acceptance from Approved Open Design handoffs', () => {
     expect(listboxSource).toContain('ArrowDown');
     expect(listboxSource).toContain('ArrowUp');
     expect(listboxSource).toContain('Escape');
+    expect(listboxSource).toContain("document.addEventListener('pointerdown'");
 
     expect(posHtml).toContain('aria-label="Quét mã vạch, SKU hoặc tên hàng"');
     expect(posSource).toContain('autoFocus');
@@ -179,7 +184,18 @@ describe('release UI acceptance from Approved Open Design handoffs', () => {
     expect(loadingButtonHtml).toContain('Hoàn tất bán hàng');
 
     expect(appShellHtml).toContain('aria-label="Chuyển sang giao diện tối"');
+    expect(appShellHtml).toContain('cenio-icon-128.png');
+    expect(appShellHtml).toContain('cn-text-avatar-sm');
+    expect(appShellHtml).toContain('cn-text-avatar-md');
+    expect(appShellHtml).not.toContain('cn-user-chevron');
+    expect(globalCss).toMatch(/\.cn-user-popover-head \.cn-text-avatar\s*\{[^}]*color: #ffffff;[^}]*font-size: 13px;/s);
+    expect(globalCss).toMatch(/\.cn-user-copy,\s*\.cn-user-popover-head div\s*\{[^}]*justify-items: start;[^}]*text-align: left;/s);
     expect(appShellHtml).not.toContain('<select');
+    expect(appShellHtml).toContain('aria-haspopup="menu"');
+    expect(appShellHtml).not.toContain('cn-logout');
+    expect(appShellSource).not.toMatch(/[▦▣▤⬡◌◇▧▭▥⚙☀☾◔]/u);
+    expect(dashboardSource).not.toMatch(/[▣▤▧◇◷△↗]/u);
+    expect(posCheckoutSource).not.toMatch(/[◇]/u);
   });
 });
 

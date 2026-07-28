@@ -7,6 +7,11 @@ import type {
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { ApiClient } from '../lib/api/client';
 import { createRuntimeApiClient, type RuntimeApiMode } from '../lib/api/runtime-client';
+import {
+  createLocalDebugActor,
+  createLocalDebugScope,
+  LOCAL_DEBUG_SESSION_TOKEN,
+} from '../lib/api/local-fake-backend';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StateBlock } from '../components/ui/state-block';
 import { AuthFlow, type ChangePasswordInput, type LoginInput } from './auth/auth-flow';
@@ -27,16 +32,19 @@ export interface SalesManagementAppProps {
   apiClient?: ApiClient;
   initialSessionToken?: string;
   initialActor?: ActorContextDTO;
+  initialRoute?: AppRoute;
   initialScope?: CurrentScopeResponse;
 }
 
 export function SalesManagementApp({
   apiClient,
   initialActor,
+  initialRoute,
   initialScope,
   initialSessionToken,
   runtimeMode,
 }: SalesManagementAppProps) {
+  const localDebugAuthEnabled = useMemo(() => shouldUseLocalDebugAuth(runtimeMode), [runtimeMode]);
   const client = useMemo(
     () =>
       apiClient ??
@@ -46,20 +54,29 @@ export function SalesManagementApp({
     [apiClient, runtimeMode],
   );
   const sessionStorage = useMemo(() => createSessionStorage(), []);
+  const localDebugActor = useMemo(
+    () => (localDebugAuthEnabled ? createLocalDebugActor() : undefined),
+    [localDebugAuthEnabled],
+  );
+  const localDebugScope = useMemo(
+    () => (localDebugAuthEnabled ? createLocalDebugScope() : undefined),
+    [localDebugAuthEnabled],
+  );
+  const effectiveInitialScope = initialScope ?? localDebugScope;
   const [theme, setTheme] = useState<AppTheme>('light');
   const [sessionToken, setSessionToken] = useState<string | undefined>(
-    initialSessionToken ?? sessionStorage.read(),
+    initialSessionToken ?? (localDebugAuthEnabled ? LOCAL_DEBUG_SESSION_TOKEN : sessionStorage.read()),
   );
-  const [actor, setActor] = useState<ActorContextDTO | undefined>(initialActor);
-  const [scope, setScope] = useState<CurrentScopeResponse | undefined>(initialScope);
+  const [actor, setActor] = useState<ActorContextDTO | undefined>(initialActor ?? localDebugActor);
+  const [scope, setScope] = useState<CurrentScopeResponse | undefined>(effectiveInitialScope);
   const [authMode, setAuthMode] = useState<'login' | 'change-password-required'>('login');
   const [notice, setNotice] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(sessionToken && !actor));
-  const [route, setRoute] = useState<AppRoute>('dashboard');
-  const [selectedBranchId, setSelectedBranchId] = useState(initialScope?.activeBranchId);
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState(initialScope?.activeWarehouseId);
+  const [route, setRoute] = useState<AppRoute>(initialRoute ?? 'dashboard');
+  const [selectedBranchId, setSelectedBranchId] = useState(effectiveInitialScope?.activeBranchId);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(effectiveInitialScope?.activeWarehouseId);
 
   useEffect(() => {
     const nextTheme = readBrowserTheme();
@@ -69,13 +86,24 @@ export function SalesManagementApp({
 
   const clearSession = useCallback(() => {
     sessionStorage.clear();
+
+    if (localDebugAuthEnabled && localDebugActor && localDebugScope) {
+      setSessionToken(LOCAL_DEBUG_SESSION_TOKEN);
+      setActor(localDebugActor);
+      setScope(localDebugScope);
+      setSelectedBranchId(localDebugScope.activeBranchId);
+      setSelectedWarehouseId(localDebugScope.activeWarehouseId);
+      setAuthMode('login');
+      return;
+    }
+
     setSessionToken(undefined);
     setActor(undefined);
     setScope(undefined);
     setSelectedBranchId(undefined);
     setSelectedWarehouseId(undefined);
     setAuthMode('login');
-  }, [sessionStorage]);
+  }, [localDebugActor, localDebugAuthEnabled, localDebugScope, sessionStorage]);
 
   const loadScope = useCallback(
     async (token: string) => {
@@ -283,11 +311,14 @@ export function SalesManagementApp({
         />
       ) : route === 'pos' ? (
         <PosCheckoutShell
+          actor={actor}
           apiClient={client}
           scope={scope}
-          sessionToken={sessionToken}
           selectedBranchId={selectedBranchId}
           selectedWarehouseId={selectedWarehouseId}
+          sessionToken={sessionToken}
+          shellMode="embedded"
+          theme={theme}
         />
       ) : route === 'orders' ? (
         <SalesOrdersReturnsHome
@@ -316,4 +347,15 @@ export function SalesManagementApp({
 
 function createRequestId(scope: string): string {
   return `web-${scope}-${Date.now()}`;
+}
+
+function shouldUseLocalDebugAuth(runtimeMode: RuntimeApiMode | undefined): boolean {
+  if (runtimeMode !== undefined) {
+    return runtimeMode === 'local-fake';
+  }
+
+  return (
+    typeof window !== 'undefined' &&
+    window.google?.script?.run === undefined
+  );
 }

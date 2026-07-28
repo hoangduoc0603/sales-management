@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
-import { Badge } from '../../components/ui/badge';
+import { CenioBrandMark } from '../../components/ui/brand-mark';
 import { IconButton } from '../../components/ui/button';
+import { AppIcon, type AppIconName } from '../../components/ui/icons';
 import { Listbox } from '../../components/ui/listbox';
+import { TextAvatar } from '../../components/ui/text-avatar';
 import type { AppTheme } from '../theme/theme';
 
 export type AppRoute = 'dashboard' | 'pos' | 'orders' | 'catalog' | 'customers' | 'inventory' | 'purchasing' | 'finance' | 'reports' | 'admin';
@@ -16,6 +19,7 @@ export interface AppShellProps {
   selectedWarehouseId: string;
   theme: AppTheme;
   children: ReactNode;
+  initialSidebarCollapsed?: boolean;
   onLogout(): void;
   onRouteChange(route: AppRoute): void;
   onScopeChange(input: { branchId?: string; warehouseId?: string }): void;
@@ -24,37 +28,40 @@ export interface AppShellProps {
 
 const navigationGroups: readonly {
   label: string;
-  items: readonly { route: AppRoute; label: string; icon: string }[];
+  items: readonly { route: AppRoute; label: string; icon: AppIconName }[];
 }[] = [
   {
     label: 'Vận hành',
     items: [
-      { route: 'dashboard', label: 'Tổng quan', icon: '▦' },
-      { route: 'pos', label: 'Bán hàng', icon: '▣' },
-      { route: 'orders', label: 'Đơn bán', icon: '▤' },
-      { route: 'catalog', label: 'Hàng hóa', icon: '⬡' },
-      { route: 'customers', label: 'Khách hàng', icon: '◌' },
+      { route: 'dashboard', label: 'Tổng quan', icon: 'dashboard' },
+      { route: 'pos', label: 'Bán hàng', icon: 'pos' },
+      { route: 'orders', label: 'Đơn bán', icon: 'orders' },
+      { route: 'catalog', label: 'Hàng hóa', icon: 'catalog' },
+      { route: 'customers', label: 'Khách hàng', icon: 'customers' },
     ],
   },
   {
     label: 'Kiểm soát',
     items: [
-      { route: 'inventory', label: 'Kho', icon: '◇' },
-      { route: 'purchasing', label: 'Mua hàng', icon: '▧' },
-      { route: 'finance', label: 'Tài chính', icon: '▭' },
-      { route: 'reports', label: 'Báo cáo', icon: '▥' },
+      { route: 'inventory', label: 'Kho', icon: 'inventory' },
+      { route: 'purchasing', label: 'Mua hàng', icon: 'purchasing' },
+      { route: 'finance', label: 'Tài chính', icon: 'finance' },
+      { route: 'reports', label: 'Báo cáo', icon: 'reports' },
     ],
   },
   {
     label: 'Hệ thống',
-    items: [{ route: 'admin', label: 'Quản trị', icon: '⚙' }],
+    items: [{ route: 'admin', label: 'Quản trị', icon: 'admin' }],
   },
 ];
+
+const sidebarCollapsedStorageKey = 'sales-management.sidebarCollapsed.v1';
 
 export function AppShell({
   actor,
   children,
   currentRoute,
+  initialSidebarCollapsed,
   onLogout,
   onRouteChange,
   onScopeChange,
@@ -64,39 +71,91 @@ export function AppShell({
   selectedWarehouseId,
   theme,
 }: AppShellProps) {
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    () => initialSidebarCollapsed ?? readSidebarCollapsedPreference(),
+  );
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleSidebarToggle = useCallback(() => {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      writeSidebarCollapsedPreference(next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (userMenuRef.current?.contains(event.target as Node)) return;
+      setIsUserMenuOpen(false);
+    };
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setIsUserMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isUserMenuOpen]);
+
   return (
-    <div className="cn-app-shell">
+    <div className={isSidebarCollapsed ? 'cn-app-shell cn-app-shell-collapsed' : 'cn-app-shell'}>
       <aside className="cn-sidebar">
         <div className="cn-sidebar-brand">
-          <span className="cn-brand-mark">C</span>
-          <div>
-            <strong>Cenio Sales</strong>
-            <span>Retail operations</span>
-          </div>
+          <CenioBrandMark />
+          {!isSidebarCollapsed ? (
+            <div className="cn-sidebar-brand-copy">
+              <strong>Cenio Sales</strong>
+              <span>Retail operations</span>
+            </div>
+          ) : null}
+          <button
+            aria-label={isSidebarCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            className="cn-sidebar-toggle"
+            onClick={handleSidebarToggle}
+            title={isSidebarCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            type="button"
+          >
+            <AppIcon name="chevronRight" />
+          </button>
         </div>
         <nav className="cn-nav" aria-label="Điều hướng chính">
           {navigationGroups.map((group) => (
             <div className="cn-nav-group" key={group.label}>
-              <p className="cn-nav-label">{group.label}</p>
+              {!isSidebarCollapsed ? <p className="cn-nav-label">{group.label}</p> : null}
               {group.items.map((item) => (
                 <button
+                  aria-label={isSidebarCollapsed ? item.label : undefined}
                   aria-current={item.route === currentRoute ? 'page' : undefined}
                   className={item.route === currentRoute ? 'cn-nav-item active' : 'cn-nav-item'}
                   key={item.route}
                   onClick={() => onRouteChange(item.route)}
                   type="button"
                 >
-                  <span aria-hidden="true">{item.icon}</span>
-                  <span>{item.label}</span>
+                  <AppIcon className="cn-nav-icon" name={item.icon} />
+                  {!isSidebarCollapsed ? <span>{item.label}</span> : null}
                 </button>
               ))}
             </div>
           ))}
         </nav>
-        <div className="cn-sidebar-foot">
-          <span className="cn-sync-dot" />
-          Đồng bộ cục bộ sẵn sàng
-        </div>
+        {!isSidebarCollapsed ? (
+          <div className="cn-sidebar-foot">
+            <span className="cn-sync-dot" />
+            Đồng bộ cục bộ sẵn sàng
+          </div>
+        ) : (
+          <div aria-label="Đồng bộ cục bộ sẵn sàng" className="cn-sidebar-foot-compact" title="Đồng bộ cục bộ sẵn sàng">
+            <span className="cn-sync-dot" />
+          </div>
+        )}
       </aside>
       <div className="cn-app-main">
         <header className="cn-topbar">
@@ -112,7 +171,6 @@ export function AppShell({
               options={scope.branches.map((branch) => ({
                 value: branch.branchId,
                 label: branch.name,
-                description: branch.branchCode,
               }))}
               value={selectedBranchId}
             />
@@ -123,7 +181,6 @@ export function AppShell({
               options={scope.warehouses.map((warehouse) => ({
                 value: warehouse.warehouseId,
                 label: warehouse.name,
-                description: warehouse.warehouseCode,
               }))}
               value={selectedWarehouseId}
             />
@@ -133,31 +190,59 @@ export function AppShell({
               label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
               onClick={onThemeToggle}
             >
-              {theme === 'dark' ? '☀' : '☾'}
+              <AppIcon className="cn-topbar-icon" name={theme === 'dark' ? 'sun' : 'moon'} />
             </IconButton>
-            <IconButton label="Thông báo">◔</IconButton>
-            <div className="cn-user-menu">
-              <span className="cn-avatar">{getInitials(actor.displayName)}</span>
-              <div>
-                <strong>{actor.displayName}</strong>
-                <span>{actor.loginId}</span>
+            <IconButton label="Thông báo">
+              <AppIcon className="cn-topbar-icon" name="bell" />
+            </IconButton>
+            <div className="cn-user-menu" ref={userMenuRef}>
+              <button
+                aria-expanded={isUserMenuOpen}
+                aria-haspopup="menu"
+                className="cn-user-trigger"
+                onClick={() => setIsUserMenuOpen((current) => !current)}
+                type="button"
+              >
+                <TextAvatar initials={getInitials(actor.displayName)} label={actor.displayName} size="sm" />
+                <span className="cn-user-copy">
+                  <strong>{actor.displayName}</strong>
+                  <span>{actor.loginId}</span>
+                </span>
+              </button>
+              <div className="cn-user-popover" hidden={!isUserMenuOpen} role="menu">
+                <div className="cn-user-popover-head">
+                  <TextAvatar initials={getInitials(actor.displayName)} label={actor.displayName} size="md" />
+                  <div>
+                    <strong>{actor.displayName}</strong>
+                    <span>{actor.loginId}</span>
+                  </div>
+                </div>
+                <button className="cn-user-action danger" onClick={onLogout} role="menuitem" type="button">
+                  <AppIcon className="cn-user-action-icon" name="logout" />
+                  Đăng xuất
+                </button>
               </div>
             </div>
-            <button className="cn-logout" onClick={onLogout} type="button">
-              Đăng xuất
-            </button>
           </div>
         </header>
         <main className="cn-page">
-          <div className="cn-page-context">
-            <Badge tone="success">Dữ liệu sẵn sàng</Badge>
-            <span>Scope backend xác thực · không dùng Google identity</span>
-          </div>
           {children}
         </main>
       </div>
     </div>
   );
+}
+
+function readSidebarCollapsedPreference(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  return window.localStorage.getItem(sidebarCollapsedStorageKey) === 'true';
+}
+
+function writeSidebarCollapsedPreference(isCollapsed: boolean): void {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
 }
 
 function getInitials(displayName: string): string {

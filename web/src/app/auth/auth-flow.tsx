@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
+import { CenioBrandMark } from '../../components/ui/brand-mark';
 import { Button } from '../../components/ui/button';
 
 export type AuthFlowMode = 'login' | 'change-password-required';
@@ -35,7 +36,7 @@ export function AuthFlow({
     <main className="cn-auth-page">
       <section className="cn-auth-card" aria-labelledby="auth-title">
         <div className="cn-auth-brand">
-          <span className="cn-brand-mark">C</span>
+          <CenioBrandMark />
           <div>
             <strong>Cenio Sales</strong>
             <span>Retail operations</span>

@@ -77,6 +77,46 @@ describe('ReportingService', () => {
     expect(report.data.rows[0]).not.toHaveProperty('grossProfitVnd');
   });
 
+  it('returns partial partition coverage metadata when report query touches archive without including it', () => {
+    const { service } = createFixture({
+      resolvePartitionCoverage: () => ({
+        status: 'Partial',
+        activeFrom: '2026-07-01',
+        activeTo: '2026-07-26',
+        archiveIncluded: false,
+        missingArchiveReason: 'Khoảng thời gian yêu cầu có dữ liệu nằm trong partition lưu trữ; cần bật includeArchive hoặc chạy export worker.',
+      }),
+    });
+
+    const report = service.queryReport({
+      actor: actor(),
+      request: {
+        reportId: 'sales-summary',
+        dateField: 'completedOrShippedAt',
+        dateRange: { from: '2026-06-15', to: '2026-07-26' },
+        scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+        pageSize: 50,
+      },
+    });
+
+    expect(report).toMatchObject({
+      ok: true,
+      data: {
+        metadata: {
+          partitionCoverage: {
+            status: 'Partial',
+            activeFrom: '2026-07-01',
+            activeTo: '2026-07-26',
+            archiveIncluded: false,
+            missingArchiveReason: 'Khoảng thời gian yêu cầu có dữ liệu nằm trong partition lưu trữ; cần bật includeArchive hoặc chạy export worker.',
+          },
+          archiveIncluded: false,
+        },
+        rows: [{ branchId: 'branch-default', netRevenueVnd: 286_450_000 }],
+      },
+    });
+  });
+
   it('keeps sensitive fields only for actor with sensitive permission', () => {
     const { service } = createFixture();
 
@@ -136,9 +176,61 @@ describe('ReportingService', () => {
     expect(large).toMatchObject({ ok: true, data: { exportRun: { status: 'Requested', routing: 'LargeWorker' } } });
     expect(repository.listExportRuns()).toHaveLength(2);
   });
+
+  it('resolves drill-down token only after revalidating current actor scope and sensitive permission', () => {
+    const { service } = createFixture();
+
+    const allowed = service.resolveDrillDown({
+      actor: actor(),
+      request: {
+        token: {
+          tokenId: 'drill-sales-profit-branch-default',
+          reportId: 'sales-profit',
+          dateField: 'completedOrShippedAt',
+          dateRange: { from: '2026-07-26', to: '2026-07-26' },
+          scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+          filters: { kpiId: 'netRevenue' },
+          issuedAt: '2026-07-27T08:59:30.000Z',
+          asOf: '2026-07-27T08:59:30.000Z',
+        },
+        pageSize: 50,
+      },
+    });
+
+    expect(allowed).toMatchObject({
+      ok: true,
+      data: {
+        tokenId: 'drill-sales-profit-branch-default',
+        reportId: 'sales-profit',
+        rows: [{ branchId: 'branch-default', netRevenueVnd: 286_450_000 }],
+      },
+    });
+    if (!allowed.ok) throw new Error('Expected drill-down success.');
+    expect(allowed.data.rows[0]).not.toHaveProperty('grossProfitVnd');
+
+    const denied = service.resolveDrillDown({
+      actor: actor({ branchIds: ['branch-other'], warehouseIds: ['warehouse-default'] }),
+      request: {
+        token: {
+          tokenId: 'drill-sales-profit-branch-default',
+          reportId: 'sales-profit',
+          dateField: 'completedOrShippedAt',
+          dateRange: { from: '2026-07-26', to: '2026-07-26' },
+          scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+          issuedAt: '2026-07-27T08:59:30.000Z',
+          asOf: '2026-07-27T08:59:30.000Z',
+        },
+        pageSize: 50,
+      },
+    });
+
+    expect(denied).toMatchObject({ ok: false, error: { code: 'SCOPE_DENIED' } });
+  });
 });
 
-function createFixture() {
+function createFixture(
+  input: Partial<Parameters<typeof createReportingService>[0]> = {},
+) {
   const tenantId = 'tenant-default';
   const repository = createInMemoryReportingRepository();
   const service = createReportingService({
@@ -146,6 +238,7 @@ function createFixture() {
     tenantId,
     now: () => new Date('2026-07-27T09:00:00.000Z'),
     newId: createSequentialId(),
+    ...input,
   });
 
   repository.saveDashboardProjection({

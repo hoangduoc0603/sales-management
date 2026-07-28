@@ -4,6 +4,7 @@
 
 - Status: `Approved`
 - Ngày chốt: 2026-07-26
+- Cập nhật triển khai: 2026-07-28 — POS chạy trong AppShell/Header chung khi truy cập từ ứng dụng chính.
 - Design System: Cenio Core v0.6
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `app-pos-checkout.html`
@@ -47,11 +48,11 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 
 ## Nội dung và hierarchy bắt buộc
 
-### Header POS
+### Header và AppShell
 
-- Context Branch, Warehouse bán, ca/két tiền đang mở và thu ngân.
-- Trạng thái cache/dữ liệu và thời điểm cập nhật khi cần.
-- Icon button chuyển light/dark theme ở header.
+- Khi POS được mở từ navigation chính, màn hình phải dùng AppShell/Header chung của ứng dụng: brand, sidebar, Branch/Warehouse selector, theme toggle, notification và user menu không được dựng lại trong POS.
+- Không thêm badge/header riêng kiểu “Ca POS đang mở” hoặc “Dữ liệu quầy sẵn sàng” trên header chung chỉ để phục vụ POS. Trạng thái ca/két tiền và cache POS nếu cần phải nằm trong nội dung POS hoặc recovery state theo đúng mức ưu tiên nghiệp vụ.
+- Chế độ header POS standalone chỉ phục vụ preview/debug độc lập của artifact POS; không dùng cho route `Bán hàng` trong app chính.
 - Không cho đổi sang Branch/Warehouse ngoài scope; Warehouse không bán trực tiếp không được là context tạo đơn.
 
 ### Bố cục
@@ -97,7 +98,7 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 - Bám AppShell, component, token, typography và semantic color của Cenio Core v0.6; không tạo palette, radius, shadow hay spacing system cục bộ.
 - Desktop-first, ưu tiên vùng scan/tìm và checkout dễ thao tác; responsive không được làm mất CTA hay che giỏ/tổng tiền.
 - Không dùng native `<select>`; dùng custom select/listbox hoặc shadcn Select style theo Cenio Core.
-- Theme toggle là một icon button ở header; light/dark theme phải hoạt động.
+- Theme toggle là icon button ở AppShell header chung; light/dark theme phải hoạt động.
 - Các button submit/loading giữ nguyên label và chỉ thêm loading icon.
 - Số lượng và tiền dùng tabular numbers với Outfit, không dùng mono font.
 - Không hiển thị giá vốn, lợi nhuận hoặc dữ liệu ngoài quyền. Không dùng UI để thay cho permission check backend.
@@ -107,9 +108,10 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 ## Acceptance checklist
 
 - [ ] Đọc registry và artifact `app-pos-checkout.html` trước khi code.
+- [ ] Route POS trong ứng dụng chính dùng AppShell/Header chung; không render header POS riêng hoặc badge header riêng “Ca POS đang mở”, “Dữ liệu quầy sẵn sàng”.
 - [ ] POS giữ desktop checkout shell: vùng scan/tìm hàng, workspace giỏ và tổng kết/hoàn tất.
 - [ ] Scan/tìm/thay đổi giỏ không phát sinh RPC từng thao tác khi cache sẵn sàng.
-- [ ] Có Branch/Warehouse/ca bán/két tiền đúng scope và trạng thái chưa mở ca.
+- [ ] Có Branch/Warehouse đúng scope từ AppShell; trạng thái ca bán/két tiền hiển thị trong nội dung POS/recovery khi nghiệp vụ yêu cầu.
 - [ ] Có custom select/listbox, không có native `<select>`.
 - [ ] Có tạo/chọn khách, đơn vị, lô/serial, giá/giảm, promotion/voucher/điểm theo quyền và dữ liệu nghiệp vụ.
 - [ ] Có payment/tender, bán chịu, tiền thừa hoặc còn phải thu theo cấu hình.

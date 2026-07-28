@@ -1,5 +1,14 @@
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
 import {
+  createSheetAdministrationRepository,
+  type AdministrationRepository,
+} from '../repositories/platform/administration-repository';
+import {
+  createSheetAuthRepository,
+  type AuthRepository,
+  type CredentialVerifierStore,
+} from '../repositories/platform/auth-repository';
+import {
   createSheetAuditOutboxRepository,
   type AuditOutboxRepository,
 } from '../repositories/platform/audit-outbox-repository';
@@ -42,6 +51,8 @@ import {
 } from '../repositories/reporting/reporting-repository';
 
 export interface ProductionRepositories {
+  authRepository: AuthRepository;
+  administrationRepository: AdministrationRepository;
   commandRepository: CommandRepository;
   auditOutboxRepository: AuditOutboxRepository;
   catalogRepository: CatalogRepository;
@@ -59,10 +70,20 @@ export interface ProductionRepositoryDependencies {
   tableDefinitions: readonly TableDefinitionDTO[];
   transactionPartitionKey: string;
   auditPartitionKey: string;
+  credentialVerifierStore: CredentialVerifierStore;
 }
 
 export function createProductionRepositories(deps: ProductionRepositoryDependencies): ProductionRepositories {
   return {
+    authRepository: createSheetAuthRepository({
+      gateway: deps.sheetGateway,
+      tableDefinitions: deps.tableDefinitions,
+      credentialVerifierStore: deps.credentialVerifierStore,
+    }),
+    administrationRepository: createSheetAdministrationRepository({
+      gateway: deps.sheetGateway,
+      tableDefinitions: deps.tableDefinitions,
+    }),
     commandRepository: createSheetCommandRepository({
       gateway: deps.sheetGateway,
       table: findRequiredTable(deps.tableDefinitions, 'CommandTransaction', 'platform'),

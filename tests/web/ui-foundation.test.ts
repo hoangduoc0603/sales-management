@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Badge } from '../../web/src/components/ui/badge';
 import { Button, IconButton } from '../../web/src/components/ui/button';
+import { AppIcon } from '../../web/src/components/ui/icons';
 import { Listbox } from '../../web/src/components/ui/listbox';
 import { Panel } from '../../web/src/components/ui/panel';
 import { StateBlock } from '../../web/src/components/ui/state-block';
@@ -56,8 +57,8 @@ describe('UI foundation primitives', () => {
         children: createElement(
           'div',
           null,
-          createElement(Badge, { tone: 'success' }, 'Dữ liệu sẵn sàng'),
-          createElement(IconButton, { label: 'Chuyển theme' }, '☾'),
+          createElement(Badge, { tone: 'success' }, 'Hoạt động'),
+          createElement(IconButton, { label: 'Chuyển theme' }, createElement(AppIcon, { name: 'moon' })),
         ),
       }),
     );

@@ -42,7 +42,7 @@ Sales Dashboard là màn tổng quan vận hành hằng ngày cho quản lý c�
 - Workspace/company context.
 - Bộ chọn chi nhánh.
 - Bộ chọn kho.
-- Trạng thái dữ liệu, `generatedAt`, `asOf` và phạm vi phủ dữ liệu.
+- Thời điểm dữ liệu chính như `generatedAt`/`asOf` ở dạng text gọn; không dùng badge “Dữ liệu sẵn sàng” hoặc “Phủ dữ liệu” trong header để tránh nhiễu.
 - Nút làm mới.
 - Icon button chuyển light/dark theme ở header.
 - Thông tin user/role.
@@ -56,7 +56,8 @@ Sales Dashboard là màn tổng quan vận hành hằng ngày cho quản lý c�
 
 #### Freshness và archive coverage
 
-- Header phải hiển thị `generatedAt`, `asOf`, `partitionCoverage` và `archiveIncluded` theo metadata backend trả về.
+- Header hiển thị thời điểm dữ liệu chính theo metadata backend trả về ở dạng text gọn.
+- `partitionCoverage` và `archiveIncluded` vẫn là metadata backend/report bắt buộc, nhưng không render thành badge thường trực trong header Dashboard.
 - Kỳ dài có archive phải ghi rõ “gồm dữ liệu lưu trữ”; nếu chỉ có dữ liệu một phần, không được trình bày như báo cáo đầy đủ.
 
 ### KPI chính
@@ -71,7 +72,7 @@ Hiển thị đúng 4 KPI:
 Rule:
 
 - KPI dùng tabular numbers.
-- Lead KPI không dùng top accent strip/line trang trí.
+- KPI không dùng top accent strip/line trang trí hoặc border highlight riêng; 4 KPI chính đồng nhất về border/elevation.
 - Phân cấp KPI bằng typography, spacing, border, elevation và icon tint nhẹ.
 - Trend/status dùng semantic badge, không dùng màu tùy tiện.
 
@@ -144,13 +145,13 @@ Rule:
 - [ ] Responsive tablet/mobile không vỡ AppShell, KPI, chart, queue và table.
 - [ ] Light/dark theme hoạt động.
 - [ ] Có đúng 4 KPI chính.
-- [ ] Lead KPI không có top accent strip.
+- [ ] KPI không có top accent strip hoặc border highlight riêng.
 - [ ] Biểu đồ không có block “Tín hiệu quyết định”.
 - [ ] Queue không có vertical priority rail/line màu.
 - [ ] Không có native `<select>`.
 - [ ] State loading/empty/error/restricted, scope, stale/retry, archive coverage và command đang xử lý được implement.
 - [ ] Scope thay đổi xoá dữ liệu cũ và tải lại quyền/context trước khi render.
-- [ ] Metadata `generatedAt`/`asOf`/`partitionCoverage`/`archiveIncluded` được hiển thị đúng dữ liệu backend trả về.
+- [ ] Metadata thời điểm dữ liệu chính được hiển thị gọn trong header; không render badge “Dữ liệu sẵn sàng” hoặc “Phủ dữ liệu”.
 - [ ] Không hiển thị dữ liệu sensitive khi thiếu quyền.
 - [ ] Không implement dữ liệu “Hoạt động gần đây” trước khi có source/query và permission contract được phê duyệt.
 - [ ] Không thêm nội dung ngoài SRS/LLD/handoff.

@@ -9,6 +9,10 @@ import {
   createInMemoryAdministrationRepository,
   type AdministrationRepository,
 } from '../../../repositories/platform/administration-repository';
+import {
+  createDeterministicPasswordServiceForTest,
+  type PasswordService,
+} from '../auth/password-service';
 
 export interface BootstrapService {
   install(input: BootstrapInstallRequest): BootstrapInstallResponse;
@@ -18,9 +22,12 @@ export interface BootstrapService {
 interface BootstrapServiceDependencies {
   repository: AdministrationRepository;
   authRepository: AuthRepository;
+  passwordService?: PasswordService;
 }
 
 export function createBootstrapService(deps: BootstrapServiceDependencies): BootstrapService {
+  const passwordService = deps.passwordService ?? createDeterministicPasswordServiceForTest();
+
   return {
     install(input) {
       const existing = buildInstalledResponse(deps.repository, deps.authRepository);
@@ -43,7 +50,7 @@ export function createBootstrapService(deps: BootstrapServiceDependencies): Boot
         authVersion: 1,
         disabled: false,
         passwordChangeRequired: true,
-        passwordVerifier: `test-verifier:${input.temporaryPassword ?? 'admin123'}`,
+        passwordVerifier: passwordService.createVerifier(input.temporaryPassword ?? 'admin123'),
         failedLoginCount: 0,
         actions: [
           'platform.auth.logout',
