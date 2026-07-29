@@ -105,24 +105,80 @@ Script `deploy:push` sẽ:
 
 Nếu script báo thiếu `.clasp.json`, không sửa `.clasp.json.example` để thêm `scriptId`. Phải tạo `.clasp.json` local riêng.
 
-## 6. Tạo versioned Web App deployment
+## 5.1. Debug Web App bằng test deployment không tăng version
 
-Sau khi push thành công, tạo deployment có version rõ ràng:
+Trong giai đoạn debug, khi cần cập nhật Apps Script nhiều lần nhưng không muốn tạo immutable version mới, chạy:
 
 ```bash
-npx clasp deploy --description "sales-management <APP_VERSION> initial customer deployment"
+npm run deploy:test
 ```
 
-Trong Apps Script UI, cấu hình Web App:
+Script `deploy:test` sẽ:
 
-- Execute as: Google account của khách/Owner triển khai.
-- Who has access: theo mô hình public Web App đã chốt; user đăng nhập bằng tài khoản/mật khẩu nội bộ của app, không dựa vào Google identity.
+1. kiểm tra `.clasp.json` local tồn tại và trỏ tới `rootDir: "./dist"`;
+2. chạy `npm run verify`;
+3. chạy `npx clasp push`;
+4. đọc HEAD/test deployment ID từ `npx clasp deployments --json`;
+5. in test Web App URL dạng `https://script.google.com/macros/s/<DEPLOYMENT_ID>/dev`.
+
+Lệnh này không chạy `clasp version`, không chạy `clasp deploy`, không cập nhật public Web App URL `/exec` và không tiêu tốn version deploy. URL `/dev` là test deployment chạy code mới nhất đã lưu/push trên Apps Script project và thường chỉ editor của Apps Script project truy cập được. URL này phải dùng Web App deployment ID dạng `AKfy...`, không dùng Apps Script project `scriptId`.
+
+## 6. Tạo versioned Web App deployment
+
+Để push, tạo immutable version và deploy Web App trong cùng một lệnh:
+
+```bash
+npm run deploy:webapp
+```
+
+Lệnh này sẽ:
+
+1. chạy `npm run verify`;
+2. push artifact trong `dist/`;
+3. tạo Apps Script version mới;
+4. deploy version đó thành Web App;
+5. in `Deployment ID` và `Web App URL` nếu `clasp` trả deployment ID.
+
+Manifest source phải có Web App config:
+
+```json
+{
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "ANYONE_ANONYMOUS"
+  }
+}
+```
+
+Cấu hình này bám theo ADR 0001: Web App public, chạy bằng quyền Google account khách/Owner triển khai; user đăng nhập bằng tài khoản/mật khẩu nội bộ của app, không dựa vào Google identity.
+
+Sau lần deploy đầu tiên, ghi lại `Deployment ID` ngoài source repo. Các lần cập nhật nên redeploy vào deployment cũ để giữ nguyên Web App URL:
+
+```bash
+npm run deploy:webapp -- --deploymentId <DEPLOYMENT_ID>
+```
 
 Ghi lại deployment ID và Web App URL vào biên bản bàn giao ngoài source repo.
 
 ## 7. Bootstrap tenant
 
 Bootstrap phải chạy một lần sau deploy đầu tiên.
+
+Với tenant test/mặc định, chạy:
+
+```bash
+npm run bootstrap:default
+```
+
+Lệnh này gọi Apps Script function `installDefaultTenant_` qua clasp. Function này tạo Drive root, storage folders, các Spreadsheet dữ liệu, runtime config trong Script Properties và seed tenant/admin mặc định. Đây là owner-run function, không phải UI public bootstrap.
+
+Nếu `clasp run` báo `Script function not found. Please make sure script is deployed as API executable.`, bootstrap chưa chạy. Cách xử lý nhanh cho lần đầu triển khai:
+
+1. mở Apps Script editor bằng `npx clasp open-script`;
+2. chọn function `installDefaultTenant_`;
+3. bấm Run và duyệt quyền Google nếu được hỏi;
+4. kiểm tra function chạy xong không lỗi;
+5. mở lại Web App và đăng nhập bằng `admin/admin123`.
 
 Payload nghiệp vụ tối thiểu:
 

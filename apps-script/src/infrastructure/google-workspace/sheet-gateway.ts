@@ -55,10 +55,12 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
       return values.slice(1).map((row) => rowToRecord(row, actualHeaders, request.table.headers));
     },
     appendRows(request) {
-      const { sheet } = openLocatedSheet(deps, request.table, request.partitionKey, true);
+      const { sheet, created } = openLocatedSheet(deps, request.table, request.partitionKey, true);
       if (sheet === null) {
         throw new Error(`Cannot append to missing sheet ${request.table.sheetName}.`);
       }
+
+      ensureHeaders(sheet, request.table, created);
 
       for (const row of request.rows) {
         sheet.appendRow(request.table.headers.map((column) => serializeCell(row[column.name], column)));
@@ -74,15 +76,21 @@ function openLocatedSheet(
   table: TableDefinitionDTO,
   partitionKey: string | undefined,
   createIfMissing: boolean,
-): { sheet: SheetLike | null } {
+): { sheet: SheetLike | null; created: boolean } {
   const location = deps.tableLocator({ table, partitionKey });
   const spreadsheet = deps.spreadsheetApp.openById(location.spreadsheetId);
   const sheet = spreadsheet.getSheetByName(location.sheetName);
-  if (sheet !== null) return { sheet };
+  if (sheet !== null) return { sheet, created: false };
   if (createIfMissing && spreadsheet.insertSheet !== undefined) {
-    return { sheet: spreadsheet.insertSheet(location.sheetName) };
+    return { sheet: spreadsheet.insertSheet(location.sheetName), created: true };
   }
-  return { sheet: null };
+  return { sheet: null, created: false };
+}
+
+function ensureHeaders(sheet: SheetLike, table: TableDefinitionDTO, created: boolean): void {
+  if (!created && sheet.getDataRange().getValues().length > 0) return;
+
+  sheet.appendRow(table.headers.map((column) => column.name));
 }
 
 function rowToRecord(

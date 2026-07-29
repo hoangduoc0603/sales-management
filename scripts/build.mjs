@@ -25,7 +25,7 @@ await build({
 
 appendFileSync(
   path.join(artifactDirectory, 'code.js'),
-  `\nfunction doGet(event) {\n  return SalesManagement.doGet_(event);\n}\n\nfunction invoke(request) {\n  return SalesManagement.invoke_(request);\n}\n`,
+  `\nfunction doGet(event) {\n  return SalesManagement.doGet_(event);\n}\n\nfunction invoke(request) {\n  return SalesManagement.invoke_(request);\n}\n\nfunction installDefaultTenant_(request) {\n  return SalesManagement.installDefaultTenantForAppsScript_(request || {});\n}\n`,
   'utf8',
 );
 

@@ -48,3 +48,31 @@ Khi chạy local không có `google.script.run`, frontend tự dùng local fake 
 Khi chạy trong Apps Script Web App có `google.script.run`, client sẽ ưu tiên backend Apps Script thật.
 
 `npm run build` tạo artifact trong `dist/`; lệnh không gọi Google Workspace. Để push lên test tenant, người triển khai tự sao chép `.clasp.json.example` thành `.clasp.json`, thêm `scriptId` cục bộ, rồi chạy `npm run deploy:push`. Không đưa `scriptId`, token hay `.clasp.json` vào source, log hoặc Git.
+
+Trong giai đoạn debug Web App, dùng lệnh dưới đây để verify, push code mới nhất lên Apps Script, đọc HEAD/test deployment ID từ `clasp deployments --json` rồi in test deployment `/dev` mà không tạo Apps Script version mới:
+
+```bash
+npm run deploy:test
+```
+
+Lệnh này không cập nhật URL production `/exec`; `/dev` là test deployment và thường chỉ editor của Apps Script project truy cập được. URL `/dev` phải dùng Web App deployment ID dạng `AKfy...`, không dùng Apps Script project `scriptId`.
+
+Để build, push, tạo version Apps Script và deploy Web App trong cùng một lệnh:
+
+```bash
+npm run deploy:webapp
+```
+
+Lần đầu lệnh này tạo deployment mới và in `Web App URL` nếu `clasp` trả về deployment ID. Các lần sau nên giữ URL cũ bằng cách truyền deployment ID hiện có:
+
+```bash
+npm run deploy:webapp -- --deploymentId <DEPLOYMENT_ID>
+```
+
+Sau deploy lần đầu, chạy bootstrap tenant mặc định một lần trên Apps Script project đích:
+
+```bash
+npm run bootstrap:default
+```
+
+Lệnh này chạy function owner-only `installDefaultTenant_` qua clasp để tạo Drive folder, các Spreadsheet dữ liệu, runtime config và tài khoản admin tạm `admin/admin123`. Nếu `clasp run` báo project chưa có API executable deployment, mở Apps Script editor bằng `npx clasp open-script`, chọn function `installDefaultTenant_`, bấm Run và duyệt quyền Google. Sau khi bootstrap xong, mở Web App URL và đăng nhập.

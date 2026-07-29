@@ -54,8 +54,11 @@ const requiredPaths = [
   'docs/product/srs/finance.md',
   'docs/product/srs/access-reporting.md',
   'scripts/verify-structure.mjs',
+  'scripts/bootstrap-default.mjs',
   'scripts/build.mjs',
   'scripts/deploy-push.mjs',
+  'scripts/deploy-test.mjs',
+  'scripts/deploy-webapp.mjs',
   'scripts/verify-apps-script-artifact.mjs',
   'tests/.gitkeep',
 ];
@@ -96,6 +99,11 @@ if (manifest.runtimeVersion !== 'V8') {
 
 if (manifest.exceptionLogging !== 'STACKDRIVER') {
   console.error('Manifest Apps Script phải đặt exceptionLogging là STACKDRIVER.');
+  process.exit(1);
+}
+
+if (manifest.webapp?.executeAs !== 'USER_DEPLOYING' || manifest.webapp?.access !== 'ANYONE_ANONYMOUS') {
+  console.error('Manifest Apps Script phải cấu hình Web App public chạy bằng tài khoản triển khai.');
   process.exit(1);
 }
 

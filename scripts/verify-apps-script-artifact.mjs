@@ -37,6 +37,10 @@ export function verifyArtifact(artifactDirectory) {
     throw new Error('appsscript.json không thỏa runtime V8, Asia/Ho_Chi_Minh và STACKDRIVER.');
   }
 
+  if (manifest.webapp?.executeAs !== 'USER_DEPLOYING' || manifest.webapp?.access !== 'ANYONE_ANONYMOUS') {
+    throw new Error('appsscript.json không có cấu hình Web App public chạy bằng tài khoản triển khai.');
+  }
+
   for (const filename of requiredFiles) {
     const content = readFileSync(path.join(artifactDirectory, filename), 'utf8');
     if (/\b(scriptId|client_secret|refresh_token)\b/i.test(content)) {

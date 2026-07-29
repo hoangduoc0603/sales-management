@@ -47,6 +47,37 @@ describe('Google Workspace adapter seams', () => {
     ]);
   });
 
+  it('writes registry headers before first append when a sheet is created lazily', () => {
+    const spreadsheet = new FakeSpreadsheet({});
+    const spreadsheetApp = new FakeSpreadsheetApp({ 'spreadsheet-core': spreadsheet });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [
+        {
+          id: 'user-1',
+          status: 'Active',
+          detailsJson: { displayName: 'Admin' },
+        },
+      ],
+    });
+
+    expect(gateway.readTable({ table: userAccountTable })).toEqual([
+      {
+        id: 'user-1',
+        status: 'Active',
+        detailsJson: { displayName: 'Admin' },
+      },
+    ]);
+  });
+
   it('creates private tenant Drive folders without public URLs', () => {
     const driveApp = new FakeDriveApp();
     const gateway = createDriveGateway({ driveApp });

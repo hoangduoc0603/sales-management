@@ -236,13 +236,21 @@ export function AppShell({
 function readSidebarCollapsedPreference(): boolean {
   if (typeof window === 'undefined') return false;
 
-  return window.localStorage.getItem(sidebarCollapsedStorageKey) === 'true';
+  try {
+    return window.localStorage?.getItem(sidebarCollapsedStorageKey) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 function writeSidebarCollapsedPreference(isCollapsed: boolean): void {
   if (typeof window === 'undefined') return;
 
-  window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+  try {
+    window.localStorage?.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+  } catch {
+    // localStorage có thể bị chặn trong một số môi trường test/browser; UI vẫn hoạt động với state trong memory.
+  }
 }
 
 function getInitials(displayName: string): string {
