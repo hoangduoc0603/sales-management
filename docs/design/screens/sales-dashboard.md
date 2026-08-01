@@ -3,8 +3,8 @@
 ## Trạng thái
 
 - Status: `Approved`
-- Ngày chốt: 2026-07-26
-- Design System: Cenio Core v0.6
+- Ngày chốt: 2026-08-01
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `app-shell-dashboard.html`
 - Handoff trong Open Design: `brand-spec.md`
@@ -134,6 +134,8 @@ Rule:
 - Submit/loading button chỉ show loading icon, không đổi text nếu không có yêu cầu khác.
 - Không dùng font mono cho số liệu; dùng Outfit với tabular numbers.
 - Không tạo token/palette/radius/shadow cục bộ ngoài Cenio Core.
+- Header ready-state chỉ hiển thị `generatedAt`/`asOf` dạng text gọn; không hiển thị badge thường trực về độ sẵn sàng hay coverage. Coverage chỉ xuất hiện khi kỳ có archive/partial coverage hoặc trong recovery state tương ứng.
+- Ready view không hiển thị state gallery hay checklist benchmark. State/recovery phải được gọi theo tình huống.
 - Không hiển thị số liệu giá vốn/lợi nhuận nhạy cảm nếu user thiếu quyền.
 - Không suy diễn dữ liệu tài chính, công nợ hoặc chênh lệch ca từ UI khi backend không trả quyền/row/field tương ứng.
 - Không thêm nhãn/kênh: Website, Zalo OA, Sàn thương mại điện tử, Shopee, TikTok, Carrier, Bank.
