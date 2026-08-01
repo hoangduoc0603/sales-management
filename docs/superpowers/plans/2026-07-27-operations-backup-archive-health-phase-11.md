@@ -52,7 +52,7 @@
   - `ImportUploadRequest/Response`
   - `ImportValidateRequest/Response`
   - `ImportCommitRequest/Response`
-  - `AttachmentCompleteRequest`, `AttachmentAccessRequest`, `AttachmentMetadataDTO`
+  - `AttachmentUploadRequest`, `AttachmentCompleteRequest`, `AttachmentAccessRequest`, `AttachmentMetadataDTO`
   - `BackupRequest/Response`, `BackupListResponse`
   - `RestorePrepareRequest/Response`, `RestoreSwitchRequest/Response`
   - `HealthCheckRequest/Response`
@@ -63,8 +63,11 @@
   - `operations.import.upload`
   - `operations.import.validate`
   - `operations.import.commit`
+  - `operations.attachment.upload`
+  - `operations.attachment.list`
   - `operations.attachment.complete`
   - `operations.attachment.download`
+  - `operations.attachment.delete`
   - `operations.backup.request`
   - `operations.backup.list`
   - `operations.restore.prepare`
@@ -87,7 +90,7 @@
 
 - [x] Add failing tests:
   - Import validation returns row-level errors and `ValidRowsOnly` commit is idempotent by `batchId/rowKey`.
-  - Attachment download returns no public URL and denies branch/warehouse outside actor scope.
+  - Attachment upload writes through private attachment storage; download returns no public URL and denies branch/warehouse outside actor scope.
   - Backup manifest includes app/schema version, partitions, row counts and deterministic checksum.
   - Restore prepare freezes writes and switch creates replacement config marker and health result.
   - Partition ensure-next creates next partition before capacity threshold breach.
@@ -101,6 +104,7 @@
   - Partition: active capacity alert and next active partition creation
 - [x] Implement checksum using deterministic JSON + simple stable hash; no crypto dependency required for baseline tests.
 - [x] Implement actor scope guard helpers for branch/warehouse where records carry scope.
+- [x] Implement `AttachmentStorage` seam so production can write/read/trash uploaded content in private Google Drive while service persists only metadata.
 - [x] Run `npm test -- tests/apps-script/operations/operations-service.test.ts`.
 
 ## Task 3: API composition and local fake backend
@@ -117,7 +121,7 @@
 - [x] Add failing composition tests that invoke operations through the single RPC gateway with session and action authorization.
 - [x] Wire operations service dependencies in `createApiComposition()`.
 - [x] Register handlers for all Phase 11 operation names.
-- [x] Add local fake backend handlers with same response shape and no public Drive URL.
+- [x] Add local fake backend handlers with same response shape and no public Drive URL, including `operations.attachment.upload/list/delete/download`.
 - [x] Run `npm test -- tests/apps-script/operations/operations-composition.test.ts tests/web/local-fake-backend.test.ts`.
 
 ## Task 4: TableRegistry and operational table definitions
@@ -145,11 +149,11 @@
 - [x] Run targeted tests for operations/shared/composition/local fake/registry.
 - [x] Run `npm run verify`.
 - [x] Tick only completed Phase 11 checklist items.
-- [x] Record remaining gaps if any: real Drive upload/download adapter, scheduled trigger runner, physical replacement resources, full UI Owner operations screen.
+- [x] Record remaining gaps if any: scheduled trigger runner, physical replacement resources, full UI Owner operations screen.
 
 ## Remaining gaps after Phase 11 baseline
 
-- Real Google Drive attachment upload/download adapter; baseline hiện trả internal access token và không public URL.
+- Attachment private Drive lifecycle baseline đã có `DriveGateway.savePrivateAttachment/readPrivateAttachment/trashPrivateAttachment()`; `operations.attachment.upload/list/delete/download` kiểm quyền/scope, logical delete và không public URL. Sales/Warranty/Expense UI tích hợp attachment theo source object vẫn là scope của domain UI/feature tương ứng.
 - Scheduled trigger/worker runner cho import/export/audit/backup/archive; baseline hiện chạy synchronous qua service/local fake.
 - Backup retention 30 newest daily và manifest file thật trên Drive.
 - Restore physical replacement resources, Owner switch gắn runtime config thật, revoke active sessions thật và restore drill.

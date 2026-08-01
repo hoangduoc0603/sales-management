@@ -4,6 +4,12 @@ import type {
   AttachmentAccessResponse,
   AttachmentCompleteRequest,
   AttachmentCompleteResponse,
+  AttachmentDeleteRequest,
+  AttachmentDeleteResponse,
+  AttachmentListRequest,
+  AttachmentListResponse,
+  AttachmentUploadRequest,
+  AttachmentUploadResponse,
   BackupListResponse,
   BackupManifestDTO,
   BackupRequest,
@@ -44,8 +50,11 @@ export interface OperationsService {
   uploadImport(input: { actor: ActorContextDTO; request: ImportUploadRequest }): OperationsServiceResult<ImportUploadResponse>;
   validateImport(input: { actor: ActorContextDTO; request: ImportValidateRequest }): OperationsServiceResult<ImportValidateResponse>;
   commitImport(input: { actor: ActorContextDTO; request: ImportCommitRequest }): OperationsServiceResult<ImportCommitResponse>;
+  uploadAttachment(input: { actor: ActorContextDTO; request: AttachmentUploadRequest }): OperationsServiceResult<AttachmentUploadResponse>;
+  listAttachments(input: { actor: ActorContextDTO; request: AttachmentListRequest }): OperationsServiceResult<AttachmentListResponse>;
   completeAttachment(input: { actor: ActorContextDTO; request: AttachmentCompleteRequest }): OperationsServiceResult<AttachmentCompleteResponse>;
   downloadAttachment(input: { actor: ActorContextDTO; request: AttachmentAccessRequest }): OperationsServiceResult<AttachmentAccessResponse>;
+  deleteAttachment(input: { actor: ActorContextDTO; request: AttachmentDeleteRequest }): OperationsServiceResult<AttachmentDeleteResponse>;
   requestBackup(input: { actor: ActorContextDTO; request: BackupRequest }): OperationsServiceResult<BackupResponse>;
   listBackups(input: { actor: ActorContextDTO }): OperationsServiceResult<BackupListResponse>;
   prepareRestore(input: { actor: ActorContextDTO; request: RestorePrepareRequest }): OperationsServiceResult<RestorePrepareResponse>;
@@ -57,11 +66,26 @@ export interface OperationsService {
 
 export interface OperationsServiceDependencies {
   repository: OperationsRepository;
+  attachmentStorage?: AttachmentStorage;
   tenantId: string;
   appVersion: string;
   schemaVersion: number;
   now: () => Date;
   newId(prefix: string): string;
+}
+
+export interface AttachmentStorage {
+  savePrivateAttachment(input: {
+    fileName: string;
+    mimeType: string;
+    contentBase64: string;
+  }): {
+    driveFileId: string;
+  };
+  readPrivateAttachment?(input: { driveFileId: string }): {
+    contentBase64: string;
+  };
+  trashPrivateAttachment?(input: { driveFileId: string }): void;
 }
 
 const importTemplateColumns: Record<ImportTemplateRequest['importType'], readonly string[]> = {
@@ -185,6 +209,55 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
         },
       };
     },
+    uploadAttachment(input) {
+      const permissionError = requireAction(input.actor, 'operations.attachment.manage');
+      if (permissionError !== undefined) return permissionError;
+      const scopeError = requireScope(input.actor, input.request);
+      if (scopeError !== undefined) return scopeError;
+      if (deps.attachmentStorage === undefined) {
+        return failure('INVALID_INPUT', 'Attachment storage chưa được cấu hình.');
+      }
+
+      const stored = deps.attachmentStorage.savePrivateAttachment({
+        fileName: input.request.fileName,
+        mimeType: input.request.mimeType,
+        contentBase64: input.request.contentBase64,
+      });
+      const attachment = {
+        attachmentId: deps.newId('attachment'),
+        objectType: input.request.objectType,
+        objectId: input.request.objectId,
+        branchId: input.request.branchId,
+        warehouseId: input.request.warehouseId,
+        driveFileId: stored.driveFileId,
+        fileName: input.request.fileName,
+        mimeType: input.request.mimeType,
+        sizeBytes: input.request.sizeBytes,
+        checksum: input.request.checksum,
+        status: 'Available' as const,
+        uploadedBy: input.actor.userId,
+        uploadedAt: deps.now().toISOString(),
+      };
+      deps.repository.saveAttachment(attachment);
+      return { ok: true, data: { attachment } };
+    },
+    listAttachments(input) {
+      const permissionError = requireAction(input.actor, 'operations.attachment.view');
+      if (permissionError !== undefined) return permissionError;
+      const scopeError = requireScope(input.actor, input.request);
+      if (scopeError !== undefined) return scopeError;
+
+      const attachments = deps.repository
+        .listAttachments()
+        .filter((attachment) => attachment.objectType === input.request.objectType)
+        .filter((attachment) => attachment.objectId === input.request.objectId)
+        .filter((attachment) => attachment.status !== 'Deleted')
+        .filter((attachment) => input.request.branchId === undefined || attachment.branchId === input.request.branchId)
+        .filter((attachment) => input.request.warehouseId === undefined || attachment.warehouseId === input.request.warehouseId)
+        .filter((attachment) => requireScope(input.actor, attachment) === undefined);
+
+      return { ok: true, data: { attachments } };
+    },
     completeAttachment(input) {
       const permissionError = requireAction(input.actor, 'operations.attachment.manage');
       if (permissionError !== undefined) return permissionError;
@@ -221,14 +294,37 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
       if (scopeError !== undefined) return scopeError;
       if (attachment.status !== 'Available') return failure('INVALID_INPUT', 'File đính kèm không khả dụng.');
 
+      const content = deps.attachmentStorage?.readPrivateAttachment?.({ driveFileId: attachment.driveFileId });
       return {
         ok: true,
         data: {
           attachment,
           accessToken: `attachment-access-token-${lastSegment(attachment.attachmentId)}`,
           expiresAt: new Date(deps.now().getTime() + 5 * 60 * 1000).toISOString(),
+          contentBase64: content?.contentBase64,
         },
       };
+    },
+    deleteAttachment(input) {
+      const permissionError = requireAction(input.actor, 'operations.attachment.manage');
+      if (permissionError !== undefined) return permissionError;
+      const attachment = deps.repository.getAttachment(input.request.attachmentId);
+      if (attachment === undefined) return failure('INVALID_INPUT', 'Không tìm thấy file đính kèm.');
+      if (attachment.objectType !== input.request.objectType || attachment.objectId !== input.request.objectId) {
+        return failure('INVALID_INPUT', 'File đính kèm không khớp chứng từ nguồn.');
+      }
+      const scopeError = requireScope(input.actor, attachment);
+      if (scopeError !== undefined) return scopeError;
+      if (attachment.status === 'Deleted') return { ok: true, data: { attachment } };
+
+      deps.attachmentStorage?.trashPrivateAttachment?.({ driveFileId: attachment.driveFileId });
+      const deleted = {
+        ...attachment,
+        status: 'Deleted' as const,
+        deletedAt: deps.now().toISOString(),
+      };
+      deps.repository.saveAttachment(deleted);
+      return { ok: true, data: { attachment: deleted } };
     },
     requestBackup(input) {
       const permissionError = requireAction(input.actor, 'operations.backup.manage');

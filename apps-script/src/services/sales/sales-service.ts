@@ -54,6 +54,7 @@ type SalesServiceResult<T> =
         details?: Record<string, string>;
       };
     };
+type SalesServiceFailure = Extract<SalesServiceResult<never>, { ok: false }>;
 
 type CatalogPosProjection = ReturnType<CatalogService['getPosProjection']>;
 
@@ -383,6 +384,9 @@ function cancelOnline(
     }
   }
 
+  const depositResult = handleCancelledOnlineDeposit(deps, order, input);
+  if (!depositResult.ok) return depositResult;
+
   const now = deps.now().toISOString();
   const next: SaleOrderDTO = {
     ...order,
@@ -392,7 +396,67 @@ function cancelOnline(
     note: input.reason,
   };
   deps.repository.saveOrder(next);
-  return { ok: true, data: { order: next, inventoryMovements: movements } };
+  return {
+    ok: true,
+    data: {
+      order: next,
+      inventoryMovements: movements,
+      customerCredit: depositResult.customerCredit,
+      financeResult: depositResult.financeResult,
+    },
+  };
+}
+
+function handleCancelledOnlineDeposit(
+  deps: SalesServiceDependencies,
+  order: SaleOrderDTO,
+  input: SalesOnlineCancelRequest,
+):
+  | {
+      ok: true;
+      customerCredit?: CustomerCreditDTO;
+      financeResult?: FinancePaymentRecordResponse;
+    }
+  | SalesServiceFailure {
+  if (order.paidVnd <= 0) return { ok: true };
+
+  const treatment = input.depositTreatment ?? 'KeepCustomerCredit';
+  if (treatment === 'KeepCustomerCredit') {
+    if (order.customerId === undefined) {
+      return failure('INVALID_INPUT', 'Giữ tiền cọc thành tín dụng khách cần có khách hàng trên đơn.');
+    }
+
+    return {
+      ok: true,
+      customerCredit: deps.financeService.createCustomerCreditFromSource({
+        branchId: order.branchId,
+        customerId: order.customerId,
+        sourceDocument: { sourceType: 'SaleOrder', sourceId: order.saleOrderId },
+        amountVnd: order.paidVnd,
+      }),
+    };
+  }
+
+  if (input.cashDrawerId === undefined || input.paymentMethodId === undefined || input.approverId === undefined) {
+    return failure('INVALID_INPUT', 'Hoàn tiền cọc cần quỹ, phương thức thanh toán và người duyệt.');
+  }
+
+  const refunded = deps.financeService.recordRefund({
+    commandId: `${input.commandId}-deposit-refund`,
+    idempotencyKey: `${input.idempotencyKey}-deposit-refund`,
+    branchId: order.branchId,
+    cashDrawerId: input.cashDrawerId,
+    paymentMethodId: input.paymentMethodId,
+    amountVnd: order.paidVnd,
+    payeeType: order.customerId === undefined ? 'Other' : 'Customer',
+    payeeId: order.customerId,
+    sourceDocument: { sourceType: 'SaleOrder', sourceId: order.saleOrderId },
+    shiftId: input.shiftId,
+    approverId: input.approverId,
+  });
+  if (!refunded.ok) return failure(refunded.error.code, refunded.error.message);
+
+  return { ok: true, financeResult: refunded.data };
 }
 
 function createReturn(

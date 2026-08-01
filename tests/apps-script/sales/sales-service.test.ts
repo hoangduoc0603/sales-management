@@ -253,6 +253,82 @@ describe('SalesService POS checkout', () => {
     expect(inventoryRepository.listMovements().filter((movement) => movement.movementType === 'SaleIssue')).toHaveLength(0);
   });
 
+  it('cancels online order with deposit by keeping paid amount as customer credit', () => {
+    const { financeRepository, inventoryRepository, salesService } = createFixture();
+    const draft = salesService.saveDraft({
+      ...onlineDraftInput(),
+      commandId: 'cmd-online-draft-deposit-credit',
+      idempotencyKey: 'idem-online-draft-deposit-credit',
+      tenders: [{ tenderId: 'tender-deposit-cash', paymentMethodId: 'cash', amountVnd: 20_000, cashDrawerId: 'drawer-main' }],
+    });
+    if (!draft.ok) throw new Error('Expected online draft save.');
+
+    const confirmed = salesService.confirmOnline({
+      commandId: 'cmd-online-confirm-deposit-credit',
+      idempotencyKey: 'idem-online-confirm-deposit-credit',
+      saleOrderId: draft.data.order.saleOrderId,
+      actorId: 'seller-1',
+    });
+    expect(confirmed).toMatchObject({ ok: true });
+
+    const cancelled = salesService.cancelOnline({
+      commandId: 'cmd-online-cancel-deposit-credit',
+      idempotencyKey: 'idem-online-cancel-deposit-credit',
+      saleOrderId: draft.data.order.saleOrderId,
+      actorId: 'seller-1',
+      reason: 'Khách hủy và giữ tiền cọc.',
+      depositTreatment: 'KeepCustomerCredit',
+    });
+
+    expect(cancelled).toMatchObject({
+      ok: true,
+      data: {
+        order: { status: 'Cancelled', paidVnd: 20_000, paymentStatus: 'Partial' },
+        customerCredit: { customerId: 'customer-1', amountVnd: 20_000, sourceDocument: { sourceType: 'SaleOrder' } },
+      },
+    });
+    expect(financeRepository.listCustomerCredits()).toHaveLength(1);
+    expect(financeRepository.listPayments()).toHaveLength(0);
+    expect(inventoryRepository.getBalance('warehouse-default', 'variant-2')).toMatchObject({
+      availableMilli: 10_000,
+      reservedMilli: 0,
+      onHandMilli: 10_000,
+    });
+  });
+
+  it('cancels online order with deposit by recording a refund counter-payment', () => {
+    const { financeRepository, salesService } = createFixture();
+    const draft = salesService.saveDraft({
+      ...onlineDraftInput(),
+      commandId: 'cmd-online-draft-deposit-refund',
+      idempotencyKey: 'idem-online-draft-deposit-refund',
+      tenders: [{ tenderId: 'tender-deposit-bank', paymentMethodId: 'bank', amountVnd: 30_000, cashDrawerId: 'drawer-main' }],
+    });
+    if (!draft.ok) throw new Error('Expected online draft save.');
+
+    const cancelled = salesService.cancelOnline({
+      commandId: 'cmd-online-cancel-deposit-refund',
+      idempotencyKey: 'idem-online-cancel-deposit-refund',
+      saleOrderId: draft.data.order.saleOrderId,
+      actorId: 'seller-1',
+      reason: 'Khách hủy và hoàn tiền cọc.',
+      depositTreatment: 'Refund',
+      cashDrawerId: 'drawer-main',
+      paymentMethodId: 'bank',
+      approverId: 'manager-1',
+    });
+
+    expect(cancelled).toMatchObject({
+      ok: true,
+      data: {
+        order: { status: 'Cancelled', paidVnd: 30_000 },
+        financeResult: { payment: { amountVnd: -30_000, sourceDocument: { sourceType: 'SaleOrder' } } },
+      },
+    });
+    expect(financeRepository.listPayments()).toMatchObject([{ amountVnd: -30_000, status: 'Approved' }]);
+    expect(financeRepository.listCustomerCredits()).toHaveLength(0);
+  });
+
   it('ships manual online order once, creates receivable and delivery does not create another ledger', () => {
     const { financeRepository, inventoryRepository, salesService } = createFixture();
     const draft = salesService.saveDraft({ ...onlineDraftInput(), commandId: 'cmd-online-draft-ship', idempotencyKey: 'idem-online-draft-ship' });

@@ -8,6 +8,7 @@ import { createAppsScriptLoginRateLimiter } from '../infrastructure/google-works
 import { createAppsScriptCacheStore } from '../infrastructure/google-workspace/cache-store';
 import { createPropertiesTenantSecretStore } from '../infrastructure/google-workspace/tenant-secret-store';
 import { createAppsScriptSessionTokenFingerprinter } from '../services/platform/auth/session-token-fingerprinter';
+import { createDriveGateway } from '../infrastructure/google-workspace/drive-gateway';
 import { createProductionApiComposition } from './create-production-api-composition';
 
 declare const Sheets: GoogleSheetsAdvancedService;
@@ -27,6 +28,15 @@ export function createAppsScriptProductionComposition(clock: Clock) {
   });
   const tenantSecretStore = createPropertiesTenantSecretStore({ properties });
   const platformCacheStore = createAppsScriptCacheStore({ cacheService: CacheService });
+  const driveGateway = createDriveGateway({
+    driveApp: DriveApp,
+    utilities: {
+      base64Decode: (value) => Utilities.base64Decode(value),
+      base64Encode: (data) => Utilities.base64Encode(data),
+      newBlob: (data, mimeType, fileName) => Utilities.newBlob(data, mimeType, fileName),
+    },
+  });
+  const attachmentFolderId = runtimeConfig.driveFolders?.attachments.id ?? runtimeConfig.driveRootFolderId;
 
   return createProductionApiComposition({
     clock,
@@ -52,5 +62,22 @@ export function createAppsScriptProductionComposition(clock: Clock) {
       spreadsheetApp: SpreadsheetApp,
       waitTimeoutMs: 3000,
     }),
+    attachmentStorage: {
+      savePrivateAttachment(input) {
+        const stored = driveGateway.savePrivateAttachment({
+          folderId: attachmentFolderId,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          contentBase64: input.contentBase64,
+        });
+        return { driveFileId: stored.driveFileId };
+      },
+      readPrivateAttachment(input) {
+        return driveGateway.readPrivateAttachment({ driveFileId: input.driveFileId });
+      },
+      trashPrivateAttachment(input) {
+        driveGateway.trashPrivateAttachment({ driveFileId: input.driveFileId });
+      },
+    },
   });
 }

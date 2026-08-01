@@ -254,12 +254,18 @@ export type SalesOnlineConfirmRequest = SalesOnlineTransitionRequest;
 export interface SalesOnlineCancelRequest extends SalesOnlineTransitionRequest {
   reason: string;
   depositTreatment?: SalesDepositTreatment;
+  cashDrawerId?: string;
+  paymentMethodId?: string;
+  approverId?: string;
+  shiftId?: string;
 }
 
 export interface SalesOnlineTransitionResponse {
   order: SaleOrderDTO;
   inventoryMovements: readonly InventoryMovementResponse[];
   receivable?: ObligationDTO;
+  customerCredit?: CustomerCreditDTO;
+  financeResult?: FinancePaymentRecordResponse;
 }
 
 export interface SalesReturnLineInputDTO {

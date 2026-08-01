@@ -31,6 +31,7 @@ export interface OperationsRepository {
   listImportRows(batchId: string): readonly ImportStagingRowDTO[];
   saveAttachment(attachment: AttachmentMetadataDTO): void;
   getAttachment(attachmentId: string): AttachmentMetadataDTO | undefined;
+  listAttachments(): readonly AttachmentMetadataDTO[];
   saveBackgroundRun(run: BackgroundRunDTO): void;
   getBackgroundRun(runId: string): BackgroundRunDTO | undefined;
   listBackgroundRuns(): readonly BackgroundRunDTO[];
@@ -84,6 +85,9 @@ export function createInMemoryOperationsRepository(): OperationsRepository {
     },
     getAttachment(attachmentId) {
       return cloneOptional(attachments.get(attachmentId));
+    },
+    listAttachments() {
+      return clone([...attachments.values()]);
     },
     saveBackgroundRun(run) {
       backgroundRuns.set(run.runId, clone(run));
@@ -246,6 +250,9 @@ export function createSheetOperationsRepository(deps: SheetOperationsRepositoryD
     },
     getAttachment(attachmentId) {
       return attachments.list().find((attachment) => attachment.attachmentId === attachmentId);
+    },
+    listAttachments() {
+      return attachments.list();
     },
     saveBackgroundRun(run) {
       backgroundRuns.save(run);

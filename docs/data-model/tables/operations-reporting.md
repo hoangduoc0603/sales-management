@@ -37,7 +37,7 @@ Các bảng có base columns của registry (`id`, `tenantId`, `schemaVersion`, 
 
 | Table | Lifecycle / storage | Cột typed chính | JSON/versioned và routing |
 | --- | --- | --- | --- |
-| `AttachmentMetadata` | document / transaction | `attachmentId`, `partitionKey`, `objectType`, `objectId`, `branchId`, `warehouseId`, `driveFileId`, `fileName`, `mimeType`, `sizeBytes`, `checksum`, `status`, `uploadedBy`, `deletedAt` | access classification/version metadata; logical delete/unavailable preserves source reference. |
+| `AttachmentMetadata` | document / transaction | `attachmentId`, `partitionKey`, `objectType`, `objectId`, `branchId`, `warehouseId`, `driveFileId`, `fileName`, `mimeType`, `sizeBytes`, `checksum`, `status`, `uploadedBy`, `uploadedAt`, `deletedAt` | access classification/version metadata; logical delete/unavailable preserves source reference; Drive file stays private and API never stores/returns public URL. |
 | `BackupRun` | document/evidence / transaction | `backupRunId`, `status`, `requestedBy`, `startedAt`, `completedAt`, `manifestFileId`, `appVersion`, `schemaVersion`, `checksum`, `retentionUntil` | manifest with partition/resource/attachment metadata; 30 newest daily retained. |
 | `RestoreRun` | document/evidence / transaction | `restoreRunId`, `backupRunId`, `status`, `requestedBy`, `preparedAt`, `switchedAt`, `oldConfigVersion`, `newConfigVersion`, `healthResult` | verification/freeze/replacement/switch evidence; never points to overwritten production. |
 | `ReportProjectionState` | projection / transaction | `projectionId`, `reportId`, `branchId`, `warehouseId`, `dateBucket`, `asOf`, `sourcePartitionKey`, `buildVersion`, `status` | aggregate values/snapshot hash only; rebuildable from source ledger/document. |

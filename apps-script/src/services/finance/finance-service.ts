@@ -1,11 +1,19 @@
 import type { ApiErrorCode } from '@shared/contracts/errors';
 import type {
+  CashDrawerDTO,
   CashTransactionDTO,
   CustomerCreditDTO,
+  FinanceAgingProjectionRequest,
+  FinanceAgingProjectionResponse,
+  FinanceAgingRowDTO,
+  FinanceCashDrawerUpsertRequest,
   FinanceExpenseApproveRequest,
   FinanceCustomerCreditCreateRequest,
+  FinanceMasterDataRequest,
+  FinanceMasterDataResponse,
   FinancePaymentRecordRequest,
   FinancePaymentRecordResponse,
+  FinancePaymentMethodUpsertRequest,
   FinanceRefundRecordRequest,
   FinanceSupplierPaymentRecordRequest,
   FinanceSupplierPrepaymentCreateRequest,
@@ -17,6 +25,7 @@ import type {
   ObligationDTO,
   PaymentAllocationDTO,
   PaymentDTO,
+  PaymentMethodDTO,
   ShiftDTO,
   SupplierPrepaymentDTO,
 } from '@shared/contracts/finance/finance';
@@ -35,6 +44,10 @@ export interface FinanceService {
   recordRefund(input: FinanceRefundRecordRequest): FinanceServiceResult<FinancePaymentRecordResponse>;
   reversePayment(input: FinancePaymentReverseRequest): FinanceServiceResult<FinancePaymentRecordResponse>;
   approveExpense(input: FinanceExpenseApproveRequest): FinanceServiceResult<{ cashTransaction: CashTransactionDTO }>;
+  upsertCashDrawer(input: FinanceCashDrawerUpsertRequest): FinanceServiceResult<{ cashDrawer: CashDrawerDTO }>;
+  upsertPaymentMethod(input: FinancePaymentMethodUpsertRequest): FinanceServiceResult<{ paymentMethod: PaymentMethodDTO }>;
+  getMasterData(input?: FinanceMasterDataRequest): FinanceMasterDataResponse;
+  getAgingProjection(input: FinanceAgingProjectionRequest): FinanceAgingProjectionResponse;
   getSummary(): FinanceSummaryResponse;
   createCustomerCreditFromSource(input: FinanceCustomerCreditCreateRequest): CustomerCreditDTO;
   createSupplierPrepaymentFromSource(input: FinanceSupplierPrepaymentCreateRequest): SupplierPrepaymentDTO;
@@ -43,12 +56,14 @@ export interface FinanceService {
     customerId: string;
     sourceDocument: ObligationDTO['sourceDocument'];
     amountVnd: number;
+    dueDate?: string;
   }): ObligationDTO;
   createPayable(input: {
     branchId: string;
     supplierId: string;
     sourceDocument: ObligationDTO['sourceDocument'];
     amountVnd: number;
+    dueDate?: string;
   }): ObligationDTO;
   findPayableBySource(input: ObligationDTO['sourceDocument']): ObligationDTO | undefined;
   reducePayable(input: {
@@ -397,6 +412,101 @@ export function createFinanceService(deps: FinanceServiceDependencies): FinanceS
 
       return { ok: true, data: { cashTransaction } };
     },
+    upsertCashDrawer(input) {
+      const cashDrawer: CashDrawerDTO = {
+        cashDrawerId: input.cashDrawerId ?? deps.newId('cash-drawer'),
+        tenantId: deps.tenantId,
+        branchId: input.branchId,
+        drawerCode: input.drawerCode,
+        name: input.name,
+        drawerType: input.drawerType,
+        status: input.status,
+        directSaleEnabled: input.directSaleEnabled ?? true,
+      };
+      deps.repository.saveCashDrawer(cashDrawer);
+      return { ok: true, data: { cashDrawer } };
+    },
+    upsertPaymentMethod(input) {
+      const paymentMethod: PaymentMethodDTO = {
+        paymentMethodId: input.paymentMethodId ?? deps.newId('payment-method'),
+        tenantId: deps.tenantId,
+        methodCode: input.methodCode,
+        name: input.name,
+        methodType: input.methodType,
+        status: input.status,
+        directSaleEnabled: input.directSaleEnabled ?? true,
+      };
+      deps.repository.savePaymentMethod(paymentMethod);
+      return { ok: true, data: { paymentMethod } };
+    },
+    getMasterData(input = {}) {
+      const includeDisabled = input.includeDisabled ?? false;
+      return {
+        cashDrawers: deps.repository
+          .listCashDrawers()
+          .filter((drawer) => input.branchId === undefined || drawer.branchId === input.branchId)
+          .filter((drawer) => includeDisabled || drawer.status === 'Active')
+          .sort((a, b) => a.drawerCode.localeCompare(b.drawerCode)),
+        paymentMethods: deps.repository
+          .listPaymentMethods()
+          .filter((method) => includeDisabled || method.status === 'Active')
+          .sort((a, b) => a.methodCode.localeCompare(b.methodCode)),
+      };
+    },
+    getAgingProjection(input) {
+      const asOfDate = toDateOnly(input.asOfDate);
+      const rows = deps.repository
+        .listObligations()
+        .filter((obligation) => input.branchId === undefined || obligation.branchId === input.branchId)
+        .filter((obligation) => input.obligationType === undefined || obligation.obligationType === input.obligationType)
+        .filter((obligation) => (input.includeSettled ?? false) || obligation.status !== 'Settled')
+        .filter((obligation) => obligation.status !== 'Reversed')
+        .map((obligation): FinanceAgingRowDTO => {
+          const daysOverdue = Math.max(0, diffDays(asOfDate, toDateOnly(obligation.dueDate)));
+          return {
+            obligationId: obligation.obligationId,
+            branchId: obligation.branchId,
+            obligationType: obligation.obligationType,
+            partyId: obligation.partyId,
+            sourceDocument: obligation.sourceDocument,
+            dueDate: obligation.dueDate,
+            daysOverdue,
+            bucket: resolveAgingBucket(daysOverdue),
+            originalAmountVnd: obligation.originalAmountVnd,
+            allocatedAmountVnd: obligation.allocatedAmountVnd,
+            remainingAmountVnd: obligation.remainingAmountVnd,
+            status: obligation.status,
+          };
+        })
+        .sort((a, b) => b.daysOverdue - a.daysOverdue || b.remainingAmountVnd - a.remainingAmountVnd);
+
+      return {
+        generatedAt: deps.now().toISOString(),
+        asOfDate: input.asOfDate,
+        branchId: input.branchId,
+        obligationType: input.obligationType,
+        rows,
+        totals: rows.reduce(
+          (totals, row) => {
+            totals.totalRemainingVnd += row.remainingAmountVnd;
+            if (row.bucket === 'Current') totals.currentVnd += row.remainingAmountVnd;
+            if (row.bucket === '1-30') totals.bucket1To30Vnd += row.remainingAmountVnd;
+            if (row.bucket === '31-60') totals.bucket31To60Vnd += row.remainingAmountVnd;
+            if (row.bucket === '61-90') totals.bucket61To90Vnd += row.remainingAmountVnd;
+            if (row.bucket === '90+') totals.bucket90PlusVnd += row.remainingAmountVnd;
+            return totals;
+          },
+          {
+            totalRemainingVnd: 0,
+            currentVnd: 0,
+            bucket1To30Vnd: 0,
+            bucket31To60Vnd: 0,
+            bucket61To90Vnd: 0,
+            bucket90PlusVnd: 0,
+          },
+        ),
+      };
+    },
     getSummary() {
       const cashTransactions = deps.repository.listCashTransactions();
       const obligations = deps.repository.listObligations();
@@ -444,6 +554,7 @@ export function createFinanceService(deps: FinanceServiceDependencies): FinanceS
         obligationType: 'Receivable',
         partyId: input.customerId,
         sourceDocument: input.sourceDocument,
+        dueDate: input.dueDate ?? toIsoDate(deps.now()),
         originalAmountVnd: input.amountVnd,
         allocatedAmountVnd: 0,
         remainingAmountVnd: input.amountVnd,
@@ -460,6 +571,7 @@ export function createFinanceService(deps: FinanceServiceDependencies): FinanceS
         obligationType: 'Payable',
         partyId: input.supplierId,
         sourceDocument: input.sourceDocument,
+        dueDate: input.dueDate ?? toIsoDate(deps.now()),
         originalAmountVnd: input.amountVnd,
         allocatedAmountVnd: 0,
         remainingAmountVnd: input.amountVnd,
@@ -504,6 +616,26 @@ function applyAllocation(obligation: ObligationDTO, amountVnd: number): Obligati
     remainingAmountVnd,
     status: remainingAmountVnd === 0 ? 'Settled' : 'PartiallyPaid',
   };
+}
+
+function resolveAgingBucket(daysOverdue: number): FinanceAgingRowDTO['bucket'] {
+  if (daysOverdue <= 0) return 'Current';
+  if (daysOverdue <= 30) return '1-30';
+  if (daysOverdue <= 60) return '31-60';
+  if (daysOverdue <= 90) return '61-90';
+  return '90+';
+}
+
+function toIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function toDateOnly(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+}
+
+function diffDays(later: Date, earlier: Date): number {
+  return Math.floor((later.getTime() - earlier.getTime()) / 86_400_000);
 }
 
 function applyPaymentAllocations(

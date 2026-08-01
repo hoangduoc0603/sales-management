@@ -38,6 +38,8 @@ Transfer state: `Draft → PendingApproval → Approved → Shipped → Received
 
 Lot allocation bắt buộc đủ quantity, mặc định FEFO khi bật; lot hết hạn/serial không Saleable bị chặn trừ exception được phê duyệt kèm actor metadata. Serial state/warehouse thay đổi trong cùng command movement; serial return không Saleable cho đến Restock. Inventory query luôn scope Branch/Warehouse và route active/historical partition theo date/reference; không lộ balance ngoài scope.
 
+OpeningBalance chỉ được phép khi Warehouse + Variant chưa có movement history để tránh import đè lên tồn đã vận hành. Sau khi đã có ledger, mọi bổ sung tồn phải đi qua receipt/adjustment document. `InventoryLotBalance` và `SerialState` là projection đọc nhanh cập nhật cùng command receive/issue/return; POS issue kiểm lot/serial bằng projection, không scan ledger.
+
 ## 5. Test matrix
 
 Test: moving average two receipts; decimal quantity/value conservation; last stock concurrent checkout; reservation expiry; FEFO/expired lot; serial uniqueness/state; approved negative stock; partial transfer; stocktake with later movement; quarantine return; ledger-to-balance reconciliation and command retry.

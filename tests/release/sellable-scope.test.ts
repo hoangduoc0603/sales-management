@@ -53,7 +53,7 @@ describe('sellable release scope baseline', () => {
 
     expect(tableRows.length).toBeGreaterThan(0);
     for (const row of tableRows) {
-      expect(row).toMatch(/\| `(?:MustFixBeforeRelease|CanShipDisabled|PostRelease)` \|/);
+      expect(row).toMatch(/\| `(?:MustFixBeforeRelease|CanShipDisabled|PostRelease|BaselineCovered)` \|/);
     }
   });
 });

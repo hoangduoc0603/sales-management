@@ -3199,6 +3199,168 @@ html[data-theme="dark"] .cn-tender-button[aria-selected="true"] {
   color: var(--cn-accent);
 }
 
+.cn-pos-context-drawer {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  justify-content: end;
+  background: color-mix(in oklab, var(--cn-text), transparent 72%);
+}
+
+.cn-pos-context-drawer[hidden] {
+  display: none;
+}
+
+.cn-pos-context-drawer-panel {
+  display: grid;
+  width: min(420px, 100vw);
+  max-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid var(--cn-border);
+  background: var(--cn-surface);
+  box-shadow: var(--cn-shadow-md);
+}
+
+.cn-pos-context-drawer-head {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--cn-border);
+  padding: 14px 16px;
+}
+
+.cn-pos-context-drawer-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cn-pos-context-drawer-head p {
+  margin: 2px 0 0;
+  color: var(--cn-text-muted);
+  font-size: 12px;
+}
+
+.cn-pos-context-drawer-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.cn-pos-context-drawer-body .cn-state-content {
+  min-height: auto;
+  grid-template-columns: 40px minmax(0, 1fr);
+  border: 1px solid var(--cn-border);
+  border-radius: var(--cn-radius-container);
+  background: var(--cn-surface-raised);
+  padding: 14px;
+}
+
+.cn-pos-context-drawer-body .cn-state-content .cn-button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.cn-pos-context-drawer-note,
+.cn-pos-context-reference {
+  border: 1px solid var(--cn-border-subtle);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-surface-subtle);
+  color: var(--cn-text-secondary);
+  padding: 12px;
+  font-size: 12px;
+}
+
+.cn-pos-context-drawer-note strong,
+.cn-pos-context-reference strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--cn-text);
+  font-size: 13px;
+}
+
+.cn-pos-context-reference ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.cn-receipt-snapshot {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px dashed var(--cn-border);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-surface-subtle);
+  padding: 12px;
+}
+
+.cn-receipt-snapshot header,
+.cn-receipt-line,
+.cn-receipt-total {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cn-receipt-snapshot header {
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--cn-border);
+}
+
+.cn-receipt-snapshot header strong,
+.cn-receipt-snapshot header span {
+  display: block;
+}
+
+.cn-receipt-snapshot header span,
+.cn-receipt-line small,
+.cn-receipt-snapshot p {
+  color: var(--cn-text-muted);
+  font-size: 12px;
+}
+
+.cn-receipt-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.cn-receipt-line small {
+  display: block;
+  margin-top: 2px;
+}
+
+.cn-receipt-line strong {
+  white-space: nowrap;
+}
+
+.cn-receipt-total {
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cn-border);
+  color: var(--cn-text);
+  font-weight: 700;
+}
+
+.cn-receipt-snapshot p {
+  margin: 0;
+}
+
+.cn-receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .cn-state-lab {
   margin-top: 16px;
 }
@@ -3473,6 +3635,192 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   font-size: 12px;
 }
 
+.cn-inventory-workbench-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(300px, 0.72fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cn-workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(118px, 1fr));
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.cn-workflow-step {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-surface-inset);
+  color: var(--cn-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cn-workflow-step-done {
+  background: var(--cn-success-subtle);
+  color: var(--cn-success);
+}
+
+.cn-workflow-step-active {
+  background: var(--cn-primary-subtle);
+  color: var(--cn-primary-subtle-foreground);
+}
+
+.cn-workbench-list {
+  display: grid;
+  margin-top: 14px;
+}
+
+.cn-workbench-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--cn-border-subtle);
+}
+
+.cn-workbench-row:last-child {
+  border-bottom: 0;
+}
+
+.cn-workbench-row strong,
+.cn-workbench-row small {
+  display: block;
+}
+
+.cn-workbench-row small {
+  margin-top: 3px;
+  color: var(--cn-text-muted);
+}
+
+.cn-table-scroll {
+  overflow-x: auto;
+  margin-top: 14px;
+  border: 1px solid var(--cn-border-subtle);
+  border-radius: var(--cn-radius-panel);
+}
+
+.cn-workbench-table table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+}
+
+.cn-workbench-table th,
+.cn-workbench-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--cn-border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.cn-workbench-table th {
+  background: var(--cn-surface-inset);
+  color: var(--cn-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cn-workbench-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.cn-workbench-table td strong,
+.cn-workbench-table td small {
+  display: block;
+}
+
+.cn-workbench-table td small {
+  color: var(--cn-text-muted);
+}
+
+.cn-notice {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--cn-radius-control);
+  font-size: 13px;
+}
+
+.cn-notice span {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.cn-notice-warning {
+  background: var(--cn-warning-subtle);
+  color: var(--cn-warning);
+}
+
+.cn-notice-danger {
+  background: var(--cn-danger-subtle);
+  color: var(--cn-danger);
+}
+
+.cn-workbench-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cn-workbench-actions .cn-button {
+  width: 100%;
+}
+
+.cn-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cn-choice-row button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--cn-border);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-surface);
+  color: var(--cn-text);
+  font-weight: 700;
+}
+
+.cn-choice-row button.active {
+  border-color: transparent;
+  background: var(--cn-primary-subtle);
+  color: var(--cn-primary-subtle-foreground);
+}
+
+.cn-workbench-kv {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.cn-workbench-kv > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cn-workbench-kv dt {
+  color: var(--cn-text-secondary);
+}
+
+.cn-workbench-kv dd {
+  margin: 0;
+  color: var(--cn-text);
+  font-weight: 700;
+}
+
 .cn-state-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3622,6 +3970,7 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   .cn-filter-bar,
   .cn-sales-grid,
   .cn-inventory-layout,
+  .cn-inventory-workbench-grid,
   .cn-pos-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -3635,6 +3984,7 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   .cn-filter-bar,
   .cn-sales-grid,
   .cn-inventory-layout,
+  .cn-inventory-workbench-grid,
   .cn-pos-grid,
   .cn-product-grid,
   .cn-pos-session-grid,

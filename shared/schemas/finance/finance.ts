@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import type {
+  FinanceAgingProjectionRequest,
+  FinanceCashDrawerUpsertRequest,
   FinanceExpenseApproveRequest,
+  FinanceMasterDataRequest,
   FinancePaymentRecordRequest,
+  FinancePaymentMethodUpsertRequest,
   FinancePaymentReverseRequest,
   FinanceShiftCloseRequest,
   FinanceShiftLockRequest,
@@ -12,6 +16,7 @@ import type {
 const nonEmptyTrimmed = z.string().trim().min(1);
 const nonNegativeVnd = z.number().int().nonnegative();
 const positiveVnd = z.number().int().positive();
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const financeSourceDocumentSchema = z
   .object({
@@ -140,4 +145,55 @@ export const financeExpenseApproveRequestSchema = commandBaseSchema.extend({
 
 export function parseFinanceExpenseApproveRequest(value: unknown): FinanceExpenseApproveRequest {
   return financeExpenseApproveRequestSchema.parse(value);
+}
+
+export const financeCashDrawerUpsertRequestSchema = commandBaseSchema.extend({
+  cashDrawerId: nonEmptyTrimmed.optional(),
+  branchId: nonEmptyTrimmed,
+  drawerCode: nonEmptyTrimmed,
+  name: nonEmptyTrimmed,
+  drawerType: z.enum(['Cash', 'Bank', 'Wallet']),
+  status: z.enum(['Active', 'Disabled']),
+  directSaleEnabled: z.boolean().optional(),
+});
+
+export function parseFinanceCashDrawerUpsertRequest(value: unknown): FinanceCashDrawerUpsertRequest {
+  return financeCashDrawerUpsertRequestSchema.parse(value);
+}
+
+export const financePaymentMethodUpsertRequestSchema = commandBaseSchema.extend({
+  paymentMethodId: nonEmptyTrimmed.optional(),
+  methodCode: nonEmptyTrimmed,
+  name: nonEmptyTrimmed,
+  methodType: z.enum(['Cash', 'BankTransfer', 'Card', 'QR', 'Credit']),
+  status: z.enum(['Active', 'Disabled']),
+  directSaleEnabled: z.boolean().optional(),
+});
+
+export function parseFinancePaymentMethodUpsertRequest(value: unknown): FinancePaymentMethodUpsertRequest {
+  return financePaymentMethodUpsertRequestSchema.parse(value);
+}
+
+export const financeMasterDataRequestSchema = z
+  .object({
+    branchId: nonEmptyTrimmed.optional(),
+    includeDisabled: z.boolean().optional(),
+  })
+  .strict();
+
+export function parseFinanceMasterDataRequest(value: unknown): FinanceMasterDataRequest {
+  return financeMasterDataRequestSchema.parse(value ?? {});
+}
+
+export const financeAgingProjectionRequestSchema = z
+  .object({
+    asOfDate: isoDate,
+    branchId: nonEmptyTrimmed.optional(),
+    obligationType: z.enum(['Receivable', 'Payable']).optional(),
+    includeSettled: z.boolean().optional(),
+  })
+  .strict();
+
+export function parseFinanceAgingProjectionRequest(value: unknown): FinanceAgingProjectionRequest {
+  return financeAgingProjectionRequestSchema.parse(value);
 }

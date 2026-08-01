@@ -1,5 +1,6 @@
 import type { Clock } from '../api/invoke';
 import type { LockProvider } from '../infrastructure/platform/runtime';
+import type { AttachmentStorage } from '../services/operations/operations-service';
 import type { RuntimeConfigStore } from '../infrastructure/google-workspace/runtime-config-store';
 import type { PlatformCacheStore } from '../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from '../repositories/platform/sheet-record-repository';
@@ -29,6 +30,7 @@ export interface ProductionApiCompositionDependencies {
   idGenerator?: IdGenerator;
   lockProvider: LockProvider;
   passwordService?: PasswordService;
+  attachmentStorage?: AttachmentStorage;
 }
 
 export function createProductionApiComposition(deps: ProductionApiCompositionDependencies) {
@@ -62,6 +64,7 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
     bootstrapOnStart: false,
     seedDemoReadModels: false,
     afterInvoke: deps.sheetGateway.flushPendingAppends,
+    attachmentStorage: deps.attachmentStorage,
   };
 
   return createApiCompositionFromDependencies(compositionDeps);

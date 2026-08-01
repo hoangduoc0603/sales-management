@@ -36,6 +36,8 @@ export interface PosCheckoutShellProps {
   apiClient?: ApiClient;
   sessionToken?: string;
   shellMode?: PosShellMode;
+  initialReceipt?: SalesPosCompleteResponse['receipt'];
+  initialStateId?: (typeof recoveryStates)[number]['id'];
   onNavigateDashboard?(): void;
   onScopeChange?(input: { branchId?: string; warehouseId?: string }): void;
   onThemeToggle?(): void;
@@ -235,17 +237,19 @@ export function PosCheckoutShell({
   sessionToken,
   shellMode = 'standalone',
   theme = 'light',
+  initialReceipt,
+  initialStateId = 'empty',
 }: PosCheckoutShellProps) {
   const [activeProjection, setActiveProjection] = useState(projection);
   const [query, setQuery] = useState('');
   const [cartLines, setCartLines] = useState<PosCartLine[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<(typeof tenderMethods)[number]['id']>('cash');
   const [receivedAmountText, setReceivedAmountText] = useState('');
-  const [activeStateId, setActiveStateId] = useState('empty');
+  const [activeStateId, setActiveStateId] = useState(initialStateId);
   const [selectedCategory, setSelectedCategory] = useState<(typeof categories)[number]>('Tất cả');
   const [message, setMessage] = useState('POS sẵn sàng. Quét, tìm hàng và chỉnh giỏ được xử lý nhanh trên máy này.');
   const [isCompleting, setIsCompleting] = useState(false);
-  const [receipt, setReceipt] = useState<SalesPosCompleteResponse['receipt']>();
+  const [receipt, setReceipt] = useState<SalesPosCompleteResponse['receipt'] | undefined>(initialReceipt);
   const pendingCompleteCommandRef = useRef<{ commandId: string; idempotencyKey: string } | undefined>(undefined);
   const branch = scope.branches.find((candidate) => candidate.branchId === selectedBranchId);
   const warehouse = scope.warehouses.find((candidate) => candidate.warehouseId === selectedWarehouseId);
@@ -505,12 +509,14 @@ export function PosCheckoutShell({
       ) : null}
 
       <MainTag className="cn-pos-main">
-        <section className="cn-pos-page-heading">
-          <div>
-            <p className="cn-pos-crumb">Sales / POS tại quầy</p>
-            <h1>POS tại quầy</h1>
-          </div>
-        </section>
+        {isStandaloneShell ? (
+          <section className="cn-pos-page-heading">
+            <div>
+              <p className="cn-pos-crumb">Sales / POS tại quầy</p>
+              <h1>POS tại quầy</h1>
+            </div>
+          </section>
+        ) : null}
 
         <div className="cn-pos-layout-grid">
           <section className="cn-pos-workspace">
@@ -800,42 +806,153 @@ export function PosCheckoutShell({
           </aside>
         </div>
 
-        <section className="cn-pos-panel cn-state-lab">
-          <header className="cn-pos-panel-head">
-            <div>
-              <h2>Tình huống POS & phục hồi</h2>
-              <p>{message}</p>
+        {isStandaloneShell ? (
+          <section className="cn-pos-panel cn-state-lab">
+            <header className="cn-pos-panel-head">
+              <div>
+                <h2>Tình huống POS & phục hồi</h2>
+                <p>{message}</p>
+              </div>
+              <span className="cn-pos-chip info">10 trạng thái</span>
+            </header>
+            <div className="cn-state-tabs" role="tablist" aria-label="Trạng thái POS">
+              {recoveryStates.map((state) => (
+                <button
+                  aria-selected={state.id === activeStateId}
+                  className="cn-state-tab"
+                  key={state.id}
+                  onClick={() => setActiveStateId(state.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {state.label}
+                </button>
+              ))}
             </div>
-            <span className="cn-pos-chip info">10 trạng thái</span>
-          </header>
-          <div className="cn-state-tabs" role="tablist" aria-label="Trạng thái POS">
-            {recoveryStates.map((state) => (
-              <button
-                aria-selected={state.id === activeStateId}
-                className="cn-state-tab"
-                key={state.id}
-                onClick={() => setActiveStateId(state.id)}
-                role="tab"
-                type="button"
-              >
-                {state.label}
-              </button>
-            ))}
-          </div>
-          <div className={`cn-state-content cn-state-${activeState.tone}`} role="tabpanel">
-            <span className="cn-state-symbol">
-              <AppIcon name={activeState.icon} />
-            </span>
-            <div className="cn-state-copy">
-              <h3>{activeState.title}</h3>
-              <p>{activeState.id === 'success' && receipt ? `${activeState.description} ${receipt.businessNumber} · ${formatVnd(receipt.totals.totalVnd)}.` : activeState.description}</p>
-              {activeState.detail ? <div className="cn-state-detail">{activeState.detail}</div> : null}
-            </div>
-            <Button variant={activeState.id === 'conflict' ? 'primary' : 'secondary'}>{activeState.action}</Button>
-          </div>
-        </section>
+            <RecoveryStateContent activeState={activeState} receipt={receipt} />
+          </section>
+        ) : (
+          <PosContextDrawer
+            activeState={activeState}
+            message={message}
+            onClose={() => setActiveStateId('empty')}
+            receipt={receipt}
+          />
+        )}
       </MainTag>
     </div>
+  );
+}
+
+function RecoveryStateContent({
+  activeState,
+  receipt,
+}: {
+  activeState: (typeof recoveryStates)[number];
+  receipt?: SalesPosCompleteResponse['receipt'];
+}) {
+  return (
+    <div className={`cn-state-content cn-state-${activeState.tone}`} role="tabpanel">
+      <span className="cn-state-symbol">
+        <AppIcon name={activeState.icon} />
+      </span>
+      <div className="cn-state-copy">
+        <h3>{activeState.title}</h3>
+        <p>
+          {activeState.id === 'success' && receipt
+            ? `${activeState.description} ${receipt.businessNumber} · ${formatVnd(receipt.totals.totalVnd)}.`
+            : activeState.description}
+        </p>
+        {activeState.detail ? <div className="cn-state-detail">{activeState.detail}</div> : null}
+        {activeState.id === 'success' && receipt ? <ReceiptSnapshot receipt={receipt} /> : null}
+      </div>
+      {activeState.id === 'success' && receipt ? (
+        <div className="cn-receipt-actions">
+          <Button variant="primary">
+            <AppIcon name="print" />
+            In biên lai
+          </Button>
+          <Button variant="secondary">In lại</Button>
+          <span className="cn-pos-chip info">Mẫu {receipt.receiptFormat}</span>
+        </div>
+      ) : (
+        <Button variant={activeState.id === 'conflict' ? 'primary' : 'secondary'}>{activeState.action}</Button>
+      )}
+    </div>
+  );
+}
+
+function ReceiptSnapshot({ receipt }: { receipt: SalesPosCompleteResponse['receipt'] }) {
+  return (
+    <section aria-label="Receipt snapshot" className="cn-receipt-snapshot">
+      <header>
+        <strong>{receipt.businessNumber}</strong>
+        <span>{receipt.receiptFormat} · {formatShortDateTime(receipt.createdAt)}</span>
+      </header>
+      <div className="cn-receipt-lines">
+        {receipt.lines.map((line) => (
+          <div className="cn-receipt-line" key={line.saleOrderLineId}>
+            <span>
+              {line.displayName}
+              <small className="num">{line.sku ?? line.variantId} · {formatQuantity(line.quantityMilli)} {line.unitName}</small>
+            </span>
+            <strong className="num">{formatVnd(line.lineTotalVnd)}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="cn-receipt-total">
+        <span>Thanh toán</span>
+        <strong className="num">{formatVnd(receipt.totals.totalVnd)}</strong>
+      </div>
+      <p>Receipt snapshot là dữ liệu in chính thức; in hoặc in lại không tạo ledger mới.</p>
+    </section>
+  );
+}
+
+function PosContextDrawer({
+  activeState,
+  message,
+  onClose,
+  receipt,
+}: {
+  activeState: (typeof recoveryStates)[number];
+  message: string;
+  onClose(): void;
+  receipt?: SalesPosCompleteResponse['receipt'];
+}) {
+  const isOpen = activeState.id !== 'empty';
+  return (
+    <aside
+      aria-labelledby="pos-context-drawer-title"
+      aria-modal="true"
+      className="cn-pos-context-drawer"
+      hidden={!isOpen}
+      role="dialog"
+    >
+      <div className="cn-pos-context-drawer-panel">
+        <header className="cn-pos-context-drawer-head">
+          <div>
+            <p>POS tại quầy</p>
+            <h2 id="pos-context-drawer-title">Chi tiết xử lý</h2>
+          </div>
+          <IconButton label="Đóng panel xử lý" onClick={onClose}>
+            <AppIcon name="close" />
+          </IconButton>
+        </header>
+        <div className="cn-pos-context-drawer-body">
+          <RecoveryStateContent activeState={activeState} receipt={receipt} />
+          <div className="cn-pos-context-drawer-note">{message}</div>
+          <section className="cn-pos-context-reference" aria-label="Các trạng thái phục hồi POS">
+            <h3>Dữ liệu bán đã thay đổi</h3>
+            <p>PRICE_CHANGED, PROMOTION_CHANGED hoặc INSUFFICIENT_STOCK giữ nguyên giỏ và yêu cầu áp dụng quote mới.</p>
+            <h3>Đang kiểm tra kết quả hoàn tất</h3>
+            <p>Timeout phải tra cứu cùng commandId/idempotency key trước khi thử lại để không tạo chứng từ trùng.</p>
+            <h3>Receipt snapshot</h3>
+            <p>Biên lai K80/A4 được render từ snapshot đã trả về; in hoặc in lại không tạo ledger mới.</p>
+          </section>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -978,4 +1095,18 @@ function parseVnd(value: string): number | undefined {
 
 function formatVnd(value: number): string {
   return `${value.toLocaleString('vi-VN')} đ`;
+}
+
+function formatQuantity(quantityMilli: number): string {
+  const quantity = quantityMilli / 1000;
+  return Number.isInteger(quantity) ? String(quantity) : quantity.toLocaleString('vi-VN');
+}
+
+function formatShortDateTime(value: string): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
+  }).format(new Date(value));
 }

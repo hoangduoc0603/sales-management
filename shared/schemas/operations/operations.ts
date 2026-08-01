@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type {
   AttachmentAccessRequest,
   AttachmentCompleteRequest,
+  AttachmentDeleteRequest,
+  AttachmentListRequest,
+  AttachmentUploadRequest,
   BackupRequest,
   HealthCheckRequest,
   ImportCommitRequest,
@@ -96,6 +99,22 @@ export function parseAttachmentCompleteRequest(value: unknown): AttachmentComple
   return attachmentCompleteRequestSchema.parse(value);
 }
 
+export const attachmentUploadRequestSchema = commandBaseSchema.extend({
+  objectType: nonEmptyTrimmed,
+  objectId: nonEmptyTrimmed,
+  branchId: nonEmptyTrimmed.optional(),
+  warehouseId: nonEmptyTrimmed.optional(),
+  fileName: nonEmptyTrimmed,
+  mimeType: nonEmptyTrimmed,
+  sizeBytes: z.number().int().nonnegative(),
+  checksum: nonEmptyTrimmed,
+  contentBase64: nonEmptyTrimmed,
+});
+
+export function parseAttachmentUploadRequest(value: unknown): AttachmentUploadRequest {
+  return attachmentUploadRequestSchema.parse(value);
+}
+
 export const attachmentAccessRequestSchema = z
   .object({
     attachmentId: nonEmptyTrimmed,
@@ -106,6 +125,29 @@ export const attachmentAccessRequestSchema = z
 
 export function parseAttachmentAccessRequest(value: unknown): AttachmentAccessRequest {
   return attachmentAccessRequestSchema.parse(value);
+}
+
+export const attachmentListRequestSchema = z
+  .object({
+    objectType: nonEmptyTrimmed,
+    objectId: nonEmptyTrimmed,
+    branchId: nonEmptyTrimmed.optional(),
+    warehouseId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export function parseAttachmentListRequest(value: unknown): AttachmentListRequest {
+  return attachmentListRequestSchema.parse(value);
+}
+
+export const attachmentDeleteRequestSchema = commandBaseSchema.extend({
+  attachmentId: nonEmptyTrimmed,
+  objectType: nonEmptyTrimmed,
+  objectId: nonEmptyTrimmed,
+});
+
+export function parseAttachmentDeleteRequest(value: unknown): AttachmentDeleteRequest {
+  return attachmentDeleteRequestSchema.parse(value);
 }
 
 export const backupRequestSchema = commandBaseSchema.extend({

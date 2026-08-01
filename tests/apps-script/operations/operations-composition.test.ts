@@ -66,6 +66,63 @@ describe('operations API composition', () => {
     expect(attachment).toMatchObject({ ok: true, data: { attachment: { status: 'Available' } } });
     if (!attachment.ok) throw new Error('attachment failed');
 
+    const uploadedAttachment = api.invoke({
+      operation: 'operations.attachment.upload',
+      requestId: 'req-attachment-upload',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        objectType: 'Expense',
+        objectId: 'expense-api-2',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        fileName: 'receipt-upload.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 512,
+        checksum: 'attachment-upload-checksum-api',
+        contentBase64: 'cmVjZWlwdA==',
+        commandId: 'cmd-attachment-upload-api',
+        idempotencyKey: 'idem-attachment-upload-api',
+      },
+    });
+    expect(uploadedAttachment).toMatchObject({
+      ok: true,
+      data: { attachment: { status: 'Available', driveFileId: expect.stringContaining('drive-file') } },
+    });
+    if (!uploadedAttachment.ok) throw new Error('attachment upload failed');
+
+    expect(
+      api.invoke({
+        operation: 'operations.attachment.list',
+        requestId: 'req-attachment-list',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          objectType: 'Expense',
+          objectId: 'expense-api-2',
+        },
+      }),
+    ).toMatchObject({
+      ok: true,
+      data: { attachments: [{ attachmentId: uploadedAttachment.data.attachment.attachmentId, status: 'Available' }] },
+    });
+
+    expect(
+      api.invoke({
+        operation: 'operations.attachment.delete',
+        requestId: 'req-attachment-delete',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          attachmentId: uploadedAttachment.data.attachment.attachmentId,
+          objectType: 'Expense',
+          objectId: 'expense-api-2',
+          commandId: 'cmd-attachment-delete-api',
+          idempotencyKey: 'idem-attachment-delete-api',
+        },
+      }),
+    ).toMatchObject({
+      ok: true,
+      data: { attachment: { attachmentId: uploadedAttachment.data.attachment.attachmentId, status: 'Deleted' } },
+    });
+
     expect(
       api.invoke({
         operation: 'operations.attachment.download',

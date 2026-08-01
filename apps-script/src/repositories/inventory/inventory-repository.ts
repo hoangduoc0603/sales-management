@@ -1,6 +1,12 @@
 import type {
   InventoryBalanceDTO,
+  InventoryLotBalanceDTO,
   InventoryMovementDTO,
+  SerialStateDTO,
+  StocktakeLineDTO,
+  StocktakeSessionDTO,
+  StockTransferDTO,
+  StockTransferLineDTO,
 } from '@shared/contracts/inventory/inventory';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
 import {
@@ -15,11 +21,30 @@ export interface InventoryRepository {
   getBalance(warehouseId: string, variantId: string): InventoryBalanceDTO | undefined;
   listBalances(warehouseId?: string): InventoryBalanceDTO[];
   applyProjection(balance: InventoryBalanceDTO): void;
+  getLotBalance(warehouseId: string, variantId: string, lotId: string): InventoryLotBalanceDTO | undefined;
+  listLotBalances(warehouseId: string, variantId?: string): InventoryLotBalanceDTO[];
+  applyLotProjection(lotBalance: InventoryLotBalanceDTO): void;
+  getSerialState(serialId: string): SerialStateDTO | undefined;
+  saveSerialState(serialState: SerialStateDTO): void;
+  saveStockTransfer(transfer: StockTransferDTO): void;
+  getStockTransfer(transferId: string): StockTransferDTO | undefined;
+  saveStockTransferLines(lines: readonly StockTransferLineDTO[]): void;
+  listStockTransferLines(transferId: string): StockTransferLineDTO[];
+  saveStocktakeSession(session: StocktakeSessionDTO): void;
+  getStocktakeSession(stocktakeSessionId: string): StocktakeSessionDTO | undefined;
+  saveStocktakeLines(lines: readonly StocktakeLineDTO[]): void;
+  listStocktakeLines(stocktakeSessionId: string): StocktakeLineDTO[];
 }
 
 export function createInMemoryInventoryRepository(): InventoryRepository {
   const movements = new Map<string, InventoryMovementDTO>();
   const balances = new Map<string, InventoryBalanceDTO>();
+  const lotBalances = new Map<string, InventoryLotBalanceDTO>();
+  const serialStates = new Map<string, SerialStateDTO>();
+  const transfers = new Map<string, StockTransferDTO>();
+  const transferLines = new Map<string, StockTransferLineDTO>();
+  const stocktakeSessions = new Map<string, StocktakeSessionDTO>();
+  const stocktakeLines = new Map<string, StocktakeLineDTO>();
 
   return {
     appendMovement(movement) {
@@ -47,6 +72,60 @@ export function createInMemoryInventoryRepository(): InventoryRepository {
     applyProjection(balance) {
       balances.set(balanceKey(balance.warehouseId, balance.variantId), clone(balance));
     },
+    getLotBalance(warehouseId, variantId, lotId) {
+      const lotBalance = lotBalances.get(lotBalanceKey(warehouseId, variantId, lotId));
+      return lotBalance === undefined ? undefined : clone(lotBalance);
+    },
+    listLotBalances(warehouseId, variantId) {
+      return [...lotBalances.values()]
+        .filter((lotBalance) => lotBalance.warehouseId === warehouseId)
+        .filter((lotBalance) => variantId === undefined || lotBalance.variantId === variantId)
+        .map(clone);
+    },
+    applyLotProjection(lotBalance) {
+      lotBalances.set(lotBalanceKey(lotBalance.warehouseId, lotBalance.variantId, lotBalance.lotId), clone(lotBalance));
+    },
+    getSerialState(serialId) {
+      const serialState = serialStates.get(serialId);
+      return serialState === undefined ? undefined : clone(serialState);
+    },
+    saveSerialState(serialState) {
+      serialStates.set(serialState.serialId, clone(serialState));
+    },
+    saveStockTransfer(transfer) {
+      transfers.set(transfer.transferId, clone(transfer));
+    },
+    getStockTransfer(transferId) {
+      const transfer = transfers.get(transferId);
+      return transfer === undefined ? undefined : clone(transfer);
+    },
+    saveStockTransferLines(lines) {
+      for (const line of lines) {
+        transferLines.set(line.transferLineId, clone(line));
+      }
+    },
+    listStockTransferLines(transferId) {
+      return [...transferLines.values()]
+        .filter((line) => line.transferId === transferId)
+        .map(clone);
+    },
+    saveStocktakeSession(session) {
+      stocktakeSessions.set(session.stocktakeSessionId, clone(session));
+    },
+    getStocktakeSession(stocktakeSessionId) {
+      const session = stocktakeSessions.get(stocktakeSessionId);
+      return session === undefined ? undefined : clone(session);
+    },
+    saveStocktakeLines(lines) {
+      for (const line of lines) {
+        stocktakeLines.set(line.stocktakeLineId, clone(line));
+      }
+    },
+    listStocktakeLines(stocktakeSessionId) {
+      return [...stocktakeLines.values()]
+        .filter((line) => line.stocktakeSessionId === stocktakeSessionId)
+        .map(clone);
+    },
   };
 }
 
@@ -54,8 +133,12 @@ export function balanceKey(warehouseId: string, variantId: string): string {
   return `${warehouseId}::${variantId}`;
 }
 
+export function lotBalanceKey(warehouseId: string, variantId: string, lotId: string): string {
+  return `${warehouseId}::${variantId}::${lotId}`;
+}
+
 function clone<T>(value: T): T {
-  return { ...value };
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export interface SheetInventoryRepositoryDependencies {
@@ -72,7 +155,14 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
     partitionKey: deps.transactionPartitionKey,
   });
   const balanceTable = findTable(deps.tableDefinitions, 'InventoryBalance');
+  const lotBalanceTable = findTable(deps.tableDefinitions, 'InventoryLotBalance');
+  const serialStateTable = findTable(deps.tableDefinitions, 'SerialState');
+  const transferTable = findTable(deps.tableDefinitions, 'StockTransfer');
+  const transferLineTable = findTable(deps.tableDefinitions, 'StockTransferLine');
+  const stocktakeSessionTable = findTable(deps.tableDefinitions, 'StocktakeSession');
+  const stocktakeLineTable = findTable(deps.tableDefinitions, 'StocktakeLine');
   const latestBalanceVersionCache = new Map<string, number>();
+  const latestDocumentVersionCache = new Map<string, number>();
 
   function rememberLatestBalanceVersion(row: InventoryBalanceSheetRow): void {
     const version = getRecordVersion(row);
@@ -110,6 +200,100 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
       rememberLatestBalanceVersion(row);
       return fromBalanceRow(row);
     });
+  }
+
+  function findRowsByColumn(table: TableDefinitionDTO, columnName: string, value: string): Record<string, unknown>[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table,
+        partitionKey: deps.transactionPartitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table, partitionKey: deps.transactionPartitionKey });
+    return rows.filter((row) => String(row[columnName] ?? '') === value).map(deepClone);
+  }
+
+  function appendVersionedRow(
+    table: TableDefinitionDTO,
+    logicalId: string,
+    row: Record<string, unknown>,
+  ): void {
+    const cacheKey = `${table.tableName}:${logicalId}`;
+    const cachedLatestVersion = latestDocumentVersionCache.get(cacheKey);
+    const nextVersion =
+      cachedLatestVersion !== undefined
+        ? cachedLatestVersion + 1
+        : findRowsByColumn(table, table.primaryKey === 'id' ? inferLogicalIdColumn(table.tableName) : table.primaryKey, logicalId).reduce(
+            (max, candidate) => Math.max(max, getRecordVersion(candidate)),
+            0,
+          ) + 1;
+    deps.gateway.appendRows({
+      table,
+      partitionKey: deps.transactionPartitionKey,
+      rows: [
+        {
+          ...deepClone(row),
+          id: `${logicalId}:v${nextVersion}`,
+          schemaVersion: table.schemaVersion,
+          recordVersion: nextVersion,
+          partitionKey: deps.transactionPartitionKey,
+        },
+      ],
+    });
+    latestDocumentVersionCache.set(cacheKey, nextVersion);
+  }
+
+  function latestRowByLogicalId<T extends Record<string, unknown>>(
+    table: TableDefinitionDTO,
+    columnName: string,
+    value: string,
+  ): T | undefined {
+    const latest = findRowsByColumn(table, columnName, value).reduce<Record<string, unknown> | undefined>(
+      (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
+      undefined,
+    );
+    if (latest !== undefined) latestDocumentVersionCache.set(`${table.tableName}:${value}`, getRecordVersion(latest));
+    return latest === undefined ? undefined : (deepClone(latest) as T);
+  }
+
+  function latestRowsByLogicalId<T extends Record<string, unknown>>(
+    table: TableDefinitionDTO,
+    parentColumnName: string,
+    parentId: string,
+    logicalColumnName: string,
+  ): T[] {
+    const latestById = new Map<string, Record<string, unknown>>();
+    for (const row of findRowsByColumn(table, parentColumnName, parentId)) {
+      const logicalId = String(row[logicalColumnName] ?? '');
+      if (logicalId === '') continue;
+      const current = latestById.get(logicalId);
+      if (current === undefined || getRecordVersion(row) > getRecordVersion(current)) {
+        latestById.set(logicalId, row);
+      }
+    }
+    return [...latestById.values()].map((row) => {
+      latestDocumentVersionCache.set(`${table.tableName}:${String(row[logicalColumnName])}`, getRecordVersion(row));
+      return deepClone(row) as T;
+    });
+  }
+
+  function latestRowsByWarehouseAndVariant<T extends Record<string, unknown>>(
+    table: TableDefinitionDTO,
+    warehouseId: string,
+    variantId: string | undefined,
+    logicalColumnName: string,
+  ): T[] {
+    const latestById = new Map<string, Record<string, unknown>>();
+    for (const row of findRowsByColumn(table, 'warehouseId', warehouseId)) {
+      if (variantId !== undefined && String(row.variantId ?? '') !== variantId) continue;
+      const logicalId = String(row[logicalColumnName] ?? '');
+      if (logicalId === '') continue;
+      const current = latestById.get(logicalId);
+      if (current === undefined || getRecordVersion(row) > getRecordVersion(current)) {
+        latestById.set(logicalId, row);
+      }
+    }
+    return [...latestById.values()].map((row) => deepClone(row) as T);
   }
 
   return {
@@ -163,6 +347,90 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
       });
       latestBalanceVersionCache.set(balance.balanceId, nextVersion);
     },
+    getLotBalance(warehouseId, variantId, lotId) {
+      const row = latestRowByLogicalId<InventoryLotBalanceSheetRow>(
+        lotBalanceTable,
+        'lotBalanceId',
+        `lot-balance-${warehouseId}-${variantId}-${lotId}`,
+      );
+      return row === undefined ? undefined : fromLotBalanceRow(row);
+    },
+    listLotBalances(warehouseId, variantId) {
+      return latestRowsByWarehouseAndVariant<InventoryLotBalanceSheetRow>(
+        lotBalanceTable,
+        warehouseId,
+        variantId,
+        'lotBalanceId',
+      ).map(fromLotBalanceRow);
+    },
+    applyLotProjection(lotBalance) {
+      appendVersionedRow(lotBalanceTable, lotBalance.lotBalanceId, toLotBalanceRow(lotBalance));
+    },
+    getSerialState(serialId) {
+      const row = latestRowByLogicalId<SerialStateSheetRow>(serialStateTable, 'serialId', serialId);
+      return row === undefined ? undefined : fromSerialStateRow(row);
+    },
+    saveSerialState(serialState) {
+      appendVersionedRow(serialStateTable, serialState.serialId, toSerialStateRow(serialState));
+    },
+    saveStockTransfer(transfer) {
+      appendVersionedRow(transferTable, transfer.transferId, toStockTransferRow(transfer));
+    },
+    getStockTransfer(transferId) {
+      const row = latestRowByLogicalId<StockTransferSheetRow>(transferTable, 'transferId', transferId);
+      return row === undefined ? undefined : fromStockTransferRow(row);
+    },
+    saveStockTransferLines(lines) {
+      for (const line of lines) {
+        const transfer = latestRowByLogicalId<StockTransferSheetRow>(transferTable, 'transferId', line.transferId);
+        appendVersionedRow(
+          transferLineTable,
+          line.transferLineId,
+          toStockTransferLineRow(transfer?.tenantId ?? '', line),
+        );
+      }
+    },
+    listStockTransferLines(transferId) {
+      return latestRowsByLogicalId<StockTransferLineSheetRow>(
+        transferLineTable,
+        'transferId',
+        transferId,
+        'transferLineId',
+      ).map(fromStockTransferLineRow);
+    },
+    saveStocktakeSession(session) {
+      appendVersionedRow(stocktakeSessionTable, session.stocktakeSessionId, toStocktakeSessionRow(session));
+    },
+    getStocktakeSession(stocktakeSessionId) {
+      const row = latestRowByLogicalId<StocktakeSessionSheetRow>(
+        stocktakeSessionTable,
+        'stocktakeSessionId',
+        stocktakeSessionId,
+      );
+      return row === undefined ? undefined : fromStocktakeSessionRow(row);
+    },
+    saveStocktakeLines(lines) {
+      for (const line of lines) {
+        const session = latestRowByLogicalId<StocktakeSessionSheetRow>(
+          stocktakeSessionTable,
+          'stocktakeSessionId',
+          line.stocktakeSessionId,
+        );
+        appendVersionedRow(
+          stocktakeLineTable,
+          line.stocktakeLineId,
+          toStocktakeLineRow(session?.tenantId ?? '', line),
+        );
+      }
+    },
+    listStocktakeLines(stocktakeSessionId) {
+      return latestRowsByLogicalId<StocktakeLineSheetRow>(
+        stocktakeLineTable,
+        'stocktakeSessionId',
+        stocktakeSessionId,
+        'stocktakeLineId',
+      ).map(fromStocktakeLineRow);
+    },
   };
 }
 
@@ -206,6 +474,118 @@ interface InventoryBalanceSheetRow extends Record<string, unknown> {
   quarantineMilli: number;
   inventoryValueVnd: number;
   asOfMovementId?: string;
+}
+
+interface InventoryLotBalanceSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  lotBalanceId: string;
+  warehouseId: string;
+  variantId: string;
+  lotId: string;
+  lotCode: string;
+  expiryDate?: string;
+  onHandMilli: number;
+  availableMilli: number;
+  quarantineMilli: number;
+  asOfMovementId?: string;
+  metadataJson?: string;
+}
+
+interface SerialStateSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  serialId: string;
+  variantId: string;
+  warehouseId: string;
+  status: SerialStateDTO['status'];
+  sourceMovementId?: string;
+  sourceSaleLineId?: string;
+  updatedAt: string;
+  historyJson?: string;
+}
+
+interface StockTransferSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  transferId: string;
+  sourceWarehouseId: string;
+  destinationWarehouseId: string;
+  status: StockTransferDTO['status'];
+  reasonCode?: string;
+  reasonNote?: string;
+  createdBy: string;
+  createdAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  shippedBy?: string;
+  shippedAt?: string;
+  receivedBy?: string;
+  receivedAt?: string;
+}
+
+interface StockTransferLineSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  transferLineId: string;
+  transferId: string;
+  variantId: string;
+  quantityMilli: number;
+  receivedQuantityMilli: number;
+  unitVersionId?: string;
+  unitCostVnd?: number;
+  varianceReasonCode?: string;
+  varianceNote?: string;
+}
+
+interface StocktakeSessionSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  stocktakeSessionId: string;
+  warehouseId: string;
+  status: StocktakeSessionDTO['status'];
+  snapshotAt: string;
+  scopeJson?: string;
+  createdBy: string;
+  createdAt: string;
+  submittedBy?: string;
+  submittedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+interface StocktakeLineSheetRow extends Record<string, unknown> {
+  id: string;
+  tenantId: string;
+  schemaVersion: number;
+  recordVersion: number;
+  partitionKey?: string;
+  stocktakeLineId: string;
+  stocktakeSessionId: string;
+  variantId: string;
+  lotId?: string;
+  serialId?: string;
+  snapshotQuantityMilli: number;
+  countedQuantityMilli?: number;
+  varianceMilli?: number;
+  movementsAfterSnapshotCount: number;
+  reasonCode?: string;
+  reasonNote?: string;
 }
 
 function toMovementRow(movement: InventoryMovementDTO): InventoryMovementSheetRow {
@@ -278,6 +658,224 @@ function fromBalanceRow(row: InventoryBalanceSheetRow): InventoryBalanceDTO {
   };
 }
 
+function toLotBalanceRow(lotBalance: InventoryLotBalanceDTO): InventoryLotBalanceSheetRow {
+  return {
+    id: lotBalance.lotBalanceId,
+    tenantId: lotBalance.tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    lotBalanceId: lotBalance.lotBalanceId,
+    warehouseId: lotBalance.warehouseId,
+    variantId: lotBalance.variantId,
+    lotId: lotBalance.lotId,
+    lotCode: lotBalance.lotCode,
+    expiryDate: lotBalance.expiryDate,
+    onHandMilli: lotBalance.onHandMilli,
+    availableMilli: lotBalance.availableMilli,
+    quarantineMilli: lotBalance.quarantineMilli,
+    asOfMovementId: lotBalance.asOfMovementId,
+  };
+}
+
+function fromLotBalanceRow(row: InventoryLotBalanceSheetRow): InventoryLotBalanceDTO {
+  return {
+    lotBalanceId: row.lotBalanceId,
+    tenantId: row.tenantId,
+    warehouseId: row.warehouseId,
+    variantId: row.variantId,
+    lotId: row.lotId,
+    lotCode: row.lotCode,
+    expiryDate: row.expiryDate,
+    onHandMilli: row.onHandMilli,
+    availableMilli: row.availableMilli,
+    quarantineMilli: row.quarantineMilli,
+    asOfMovementId: row.asOfMovementId,
+  };
+}
+
+function toSerialStateRow(serialState: SerialStateDTO): SerialStateSheetRow {
+  return {
+    id: serialState.serialId,
+    tenantId: serialState.tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    serialId: serialState.serialId,
+    variantId: serialState.variantId,
+    warehouseId: serialState.warehouseId,
+    status: serialState.status,
+    sourceMovementId: serialState.sourceMovementId,
+    sourceSaleLineId: serialState.sourceSaleLineId,
+    updatedAt: serialState.updatedAt,
+  };
+}
+
+function fromSerialStateRow(row: SerialStateSheetRow): SerialStateDTO {
+  return {
+    serialId: row.serialId,
+    tenantId: row.tenantId,
+    variantId: row.variantId,
+    warehouseId: row.warehouseId,
+    status: row.status,
+    sourceMovementId: row.sourceMovementId,
+    sourceSaleLineId: row.sourceSaleLineId,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toStockTransferRow(transfer: StockTransferDTO): StockTransferSheetRow {
+  return {
+    id: transfer.transferId,
+    tenantId: transfer.tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    transferId: transfer.transferId,
+    sourceWarehouseId: transfer.sourceWarehouseId,
+    destinationWarehouseId: transfer.destinationWarehouseId,
+    status: transfer.status,
+    reasonCode: transfer.reasonCode,
+    reasonNote: transfer.reasonNote,
+    createdBy: transfer.createdBy,
+    createdAt: transfer.createdAt,
+    approvedBy: transfer.approvedBy,
+    approvedAt: transfer.approvedAt,
+    shippedBy: transfer.shippedBy,
+    shippedAt: transfer.shippedAt,
+    receivedBy: transfer.receivedBy,
+    receivedAt: transfer.receivedAt,
+  };
+}
+
+function fromStockTransferRow(row: StockTransferSheetRow): StockTransferDTO {
+  return {
+    transferId: row.transferId,
+    tenantId: row.tenantId,
+    sourceWarehouseId: row.sourceWarehouseId,
+    destinationWarehouseId: row.destinationWarehouseId,
+    status: row.status,
+    reasonCode: row.reasonCode,
+    reasonNote: row.reasonNote,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    approvedBy: row.approvedBy,
+    approvedAt: row.approvedAt,
+    shippedBy: row.shippedBy,
+    shippedAt: row.shippedAt,
+    receivedBy: row.receivedBy,
+    receivedAt: row.receivedAt,
+  };
+}
+
+function toStockTransferLineRow(tenantId: string, line: StockTransferLineDTO): StockTransferLineSheetRow {
+  return {
+    id: line.transferLineId,
+    tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    transferLineId: line.transferLineId,
+    transferId: line.transferId,
+    variantId: line.variantId,
+    quantityMilli: line.quantityMilli,
+    receivedQuantityMilli: line.receivedQuantityMilli,
+    unitVersionId: line.unitVersionId,
+    unitCostVnd: line.unitCostVnd,
+    varianceReasonCode: line.varianceReasonCode,
+    varianceNote: line.varianceNote,
+  };
+}
+
+function fromStockTransferLineRow(row: StockTransferLineSheetRow): StockTransferLineDTO {
+  return {
+    transferLineId: row.transferLineId,
+    transferId: row.transferId,
+    variantId: row.variantId,
+    quantityMilli: row.quantityMilli,
+    receivedQuantityMilli: row.receivedQuantityMilli,
+    unitVersionId: row.unitVersionId,
+    unitCostVnd: row.unitCostVnd,
+    varianceReasonCode: row.varianceReasonCode,
+    varianceNote: row.varianceNote,
+  };
+}
+
+function toStocktakeSessionRow(session: StocktakeSessionDTO): StocktakeSessionSheetRow {
+  return {
+    id: session.stocktakeSessionId,
+    tenantId: session.tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    stocktakeSessionId: session.stocktakeSessionId,
+    warehouseId: session.warehouseId,
+    status: session.status,
+    snapshotAt: session.snapshotAt,
+    scopeJson: session.scopeVariantIds === undefined ? undefined : JSON.stringify({ variantIds: session.scopeVariantIds }),
+    createdBy: session.createdBy,
+    createdAt: session.createdAt,
+    submittedBy: session.submittedBy,
+    submittedAt: session.submittedAt,
+    approvedBy: session.approvedBy,
+    approvedAt: session.approvedAt,
+  };
+}
+
+function fromStocktakeSessionRow(row: StocktakeSessionSheetRow): StocktakeSessionDTO {
+  return {
+    stocktakeSessionId: row.stocktakeSessionId,
+    tenantId: row.tenantId,
+    warehouseId: row.warehouseId,
+    status: row.status,
+    snapshotAt: row.snapshotAt,
+    scopeVariantIds: parseScopeVariantIds(row.scopeJson),
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    submittedBy: row.submittedBy,
+    submittedAt: row.submittedAt,
+    approvedBy: row.approvedBy,
+    approvedAt: row.approvedAt,
+  };
+}
+
+function toStocktakeLineRow(tenantId: string, line: StocktakeLineDTO): StocktakeLineSheetRow {
+  return {
+    id: line.stocktakeLineId,
+    tenantId,
+    schemaVersion: 1,
+    recordVersion: 1,
+    stocktakeLineId: line.stocktakeLineId,
+    stocktakeSessionId: line.stocktakeSessionId,
+    variantId: line.variantId,
+    lotId: line.lotId,
+    serialId: line.serialId,
+    snapshotQuantityMilli: line.snapshotQuantityMilli,
+    countedQuantityMilli: line.countedQuantityMilli,
+    varianceMilli: line.varianceMilli,
+    movementsAfterSnapshotCount: line.movementsAfterSnapshotCount,
+    reasonCode: line.reasonCode,
+    reasonNote: line.reasonNote,
+  };
+}
+
+function fromStocktakeLineRow(row: StocktakeLineSheetRow): StocktakeLineDTO {
+  return {
+    stocktakeLineId: row.stocktakeLineId,
+    stocktakeSessionId: row.stocktakeSessionId,
+    variantId: row.variantId,
+    lotId: row.lotId,
+    serialId: row.serialId,
+    snapshotQuantityMilli: row.snapshotQuantityMilli,
+    countedQuantityMilli: row.countedQuantityMilli,
+    varianceMilli: row.varianceMilli,
+    movementsAfterSnapshotCount: row.movementsAfterSnapshotCount,
+    reasonCode: row.reasonCode,
+    reasonNote: row.reasonNote,
+  };
+}
+
+function parseScopeVariantIds(scopeJson: string | undefined): readonly string[] | undefined {
+  if (scopeJson === undefined || scopeJson.trim() === '') return undefined;
+  const parsed = JSON.parse(scopeJson) as { variantIds?: unknown };
+  return Array.isArray(parsed.variantIds) ? parsed.variantIds.map(String) : undefined;
+}
+
 function findTable(definitions: readonly TableDefinitionDTO[], tableName: string): TableDefinitionDTO {
   const table = definitions.find((definition) => definition.tableName === tableName);
   if (table === undefined) {
@@ -286,12 +884,31 @@ function findTable(definitions: readonly TableDefinitionDTO[], tableName: string
   return table;
 }
 
-function getRecordVersion(row: InventoryBalanceSheetRow): number {
+function getRecordVersion(row: { id?: unknown; recordVersion?: unknown }): number {
   if (typeof row.recordVersion === 'number') return row.recordVersion;
   const parsed = Number(row.recordVersion);
   if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  const match = /:v(\d+)$/.exec(row.id);
+  const match = /:v(\d+)$/.exec(String(row.id ?? ''));
   return match === null ? 0 : Number(match[1]);
+}
+
+function inferLogicalIdColumn(tableName: string): string {
+  switch (tableName) {
+    case 'StockTransfer':
+      return 'transferId';
+    case 'InventoryLotBalance':
+      return 'lotBalanceId';
+    case 'SerialState':
+      return 'serialId';
+    case 'StockTransferLine':
+      return 'transferLineId';
+    case 'StocktakeSession':
+      return 'stocktakeSessionId';
+    case 'StocktakeLine':
+      return 'stocktakeLineId';
+    default:
+      return 'id';
+  }
 }
 
 function deepClone<T>(value: T): T {

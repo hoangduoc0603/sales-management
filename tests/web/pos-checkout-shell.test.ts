@@ -152,6 +152,97 @@ describe('PosCheckoutShell', () => {
     expect(html).not.toContain('Scope hiện tại:');
     expect(html).not.toContain('thao tác giỏ chạy local-first');
   });
+
+  it('embedded mode đặt ô scan là entry đầu tiên và dùng contextual recovery drawer theo artifact Approved', () => {
+    const html = renderToStaticMarkup(
+      createElement(PosCheckoutShell, {
+        actor,
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        shellMode: 'embedded',
+        theme: 'light',
+      }),
+    );
+
+    expect(html).not.toContain('cn-pos-page-heading');
+    expect(html).not.toContain('Tình huống POS &amp; phục hồi');
+    expect(html).not.toContain('cn-state-lab');
+    expect(html).not.toContain('cn-state-tabs');
+    expect(html).toContain('cn-pos-context-drawer');
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('Dữ liệu bán đã thay đổi');
+    expect(html).toContain('Đang kiểm tra kết quả hoàn tất');
+    expect(html).toContain('Receipt snapshot');
+    expect(readText('web/src/styles/index.css')).toContain('.cn-pos-context-drawer');
+
+    const scanPosition = html.indexOf('Quét mã vạch, SKU hoặc tên hàng');
+    const productPosition = html.indexOf('Gợi ý hàng hóa');
+    const cartPosition = html.indexOf('Giỏ hàng');
+    expect(scanPosition).toBeGreaterThanOrEqual(0);
+    expect(productPosition).toBeGreaterThan(scanPosition);
+    expect(cartPosition).toBeGreaterThan(scanPosition);
+  });
+
+  it('render receipt snapshot và tác vụ in/in lại từ state hoàn tất theo artifact Approved', () => {
+    const html = renderToStaticMarkup(
+      createElement(PosCheckoutShell, {
+        actor,
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        shellMode: 'embedded',
+        initialStateId: 'success',
+        initialReceipt: {
+          receiptId: 'receipt-1',
+          saleOrderId: 'sale-order-1',
+          businessNumber: 'SO-260801-0001',
+          receiptFormat: 'K80',
+          createdAt: '2026-08-01T09:00:00.000Z',
+          branchId: 'branch-default',
+          warehouseId: 'warehouse-default',
+          cashierId: 'user-admin',
+          lines: [
+            {
+              lineId: 'line-1',
+              saleOrderLineId: 'sale-line-1',
+              variantId: 'variant-milk-1l',
+              unitVersionId: 'unit-bottle-v1',
+              sku: 'SH-OC-1L',
+              displayName: 'Sữa hạt óc chó 1L',
+              quantity: 1,
+              quantityMilli: 1000,
+              unitName: 'chai',
+              unitPriceVnd: 42_000,
+              lineDiscountVnd: 0,
+              lineSubtotalVnd: 42_000,
+              lineTotalVnd: 42_000,
+            },
+          ],
+          totals: {
+            subtotalVnd: 42_000,
+            discountVnd: 0,
+            taxVnd: 0,
+            shippingFeeVnd: 0,
+            totalVnd: 42_000,
+            paidVnd: 42_000,
+            changeVnd: 0,
+            receivableVnd: 0,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('cn-receipt-snapshot');
+    expect(html).toContain('SO-260801-0001');
+    expect(html).toContain('Sữa hạt óc chó 1L');
+    expect(html).toContain('42.000 đ');
+    expect(html).toContain('In biên lai');
+    expect(html).toContain('In lại');
+    expect(html).toContain('Mẫu K80');
+    expect(html).toContain('không tạo ledger mới');
+    expect(html).not.toContain('<select');
+  });
 });
 
 function readText(relativePath: string): string {

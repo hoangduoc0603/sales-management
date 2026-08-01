@@ -23,9 +23,9 @@ Tất cả bảng transaction có `partitionKey`, technical ID, tenant/scope, li
 | --- | --- | --- | --- |
 | `InventoryMovement` | append-only ledger | `movementId`, `partitionKey`, `movementType`, `warehouseId`, `variantId`, `lotId`, `serialId`, `quantityMilli`, `unitVersionId`, `unitCostVnd`, `totalCostVnd`, `sourceType`, `sourceId`, `effectiveAt`, `reversalOfMovementId` | source/unit/approval snapshot |
 | `InventoryBalance` | projection | `balanceId`, `warehouseId`, `variantId`, `onHandMilli`, `availableMilli`, `reservedMilli`, `inTransitMilli`, `quarantineMilli`, `inventoryValueVnd`, `asOfMovementId` | reconciliation metadata |
-| `InventoryLotBalance` | projection | `lotBalanceId`, `warehouseId`, `variantId`, `lotCode`, `expiryDate`, `onHandMilli`, `availableMilli`, `quarantineMilli` | manufacture/quality metadata |
-| `SerialState` | state record | `serialId`, `variantId`, `warehouseId`, `status`, `sourceMovementId`, `sourceSaleLineId`, `updatedAt` | serial/history summary |
+| `InventoryLotBalance` | projection | `id`, `tenantId`, `schemaVersion`, `recordVersion`, `partitionKey`, `lotBalanceId`, `warehouseId`, `variantId`, `lotId`, `lotCode`, `expiryDate`, `onHandMilli`, `availableMilli`, `quarantineMilli`, `asOfMovementId` | manufacture/quality metadata |
+| `SerialState` | state record | `id`, `tenantId`, `schemaVersion`, `recordVersion`, `partitionKey`, `serialId`, `variantId`, `warehouseId`, `status`, `sourceMovementId`, `sourceSaleLineId`, `updatedAt` | serial/history summary |
 | `StockTransfer` / `StockTransferLine` | document | `transferId`, source/destination warehouse, `status`, line variant/quantity/received quantity | reason/variance/attachment refs |
-| `StocktakeSession` / `StocktakeLine` | document | `sessionId`, warehouse, `status`, snapshot quantity, counted quantity, variance | scope/reason/approval refs |
+| `StocktakeSession` / `StocktakeLine` | document | `stocktakeSessionId`, warehouse, `status`, snapshot quantity, counted quantity, variance, movement-after-snapshot count | scope/reason/approval refs |
 
-All quantity columns are milli-units and all inventory value/cost totals VND integers. `InventoryBalance` is rebuildable from ledger but is never manually edited; reconciliation output records actor/system metadata on its worker result.
+All quantity columns are milli-units and all inventory value/cost totals VND integers. `InventoryBalance`, `InventoryLotBalance` và `SerialState` là các projection có thể rebuild từ ledger nhưng không được sửa thủ công; reconciliation output records actor/system metadata on its worker result. `OpeningBalance` chỉ được dùng cho Warehouse + Variant chưa có movement history; các lần bổ sung tồn sau đó phải đi qua receipt/adjustment document.

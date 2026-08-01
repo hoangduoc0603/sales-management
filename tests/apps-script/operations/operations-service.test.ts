@@ -73,29 +73,29 @@ describe('OperationsService', () => {
   });
 
   it('returns attachment access token without public URL and denies warehouse outside actor scope', () => {
-    const { service } = createFixture();
-    const completed = service.completeAttachment({
+    const { service, attachmentStorage } = createFixture();
+    const uploaded = service.uploadAttachment({
       actor: actor({ actions: ['operations.attachment.manage'] }),
       request: {
         objectType: 'Expense',
         objectId: 'expense-1',
         branchId: 'branch-default',
         warehouseId: 'warehouse-default',
-        driveFileId: 'drive-file-1',
         fileName: 'receipt.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 4096,
         checksum: 'attachment-checksum-1',
-        commandId: 'cmd-attachment-1',
-        idempotencyKey: 'idem-attachment-1',
+        contentBase64: 'cmVjZWlwdC1jb250ZW50',
+        commandId: 'cmd-attachment-upload-1',
+        idempotencyKey: 'idem-attachment-upload-1',
       },
     });
-    if (!completed.ok) throw new Error(completed.error.message);
+    if (!uploaded.ok) throw new Error(uploaded.error.message);
 
     const access = service.downloadAttachment({
       actor: actor({ actions: ['operations.attachment.view'] }),
       request: {
-        attachmentId: completed.data.attachment.attachmentId,
+        attachmentId: uploaded.data.attachment.attachmentId,
         objectType: 'Expense',
         objectId: 'expense-1',
       },
@@ -103,18 +103,65 @@ describe('OperationsService', () => {
     const denied = service.downloadAttachment({
       actor: actor({ actions: ['operations.attachment.view'], warehouseIds: ['warehouse-other'] }),
       request: {
-        attachmentId: completed.data.attachment.attachmentId,
+        attachmentId: uploaded.data.attachment.attachmentId,
         objectType: 'Expense',
         objectId: 'expense-1',
       },
     });
 
+    expect(attachmentStorage.savedFiles).toEqual([
+      {
+        fileName: 'receipt.pdf',
+        mimeType: 'application/pdf',
+        contentBase64: 'cmVjZWlwdC1jb250ZW50',
+      },
+    ]);
+    expect(uploaded).toMatchObject({
+      ok: true,
+      data: { attachment: { driveFileId: 'drive-file-1', status: 'Available' } },
+    });
     expect(access).toMatchObject({
       ok: true,
-      data: { accessToken: 'attachment-access-token-1', attachment: { status: 'Available' } },
+      data: {
+        accessToken: 'attachment-access-token-1',
+        contentBase64: 'cmVjZWlwdC1jb250ZW50',
+        attachment: { status: 'Available' },
+      },
     });
     expect(JSON.stringify(access)).not.toContain('https://drive.google.com');
     expect(denied).toMatchObject({ ok: false, error: { code: 'SCOPE_DENIED' } });
+
+    const listed = service.listAttachments({
+      actor: actor({ actions: ['operations.attachment.view'] }),
+      request: { objectType: 'Expense', objectId: 'expense-1' },
+    });
+    expect(listed).toMatchObject({
+      ok: true,
+      data: { attachments: [{ attachmentId: uploaded.data.attachment.attachmentId, status: 'Available' }] },
+    });
+
+    const deleted = service.deleteAttachment({
+      actor: actor({ actions: ['operations.attachment.manage'] }),
+      request: {
+        attachmentId: uploaded.data.attachment.attachmentId,
+        objectType: 'Expense',
+        objectId: 'expense-1',
+        commandId: 'cmd-attachment-delete-1',
+        idempotencyKey: 'idem-attachment-delete-1',
+      },
+    });
+    expect(deleted).toMatchObject({ ok: true, data: { attachment: { status: 'Deleted' } } });
+    expect(attachmentStorage.trashedFileIds).toEqual(['drive-file-1']);
+    expect(
+      service.downloadAttachment({
+        actor: actor({ actions: ['operations.attachment.view'] }),
+        request: {
+          attachmentId: uploaded.data.attachment.attachmentId,
+          objectType: 'Expense',
+          objectId: 'expense-1',
+        },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
   });
 
   it('creates backup manifest with partitions, row counts and stable checksum', () => {
@@ -233,6 +280,24 @@ describe('OperationsService', () => {
 
 function createFixture() {
   const repository = createInMemoryOperationsRepository();
+  const attachmentStorage = {
+    savedFiles: [] as Array<{ fileName: string; mimeType: string; contentBase64: string }>,
+    trashedFileIds: [] as string[],
+    contents: new Map<string, string>(),
+    savePrivateAttachment(input: { fileName: string; mimeType: string; contentBase64: string }) {
+      this.savedFiles.push(input);
+      this.contents.set(`drive-file-${this.savedFiles.length}`, input.contentBase64);
+      return {
+        driveFileId: `drive-file-${this.savedFiles.length}`,
+      };
+    },
+    readPrivateAttachment(input: { driveFileId: string }) {
+      return { contentBase64: this.contents.get(input.driveFileId) ?? '' };
+    },
+    trashPrivateAttachment(input: { driveFileId: string }) {
+      this.trashedFileIds.push(input.driveFileId);
+    },
+  };
   const service = createOperationsService({
     repository,
     tenantId: 'tenant-default',
@@ -240,6 +305,7 @@ function createFixture() {
     schemaVersion: 1,
     now: () => new Date('2026-07-27T09:00:00.000Z'),
     newId: createSequentialId(),
+    attachmentStorage,
   });
 
   repository.savePartition({
@@ -253,7 +319,7 @@ function createFixture() {
     rowCount: 42,
   });
 
-  return { repository, service };
+  return { repository, service, attachmentStorage };
 }
 
 function actor(input: {

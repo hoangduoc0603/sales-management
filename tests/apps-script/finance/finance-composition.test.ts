@@ -44,4 +44,62 @@ describe('finance composition', () => {
       },
     });
   });
+
+  it('exposes finance master and aging projection through invoke pipeline', () => {
+    const composition = createApiComposition({
+      now: () => new Date('2026-07-31T09:00:00.000Z'),
+    });
+
+    const login = composition.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login-master',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    const drawer = composition.invoke({
+      operation: 'finance.cashDrawer.upsert',
+      requestId: 'req-drawer',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        commandId: 'cmd-drawer',
+        idempotencyKey: 'idem-drawer',
+        branchId: 'branch-default',
+        drawerCode: 'MAIN',
+        name: 'Két chính',
+        drawerType: 'Cash',
+        status: 'Active',
+      },
+    });
+    const method = composition.invoke({
+      operation: 'finance.paymentMethod.upsert',
+      requestId: 'req-method',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        commandId: 'cmd-method',
+        idempotencyKey: 'idem-method',
+        methodCode: 'CASH',
+        name: 'Tiền mặt',
+        methodType: 'Cash',
+        status: 'Active',
+      },
+    });
+    const master = composition.invoke({
+      operation: 'finance.master.get',
+      requestId: 'req-master',
+      sessionToken: login.data.sessionToken,
+      payload: { branchId: 'branch-default' },
+    });
+    const aging = composition.invoke({
+      operation: 'finance.aging.get',
+      requestId: 'req-aging',
+      sessionToken: login.data.sessionToken,
+      payload: { asOfDate: '2026-07-31', obligationType: 'Receivable' },
+    });
+
+    expect(drawer).toMatchObject({ ok: true, data: { cashDrawer: { drawerCode: 'MAIN' } } });
+    expect(method).toMatchObject({ ok: true, data: { paymentMethod: { methodCode: 'CASH' } } });
+    expect(master).toMatchObject({ ok: true, data: { cashDrawers: [{ drawerCode: 'MAIN' }], paymentMethods: [{ methodCode: 'CASH' }] } });
+    expect(aging).toMatchObject({ ok: true, data: { rows: [], totals: { totalRemainingVnd: 0 } } });
+  });
 });

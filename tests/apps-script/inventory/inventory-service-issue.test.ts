@@ -6,7 +6,15 @@ describe('InventoryService issueForSale', () => {
   it('snapshots current average cost and reduces on-hand/available/value', () => {
     const { repository, service } = createService();
     service.receive(receiveInput({ quantityMilli: 10_000, unitCostVnd: 100_000 }));
-    service.receive(receiveInput({ commandId: 'cmd-r2', idempotencyKey: 'idem-r2', quantityMilli: 10_000, unitCostVnd: 120_000 }));
+    service.receive(
+      receiveInput({
+        commandId: 'cmd-r2',
+        idempotencyKey: 'idem-r2',
+        quantityMilli: 10_000,
+        unitCostVnd: 120_000,
+        sourceDocument: { sourceType: 'PurchaseReceipt', sourceId: 'receipt-2' },
+      }),
+    );
 
     const result = service.issueForSale({
       commandId: 'cmd-i1',
@@ -29,6 +37,56 @@ describe('InventoryService issueForSale', () => {
       onHandMilli: 15_000,
       availableMilli: 15_000,
       inventoryValueVnd: 1_650_000,
+    });
+  });
+
+  it('rounds issue value from moving average cost and blocks the next command after last stock is sold', () => {
+    const { repository, service } = createService();
+    service.receive(receiveInput({ quantityMilli: 2_000, unitCostVnd: 10_000 }));
+    service.receive(
+      receiveInput({
+        commandId: 'cmd-r2',
+        idempotencyKey: 'idem-r2',
+        quantityMilli: 1_000,
+        unitCostVnd: 10_001,
+        sourceDocument: { sourceType: 'PurchaseReceipt', sourceId: 'receipt-2' },
+      }),
+    );
+
+    const firstIssue = service.issueForSale({
+      commandId: 'cmd-i1',
+      idempotencyKey: 'idem-i1',
+      warehouseId: 'warehouse-1',
+      variantId: 'variant-1',
+      quantityMilli: 3_000,
+      sourceDocument: { sourceType: 'SaleOrder', sourceId: 'sale-1', sourceLineId: 'line-1' },
+    });
+    const secondIssue = service.issueForSale({
+      commandId: 'cmd-i2',
+      idempotencyKey: 'idem-i2',
+      warehouseId: 'warehouse-1',
+      variantId: 'variant-1',
+      quantityMilli: 1_000,
+      sourceDocument: { sourceType: 'SaleOrder', sourceId: 'sale-2', sourceLineId: 'line-2' },
+    });
+
+    expect(firstIssue).toMatchObject({
+      ok: true,
+      data: {
+        movement: {
+          unitCostVnd: 10_000,
+          totalCostVnd: -30_001,
+        },
+      },
+    });
+    expect(repository.getBalance('warehouse-1', 'variant-1')).toMatchObject({
+      onHandMilli: 0,
+      availableMilli: 0,
+      inventoryValueVnd: 0,
+    });
+    expect(secondIssue).toMatchObject({
+      ok: false,
+      error: { code: 'INSUFFICIENT_STOCK' },
     });
   });
 

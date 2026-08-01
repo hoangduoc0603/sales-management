@@ -442,10 +442,76 @@ describe('createLocalFakeBackendClient', () => {
     });
     expect(attachmentAccess).toMatchObject({
       ok: true,
-      data: { accessToken: expect.stringContaining('attachment-access-token') },
+      data: {
+        accessToken: expect.stringContaining('attachment-access-token'),
+        contentBase64: expect.stringContaining('local-private-content'),
+      },
     });
     expect(JSON.stringify(attachmentAccess)).not.toContain('drive.google.com');
     expect(JSON.stringify(attachmentAccess)).not.toContain('publicUrl');
+
+    const uploadedAttachment = await client.invoke({
+      operation: 'operations.attachment.upload',
+      requestId: 'req-local-attachment-upload',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        objectType: 'Expense',
+        objectId: 'expense-local-2',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        fileName: 'receipt-upload.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 512,
+        checksum: 'attachment-upload-checksum-local',
+        contentBase64: 'cmVjZWlwdA==',
+        commandId: 'cmd-local-attachment-upload',
+        idempotencyKey: 'idem-local-attachment-upload',
+      },
+    });
+    expect(uploadedAttachment).toMatchObject({
+      ok: true,
+      data: {
+        attachment: {
+          objectType: 'Expense',
+          objectId: 'expense-local-2',
+          status: 'Available',
+          driveFileId: expect.stringMatching(/^local-private-drive-file-local-file-/),
+        },
+      },
+    });
+    expect(JSON.stringify(uploadedAttachment)).not.toContain('publicUrl');
+    if (!uploadedAttachment.ok) throw new Error('attachment upload failed');
+
+    const attachmentList = await client.invoke({
+      operation: 'operations.attachment.list',
+      requestId: 'req-local-attachment-list',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        objectType: 'Expense',
+        objectId: 'expense-local-2',
+      },
+    });
+    expect(attachmentList).toMatchObject({
+      ok: true,
+      data: { attachments: [{ attachmentId: uploadedAttachment.data.attachment.attachmentId, status: 'Available' }] },
+    });
+
+    const deletedAttachment = await client.invoke({
+      operation: 'operations.attachment.delete',
+      requestId: 'req-local-attachment-delete',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        attachmentId: uploadedAttachment.data.attachment.attachmentId,
+        objectType: 'Expense',
+        objectId: 'expense-local-2',
+        commandId: 'cmd-local-attachment-delete',
+        idempotencyKey: 'idem-local-attachment-delete',
+      },
+    });
+    expect(deletedAttachment).toMatchObject({
+      ok: true,
+      data: { attachment: { attachmentId: uploadedAttachment.data.attachment.attachmentId, status: 'Deleted' } },
+    });
 
     const backup = await client.invoke({
       operation: 'operations.backup.request',
@@ -972,7 +1038,7 @@ describe('createLocalFakeBackendClient', () => {
             lineDiscountVnd: 0,
           },
         ],
-        tenders: [],
+        tenders: [{ tenderId: 'tender-online-deposit', paymentMethodId: 'cash', cashDrawerId: 'drawer-main', amountVnd: 20_000 }],
       },
     });
     expect(draft).toMatchObject({ ok: true, data: { order: { source: 'ManualOnline', status: 'Draft' } } });
@@ -1029,6 +1095,28 @@ describe('createLocalFakeBackendClient', () => {
       data: {
         order: { saleOrderId: draft.data.order.saleOrderId },
         lines: [expect.objectContaining({ quantityMilli: 2_000 })],
+      },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.cancel',
+        requestId: 'req-online-cancel-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-cancel-local',
+          idempotencyKey: 'idem-online-cancel-local',
+          saleOrderId: draft.data.order.saleOrderId,
+          actorId: 'user-admin',
+          reason: 'Khách hủy và giữ tiền cọc.',
+          depositTreatment: 'KeepCustomerCredit',
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        order: { status: 'Cancelled', paidVnd: 20_000 },
+        customerCredit: { customerId: 'customer-1', amountVnd: 20_000, sourceDocument: { sourceType: 'SaleOrder' } },
       },
     });
   });

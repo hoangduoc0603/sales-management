@@ -84,6 +84,35 @@ describe('TableRegistryService', () => {
     expect(
       definitions.find((table) => table.tableName === 'InventoryBalance')?.headers.map((header) => header.name),
     ).toEqual(expect.arrayContaining(['id', 'tenantId', 'schemaVersion', 'recordVersion', 'asOfMovementId']));
+    expect(
+      definitions.find((table) => table.tableName === 'InventoryLotBalance')?.headers.map((header) => header.name),
+    ).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenantId',
+        'schemaVersion',
+        'recordVersion',
+        'lotBalanceId',
+        'lotId',
+        'lotCode',
+        'expiryDate',
+        'asOfMovementId',
+      ]),
+    );
+    expect(definitions.find((table) => table.tableName === 'SerialState')?.headers.map((header) => header.name)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenantId',
+        'schemaVersion',
+        'recordVersion',
+        'serialId',
+        'variantId',
+        'warehouseId',
+        'status',
+        'sourceMovementId',
+        'sourceSaleLineId',
+      ]),
+    );
   });
 
   it('đăng ký table Finance theo data dictionary Phase 6', () => {

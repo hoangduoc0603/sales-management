@@ -199,6 +199,33 @@ describe('sales shared contracts', () => {
 
     expect(() =>
       parseSalesOnlineCancelRequest({
+        commandId: 'cmd-cancel-refund',
+        idempotencyKey: 'idem-cancel-refund',
+        saleOrderId: 'sale-order-online',
+        actorId: 'seller-1',
+        reason: 'Khách hủy và hoàn tiền cọc.',
+        depositTreatment: 'Refund',
+        cashDrawerId: 'drawer-main',
+        paymentMethodId: 'cash',
+        approverId: 'manager-1',
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      parseSalesOnlineCancelRequest({
+        commandId: 'cmd-cancel-refund',
+        idempotencyKey: 'idem-cancel-refund',
+        saleOrderId: 'sale-order-online',
+        actorId: 'seller-1',
+        reason: 'Khách hủy và hoàn tiền cọc.',
+        depositTreatment: 'Refund',
+        paymentMethodId: 'cash',
+        approverId: 'manager-1',
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseSalesOnlineCancelRequest({
         commandId: 'cmd-cancel',
         idempotencyKey: 'idem-cancel',
         saleOrderId: 'sale-order-online',

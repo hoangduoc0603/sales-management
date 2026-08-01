@@ -15,9 +15,11 @@ Finance sở hữu Payment, CashTransaction, obligation Receivable/Payable, Paym
 | `finance.payment.reverse` | Counter-transaction và reversal allocation; không sửa chứng từ gốc. |
 | `finance.shift.open/close/lock` | Opening cash; close tính expected, variance/reason; Locked bất biến. |
 | `finance.expense.approve` | Expense + Disbursement/CashTransaction; không là giá vốn trừ landed cost Purchasing. |
+| `finance.cashDrawer.upsert` / `finance.paymentMethod.upsert` | Cập nhật master quỹ/phương thức thanh toán; không cho ghi đè số dư, không lưu secret. |
+| `finance.master.get` / `finance.aging.get` | Đọc master vận hành và projection aging từ Receivable/Payable theo `dueDate`, Branch, loại công nợ và trạng thái. |
 
 POS Completed/Shipped gọi Finance trong checkout command. CashTransaction POS luôn mang `shiftId` khi policy bắt buộc ca; không chuyển giao dịch Completed sang ca khác. Shift state: `Open → SubmittedForClose → Closed → Locked`; mọi điều chỉnh sau Locked là chứng từ mới có actor metadata.
 
 ## Tests
 
-Bao phủ allocation nhiều-nhiều, payment dư, reversal, hạn mức nợ, một cashier/một drawer, POS thiếu ca, variance close và adjustment sau lock.
+Bao phủ allocation nhiều-nhiều, payment dư, reversal, hạn mức nợ, một cashier/một drawer, POS thiếu ca, variance close, master data, aging bucket theo due date và adjustment sau lock.

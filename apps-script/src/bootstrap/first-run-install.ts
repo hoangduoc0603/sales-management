@@ -254,6 +254,14 @@ function createInitialRuntimeConfig(tenantDisplayName: string, now: Date): Runti
     appVersion,
     schemaVersion,
     driveRootFolderId: folders.root.id,
+    driveFolders: {
+      attachments: folders.attachments,
+      backups: folders.backups,
+      exports: folders.exports,
+      archive: folders.archive,
+      templates: folders.templates,
+      generatedDocuments: folders.generatedDocuments,
+    },
     storage: {
       core: { spreadsheetId: coreSpreadsheet.getId() },
       runtime: { spreadsheetId: runtimeSpreadsheet.getId() },

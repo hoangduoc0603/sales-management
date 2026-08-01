@@ -19,6 +19,8 @@ import {
 export interface FinanceRepository {
   saveCashDrawer(drawer: CashDrawerDTO): void;
   savePaymentMethod(method: PaymentMethodDTO): void;
+  listCashDrawers(): CashDrawerDTO[];
+  listPaymentMethods(): PaymentMethodDTO[];
   saveShift(shift: ShiftDTO): void;
   savePayment(payment: PaymentDTO): void;
   saveNewPayment(payment: PaymentDTO): void;
@@ -60,6 +62,8 @@ export function createInMemoryFinanceRepository(): FinanceRepository {
     savePaymentMethod(method) {
       paymentMethods.set(method.paymentMethodId, clone(method));
     },
+    listCashDrawers: () => [...cashDrawers.values()].map(clone),
+    listPaymentMethods: () => [...paymentMethods.values()].map(clone),
     saveShift(shift) {
       shifts.set(shift.shiftId, clone(shift));
     },
@@ -149,11 +153,13 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'CashDrawer'),
     idField: 'cashDrawerId',
+    fromRow: cashDrawerFromRow,
   });
   const paymentMethods = createVersionedTable<PaymentMethodDTO>({
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'PaymentMethod'),
     idField: 'paymentMethodId',
+    fromRow: paymentMethodFromRow,
   });
   const shifts = createVersionedTable<ShiftDTO>({
     gateway: deps.gateway,
@@ -221,6 +227,8 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     savePaymentMethod(method) {
       paymentMethods.save(method);
     },
+    listCashDrawers: () => cashDrawers.list(),
+    listPaymentMethods: () => paymentMethods.list(),
     saveShift(shift) {
       shifts.save(shift);
       cacheShift(deps.cacheStore, shift);
@@ -445,6 +453,31 @@ function cashTransactionToRow(transaction: CashTransactionDTO): FinanceRow {
   };
 }
 
+function cashDrawerFromRow(row: FinanceRow): CashDrawerDTO {
+  return {
+    cashDrawerId: String(row.cashDrawerId),
+    tenantId: String(row.tenantId),
+    branchId: String(row.branchId),
+    drawerCode: String(row.drawerCode),
+    name: String(row.name),
+    drawerType: row.drawerType as CashDrawerDTO['drawerType'],
+    status: row.status as CashDrawerDTO['status'],
+    directSaleEnabled: optionalBoolean(row.directSaleEnabled) ?? true,
+  };
+}
+
+function paymentMethodFromRow(row: FinanceRow): PaymentMethodDTO {
+  return {
+    paymentMethodId: String(row.paymentMethodId),
+    tenantId: String(row.tenantId),
+    methodCode: String(row.methodCode),
+    name: String(row.name),
+    methodType: row.methodType as PaymentMethodDTO['methodType'],
+    status: row.status as PaymentMethodDTO['status'],
+    directSaleEnabled: optionalBoolean(row.directSaleEnabled) ?? true,
+  };
+}
+
 function cashTransactionFromRow(row: FinanceRow): CashTransactionDTO {
   return {
     cashTransactionId: String(row.cashTransactionId),
@@ -531,6 +564,7 @@ function obligationToRow(obligation: ObligationDTO): FinanceRow {
     sourceType: obligation.sourceDocument.sourceType,
     sourceId: obligation.sourceDocument.sourceId,
     sourceLineId: obligation.sourceDocument.sourceLineId,
+    dueDate: obligation.dueDate,
     customerId: obligation.obligationType === 'Receivable' ? obligation.partyId : undefined,
     supplierId: obligation.obligationType === 'Payable' ? obligation.partyId : undefined,
   };
@@ -548,6 +582,7 @@ function obligationFromRow(obligationType: ObligationDTO['obligationType']): (ro
       sourceId: String(row.sourceId),
       sourceLineId: optionalString(row.sourceLineId),
     },
+    dueDate: String(row.dueDate ?? new Date().toISOString().slice(0, 10)),
     originalAmountVnd: Number(row.originalAmountVnd),
     allocatedAmountVnd: Number(row.allocatedAmountVnd),
     remainingAmountVnd: Number(row.remainingAmountVnd),
@@ -652,6 +687,15 @@ function readCachedShift(cacheStore: PlatformCacheStore | undefined, shiftId: st
 
 function optionalString(value: unknown): string | undefined {
   return value === undefined || value === null || value === '' ? undefined : String(value);
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') return true;
+    if (value.toLowerCase() === 'false') return false;
+  }
+  return undefined;
 }
 
 function deepClone<T>(value: T): T {

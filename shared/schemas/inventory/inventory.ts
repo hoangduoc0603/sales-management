@@ -5,6 +5,13 @@ import type {
   InventoryReceiveRequest,
   InventoryReleaseRequest,
   InventoryReserveRequest,
+  InventoryStocktakeApproveRequest,
+  InventoryStocktakeOpenRequest,
+  InventoryStocktakeSubmitRequest,
+  InventoryTransferApproveRequest,
+  InventoryTransferCreateRequest,
+  InventoryTransferReceiveRequest,
+  InventoryTransferShipRequest,
   InventoryReturnReceiveRequest,
   InventoryReturnRestockRequest,
 } from '@shared/contracts/inventory/inventory';
@@ -12,12 +19,14 @@ import type {
 const nonEmptyTrimmed = z.string().trim().min(1);
 const positiveQuantityMilli = z.number().int().positive();
 const nonNegativeVnd = z.number().int().nonnegative();
+const isoDateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const inventorySourceDocumentSchema = z
   .object({
     sourceType: z.enum([
       'OpeningBalance',
       'PurchaseReceipt',
+      'SupplierReturn',
       'SaleOrder',
       'SaleReturn',
       'StockTransfer',
@@ -37,6 +46,10 @@ const commandBaseSchema = z
     variantId: nonEmptyTrimmed,
     quantityMilli: positiveQuantityMilli,
     unitVersionId: nonEmptyTrimmed.optional(),
+    lotId: nonEmptyTrimmed.optional(),
+    lotCode: nonEmptyTrimmed.optional(),
+    expiryDate: isoDateOnly.optional(),
+    serialId: nonEmptyTrimmed.optional(),
     sourceDocument: inventorySourceDocumentSchema,
     actorId: nonEmptyTrimmed.optional(),
   })
@@ -103,4 +116,128 @@ export const inventoryBalanceSummaryRequestSchema = z
 
 export function parseInventoryBalanceSummaryRequest(value: unknown): InventoryBalanceSummaryRequest {
   return inventoryBalanceSummaryRequestSchema.parse(value);
+}
+
+const transferLineCreateSchema = z
+  .object({
+    transferLineId: nonEmptyTrimmed.optional(),
+    variantId: nonEmptyTrimmed,
+    quantityMilli: positiveQuantityMilli,
+    unitVersionId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export const inventoryTransferCreateRequestSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    sourceWarehouseId: nonEmptyTrimmed,
+    destinationWarehouseId: nonEmptyTrimmed,
+    reasonCode: nonEmptyTrimmed.optional(),
+    reasonNote: nonEmptyTrimmed.optional(),
+    lines: z.array(transferLineCreateSchema).min(1),
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict()
+  .refine((value) => value.sourceWarehouseId !== value.destinationWarehouseId, {
+    message: 'sourceWarehouseId and destinationWarehouseId must be different',
+    path: ['destinationWarehouseId'],
+  });
+
+export function parseInventoryTransferCreateRequest(value: unknown): InventoryTransferCreateRequest {
+  return inventoryTransferCreateRequestSchema.parse(value);
+}
+
+const transferCommandSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    transferId: nonEmptyTrimmed,
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export const inventoryTransferApproveRequestSchema = transferCommandSchema;
+
+export function parseInventoryTransferApproveRequest(value: unknown): InventoryTransferApproveRequest {
+  return inventoryTransferApproveRequestSchema.parse(value);
+}
+
+export const inventoryTransferShipRequestSchema = transferCommandSchema;
+
+export function parseInventoryTransferShipRequest(value: unknown): InventoryTransferShipRequest {
+  return inventoryTransferShipRequestSchema.parse(value);
+}
+
+const transferReceiveLineSchema = z
+  .object({
+    transferLineId: nonEmptyTrimmed,
+    receivedQuantityMilli: z.number().int().nonnegative(),
+    varianceReasonCode: nonEmptyTrimmed.optional(),
+    varianceNote: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export const inventoryTransferReceiveRequestSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    transferId: nonEmptyTrimmed,
+    receivedLines: z.array(transferReceiveLineSchema).min(1),
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export function parseInventoryTransferReceiveRequest(value: unknown): InventoryTransferReceiveRequest {
+  return inventoryTransferReceiveRequestSchema.parse(value);
+}
+
+export const inventoryStocktakeOpenRequestSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    warehouseId: nonEmptyTrimmed,
+    scopeVariantIds: z.array(nonEmptyTrimmed).min(1).optional(),
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export function parseInventoryStocktakeOpenRequest(value: unknown): InventoryStocktakeOpenRequest {
+  return inventoryStocktakeOpenRequestSchema.parse(value);
+}
+
+const stocktakeSubmitLineSchema = z
+  .object({
+    stocktakeLineId: nonEmptyTrimmed,
+    countedQuantityMilli: z.number().int().nonnegative(),
+    reasonCode: nonEmptyTrimmed.optional(),
+    reasonNote: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export const inventoryStocktakeSubmitRequestSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    stocktakeSessionId: nonEmptyTrimmed,
+    lines: z.array(stocktakeSubmitLineSchema).min(1),
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export function parseInventoryStocktakeSubmitRequest(value: unknown): InventoryStocktakeSubmitRequest {
+  return inventoryStocktakeSubmitRequestSchema.parse(value);
+}
+
+export const inventoryStocktakeApproveRequestSchema = z
+  .object({
+    commandId: nonEmptyTrimmed,
+    idempotencyKey: nonEmptyTrimmed,
+    stocktakeSessionId: nonEmptyTrimmed,
+    actorId: nonEmptyTrimmed.optional(),
+  })
+  .strict();
+
+export function parseInventoryStocktakeApproveRequest(value: unknown): InventoryStocktakeApproveRequest {
+  return inventoryStocktakeApproveRequestSchema.parse(value);
 }

@@ -62,24 +62,27 @@ const p1Rules = [
     title: 'Price/promotion stale conflict cần được kiểm chứng ở checkout',
     source: 'Phase 4, SRS-OVR-020',
     evidence: ['price/promotion stale conflict'],
+    resolvedEvidence: ['tests/apps-script/sales/sales-service.test.ts', 'promotion/voucher/points conflict đang disabled theo baseline'],
   },
   {
     id: 'inventory-opening-lot-serial-transfer-stocktake',
     title: 'Opening balance, lot/serial, transfer và stocktake cần chốt sellable scope',
     source: 'Phase 5, SRS-INV',
     evidence: ['Opening balance', 'lot FEFO', 'transfer/stocktake'],
+    resolvedEvidence: ['tests/apps-script/inventory/inventory-service-opening-lot-serial.test.ts', 'tests/apps-script/inventory/inventory-service-transfer-stocktake.test.ts'],
   },
   {
     id: 'finance-master-aging',
     title: 'CashDrawer/PaymentMethod master và aging projection cần chốt sellable scope',
     source: 'Phase 6, SRS-FIN',
     evidence: ['CashDrawer/PaymentMethod', 'aging projection'],
+    resolvedEvidence: ['Finance master aging local pass', 'tests/apps-script/finance/finance-service-master-aging.test.ts'],
   },
   {
-    id: 'sales-deposit-attachment-policy-reversal',
-    title: 'Deposit cancellation, attachment Drive flow và CRM policy reversal cần chốt sellable scope',
+    id: 'sales-attachment-policy-reversal',
+    title: 'Attachment Drive flow và CRM policy reversal cần chốt sellable scope',
     source: 'Phase 8, SRS-SAL',
-    evidence: ['Deposit credit/refund', 'attachment Drive flow', 'CRM policy reversal'],
+    evidence: ['attachment Drive flow', 'CRM policy reversal'],
   },
   {
     id: 'reporting-drilldown-archive-worker-export',
@@ -89,9 +92,9 @@ const p1Rules = [
   },
   {
     id: 'operations-production-lifecycle',
-    title: 'Attachment Drive, backup/restore replacement và production lifecycle cần hardening',
+    title: 'Backup/restore replacement và production lifecycle cần hardening',
     source: 'Phase 11, SRS-OVR-009..011',
-    evidence: ['attachment metadata', 'restore replacement', 'session revoke thật', 'Production Apps Script trigger/drill'],
+    evidence: ['restore replacement', 'session revoke thật', 'Production Apps Script trigger/drill'],
   },
 ];
 

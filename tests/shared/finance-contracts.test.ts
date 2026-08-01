@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
+  parseFinanceAgingProjectionRequest,
+  parseFinanceCashDrawerUpsertRequest,
+  parseFinancePaymentMethodUpsertRequest,
   parseFinancePaymentRecordRequest,
   parseFinanceShiftCloseRequest,
   parseFinanceShiftOpenRequest,
@@ -14,7 +17,46 @@ describe('finance shared contracts', () => {
     expect(operationNames).toContain('finance.payment.record');
     expect(operationNames).toContain('finance.payment.reverse');
     expect(operationNames).toContain('finance.expense.approve');
+    expect(operationNames).toContain('finance.master.get');
+    expect(operationNames).toContain('finance.cashDrawer.upsert');
+    expect(operationNames).toContain('finance.paymentMethod.upsert');
+    expect(operationNames).toContain('finance.aging.get');
     expect(operationNames).toContain('finance.summary.get');
+  });
+
+  it('validates finance master and aging requests', () => {
+    expect(() =>
+      parseFinanceCashDrawerUpsertRequest({
+        commandId: 'cmd-drawer',
+        idempotencyKey: 'idem-drawer',
+        branchId: 'branch-default',
+        drawerCode: 'MAIN',
+        name: 'Két chính',
+        drawerType: 'Cash',
+        status: 'Active',
+        directSaleEnabled: true,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseFinancePaymentMethodUpsertRequest({
+        commandId: 'cmd-method',
+        idempotencyKey: 'idem-method',
+        methodCode: 'BANK',
+        name: 'Chuyển khoản',
+        methodType: 'BankTransfer',
+        status: 'Active',
+        directSaleEnabled: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseFinanceAgingProjectionRequest({
+        asOfDate: '2026-07-31',
+        branchId: 'branch-default',
+        obligationType: 'Receivable',
+        includeSettled: false,
+      }),
+    ).not.toThrow();
+    expect(() => parseFinanceAgingProjectionRequest({ asOfDate: '31/07/2026' })).toThrow();
   });
 
   it('requires integer VND amounts and source document for payment record', () => {

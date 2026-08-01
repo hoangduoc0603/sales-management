@@ -77,4 +77,5 @@
 ## Self-Review
 
 - Spec coverage: return refund/credit, inspection Restock/KeepQuarantine/Scrap and exchange net settlement.
-- Intentional gap after this plan: deposit credit/refund thật khi hủy đơn có đặt cọc, Drive attachment flow and deeper CRM reversal/loyalty/promotion/commission entries remain for Phase 8C.
+- 2026-08-02 update: deposit credit/refund thật khi hủy đơn có đặt cọc đã được triển khai sau Phase 8B với tests `tests/apps-script/sales/sales-service.test.ts`, `tests/shared/sales-contracts.test.ts` và `tests/web/local-fake-backend.test.ts`.
+- Intentional gap after this plan: Drive attachment flow and deeper CRM reversal/loyalty/promotion/commission entries remain for Phase 8C.

@@ -229,6 +229,7 @@ const cashDrawerFixture: CashDrawerDTO = {
   name: 'Két chính',
   drawerType: 'Cash',
   status: 'Active',
+  directSaleEnabled: true,
 };
 
 const paymentMethodFixture: PaymentMethodDTO = {
@@ -238,6 +239,7 @@ const paymentMethodFixture: PaymentMethodDTO = {
   name: 'Tiền mặt',
   methodType: 'Cash',
   status: 'Active',
+  directSaleEnabled: true,
 };
 
 const shiftRowFixture = {
@@ -276,7 +278,7 @@ const paymentFixture: PaymentDTO = {
   payerType: 'Customer',
   payerId: 'customer-1',
   sourceDocument: { sourceType: 'SaleOrder', sourceId: 'sale-1' },
-  status: 'Recorded',
+  status: 'Approved',
   effectiveAt: '2026-07-27T08:01:00.000Z',
   shiftId: 'shift-1',
 };

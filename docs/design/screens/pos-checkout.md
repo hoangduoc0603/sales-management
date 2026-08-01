@@ -116,16 +116,16 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 
 ## Acceptance checklist
 
-- [ ] Đọc registry và artifact `app-pos-checkout.html` trước khi code.
-- [ ] Route POS trong ứng dụng chính dùng AppShell/Header chung; không render header POS riêng hoặc badge header riêng “Ca POS đang mở”, “Dữ liệu quầy sẵn sàng”.
-- [ ] POS giữ desktop checkout shell: vùng scan/tìm hàng, workspace giỏ và tổng kết/hoàn tất.
-- [ ] Scan/tìm/thay đổi giỏ không phát sinh RPC từng thao tác khi cache sẵn sàng.
-- [ ] Có Branch/Warehouse đúng scope từ AppShell; trạng thái ca bán/két tiền hiển thị trong nội dung POS/recovery khi nghiệp vụ yêu cầu.
-- [ ] Có custom select/listbox, không có native `<select>`.
+- [x] Đọc registry và artifact `app-pos-checkout.html` trước khi code.
+- [x] Route POS trong ứng dụng chính dùng AppShell/Header chung; không render header POS riêng hoặc badge header riêng “Ca POS đang mở”, “Dữ liệu quầy sẵn sàng”.
+- [x] POS giữ desktop checkout shell: vùng scan/tìm hàng, workspace giỏ và tổng kết/hoàn tất.
+- [x] Scan/tìm/thay đổi giỏ không phát sinh RPC từng thao tác khi cache sẵn sàng.
+- [x] Có Branch/Warehouse đúng scope từ AppShell; trạng thái ca bán/két tiền hiển thị trong nội dung POS/recovery khi nghiệp vụ yêu cầu.
+- [x] Có custom select/listbox, không có native `<select>`.
 - [ ] Có tạo/chọn khách, đơn vị, lô/serial, giá/giảm, promotion/voucher/điểm theo quyền và dữ liệu nghiệp vụ.
-- [ ] Có payment/tender, bán chịu, tiền thừa hoặc còn phải thu theo cấu hình.
-- [ ] Có action tường minh lưu/mở/hủy Draft; không autosave giỏ.
+- [x] Có payment/tender, bán chịu, tiền thừa hoặc còn phải thu theo cấu hình.
+- [x] Có action tường minh lưu/mở/hủy Draft; không autosave giỏ.
 - [ ] Checkout xử lý loading, lỗi validation, timeout/idempotency và cache conflict không tạo chứng từ trùng.
-- [ ] Hoàn tất trả receipt snapshot; print/reprint là action riêng.
-- [ ] Light/dark theme hoạt động; không hiển thị COGS/lợi nhuận nếu thiếu quyền.
+- [x] Hoàn tất trả receipt snapshot; print/reprint là action riêng.
+- [x] Light/dark theme hoạt động; không hiển thị COGS/lợi nhuận nếu thiếu quyền.
 - [ ] Responsive tablet/mobile không che ô scan, giỏ, tổng tiền hoặc CTA hoàn tất.

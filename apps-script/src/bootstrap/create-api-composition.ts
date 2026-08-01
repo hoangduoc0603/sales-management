@@ -14,12 +14,23 @@ import type {
   InventoryReceiveRequest,
   InventoryReleaseRequest,
   InventoryReserveRequest,
+  InventoryStocktakeApproveRequest,
+  InventoryStocktakeOpenRequest,
+  InventoryStocktakeSubmitRequest,
+  InventoryTransferApproveRequest,
+  InventoryTransferCreateRequest,
+  InventoryTransferReceiveRequest,
+  InventoryTransferShipRequest,
   InventoryReturnReceiveRequest,
   InventoryReturnRestockRequest,
 } from '@shared/contracts/inventory/inventory';
 import type {
+  FinanceAgingProjectionRequest,
+  FinanceCashDrawerUpsertRequest,
   FinanceExpenseApproveRequest,
+  FinanceMasterDataRequest,
   FinancePaymentRecordRequest,
+  FinancePaymentMethodUpsertRequest,
   FinancePaymentReverseRequest,
   FinanceShiftCloseRequest,
   FinanceShiftLockRequest,
@@ -47,6 +58,9 @@ import type {
 import type {
   AttachmentAccessRequest,
   AttachmentCompleteRequest,
+  AttachmentDeleteRequest,
+  AttachmentListRequest,
+  AttachmentUploadRequest,
   BackupRequest,
   HealthCheckRequest,
   ImportCommitRequest,
@@ -100,12 +114,23 @@ import {
   parseInventoryReceiveRequest,
   parseInventoryReleaseRequest,
   parseInventoryReserveRequest,
+  parseInventoryStocktakeApproveRequest,
+  parseInventoryStocktakeOpenRequest,
+  parseInventoryStocktakeSubmitRequest,
+  parseInventoryTransferApproveRequest,
+  parseInventoryTransferCreateRequest,
+  parseInventoryTransferReceiveRequest,
+  parseInventoryTransferShipRequest,
   parseInventoryReturnReceiveRequest,
   parseInventoryReturnRestockRequest,
 } from '@shared/schemas/inventory/inventory';
 import {
+  parseFinanceAgingProjectionRequest,
+  parseFinanceCashDrawerUpsertRequest,
   parseFinanceExpenseApproveRequest,
+  parseFinanceMasterDataRequest,
   parseFinancePaymentRecordRequest,
+  parseFinancePaymentMethodUpsertRequest,
   parseFinancePaymentReverseRequest,
   parseFinanceShiftCloseRequest,
   parseFinanceShiftLockRequest,
@@ -133,6 +158,9 @@ import {
 import {
   parseAttachmentAccessRequest,
   parseAttachmentCompleteRequest,
+  parseAttachmentDeleteRequest,
+  parseAttachmentListRequest,
+  parseAttachmentUploadRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -208,6 +236,7 @@ import { createReportingService } from '../services/reporting/reporting-service'
 import { ensureCurrentDashboardBaselineProjections } from '../services/reporting/dashboard-baseline-projection';
 import { createReportingPartitionCoverageResolver } from '../services/reporting/reporting-partition-coverage';
 import { createOperationsService } from '../services/operations/operations-service';
+import type { AttachmentStorage } from '../services/operations/operations-service';
 import { createSalesService } from '../services/sales/sales-service';
 import type { ProductionRepositories } from './create-production-repositories';
 
@@ -224,6 +253,7 @@ export interface ApiCompositionDependencies {
   bootstrapOnStart?: boolean;
   seedDemoReadModels?: boolean;
   afterInvoke?: () => void;
+  attachmentStorage?: AttachmentStorage;
 }
 
 export function createApiComposition(clock: Clock) {
@@ -329,8 +359,14 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       repository: operationsRepository,
     }),
   });
+  const attachmentStorage = input.attachmentStorage ?? {
+    savePrivateAttachment() {
+      return { driveFileId: newId('drive-file') };
+    },
+  };
   const operationsService = createOperationsService({
     repository: operationsRepository,
+    attachmentStorage,
     tenantId,
     appVersion: '0.1.0',
     schemaVersion: 1,
@@ -580,6 +616,55 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       handler: (input) => inventoryService.getBalanceSummary(input as InventoryBalanceSummaryRequest),
     },
     {
+      name: 'inventory.transfer.create',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryTransferCreateRequest,
+      handler: (input) => inventoryService.createTransfer(input as InventoryTransferCreateRequest),
+    },
+    {
+      name: 'inventory.transfer.approve',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryTransferApproveRequest,
+      handler: (input) => inventoryService.approveTransfer(input as InventoryTransferApproveRequest),
+    },
+    {
+      name: 'inventory.transfer.ship',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryTransferShipRequest,
+      handler: (input) => inventoryService.shipTransfer(input as InventoryTransferShipRequest),
+    },
+    {
+      name: 'inventory.transfer.receive',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryTransferReceiveRequest,
+      handler: (input) => inventoryService.receiveTransfer(input as InventoryTransferReceiveRequest),
+    },
+    {
+      name: 'inventory.stocktake.open',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryStocktakeOpenRequest,
+      handler: (input) => inventoryService.openStocktake(input as InventoryStocktakeOpenRequest),
+    },
+    {
+      name: 'inventory.stocktake.submit',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryStocktakeSubmitRequest,
+      handler: (input) => inventoryService.submitStocktake(input as InventoryStocktakeSubmitRequest),
+    },
+    {
+      name: 'inventory.stocktake.approve',
+      kind: 'mutation',
+      requiredAction: 'inventory.movement.create',
+      parsePayload: parseInventoryStocktakeApproveRequest,
+      handler: (input) => inventoryService.approveStocktake(input as InventoryStocktakeApproveRequest),
+    },
+    {
       name: 'finance.shift.open',
       kind: 'mutation',
       requiredAction: 'finance.shift.manage',
@@ -627,6 +712,34 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       requiredAction: 'finance.expense.approve',
       parsePayload: parseFinanceExpenseApproveRequest,
       handler: (input) => financeService.approveExpense(input as FinanceExpenseApproveRequest),
+    },
+    {
+      name: 'finance.master.get',
+      kind: 'query',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinanceMasterDataRequest,
+      handler: (input) => financeService.getMasterData(input as FinanceMasterDataRequest),
+    },
+    {
+      name: 'finance.cashDrawer.upsert',
+      kind: 'mutation',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinanceCashDrawerUpsertRequest,
+      handler: (input) => financeService.upsertCashDrawer(input as FinanceCashDrawerUpsertRequest),
+    },
+    {
+      name: 'finance.paymentMethod.upsert',
+      kind: 'mutation',
+      requiredAction: 'finance.shift.manage',
+      parsePayload: parseFinancePaymentMethodUpsertRequest,
+      handler: (input) => financeService.upsertPaymentMethod(input as FinancePaymentMethodUpsertRequest),
+    },
+    {
+      name: 'finance.aging.get',
+      kind: 'query',
+      requiredAction: 'finance.summary.view',
+      parsePayload: parseFinanceAgingProjectionRequest,
+      handler: (input) => financeService.getAgingProjection(input as FinanceAgingProjectionRequest),
     },
     {
       name: 'finance.summary.get',
@@ -911,6 +1024,28 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
         }),
     },
     {
+      name: 'operations.attachment.upload',
+      kind: 'mutation',
+      requiredAction: 'operations.attachment.manage',
+      parsePayload: parseAttachmentUploadRequest,
+      handler: (input, context) =>
+        operationsService.uploadAttachment({
+          actor: requireActor(context.actor),
+          request: input as AttachmentUploadRequest,
+        }),
+    },
+    {
+      name: 'operations.attachment.list',
+      kind: 'query',
+      requiredAction: 'operations.attachment.view',
+      parsePayload: parseAttachmentListRequest,
+      handler: (input, context) =>
+        operationsService.listAttachments({
+          actor: requireActor(context.actor),
+          request: input as AttachmentListRequest,
+        }),
+    },
+    {
       name: 'operations.attachment.complete',
       kind: 'mutation',
       requiredAction: 'operations.attachment.manage',
@@ -930,6 +1065,17 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
         operationsService.downloadAttachment({
           actor: requireActor(context.actor),
           request: input as AttachmentAccessRequest,
+        }),
+    },
+    {
+      name: 'operations.attachment.delete',
+      kind: 'mutation',
+      requiredAction: 'operations.attachment.manage',
+      parsePayload: parseAttachmentDeleteRequest,
+      handler: (input, context) =>
+        operationsService.deleteAttachment({
+          actor: requireActor(context.actor),
+          request: input as AttachmentDeleteRequest,
         }),
     },
     {

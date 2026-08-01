@@ -123,7 +123,32 @@ export interface AttachmentCompleteRequest extends OperationsCommandBase {
   checksum: string;
 }
 
+export interface AttachmentUploadRequest extends OperationsCommandBase {
+  objectType: string;
+  objectId: string;
+  branchId?: string;
+  warehouseId?: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksum: string;
+  contentBase64: string;
+}
+
 export interface AttachmentAccessRequest {
+  attachmentId: string;
+  objectType: string;
+  objectId: string;
+}
+
+export interface AttachmentListRequest {
+  objectType: string;
+  objectId: string;
+  branchId?: string;
+  warehouseId?: string;
+}
+
+export interface AttachmentDeleteRequest extends OperationsCommandBase {
   attachmentId: string;
   objectType: string;
   objectId: string;
@@ -150,10 +175,23 @@ export interface AttachmentCompleteResponse {
   attachment: AttachmentMetadataDTO;
 }
 
+export interface AttachmentUploadResponse {
+  attachment: AttachmentMetadataDTO;
+}
+
 export interface AttachmentAccessResponse {
   attachment: AttachmentMetadataDTO;
   accessToken: string;
   expiresAt: string;
+  contentBase64?: string;
+}
+
+export interface AttachmentListResponse {
+  attachments: readonly AttachmentMetadataDTO[];
+}
+
+export interface AttachmentDeleteResponse {
+  attachment: AttachmentMetadataDTO;
 }
 
 export interface OperationsDateRangeDTO {

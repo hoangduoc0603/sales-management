@@ -40,10 +40,10 @@ Mỗi phase dưới đây phải được tách thành implementation plan chi t
 | Phase 5 — Inventory Ledger & Balance Core | Hoàn thành core movement/balance/reservation/return baseline; opening/lot/serial/transfer/stocktake còn là release scope gap | [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md) đã tick; verify pass. |
 | Phase 6 — Finance, Payment & Shift Core | Hoàn thành shift/payment/reversal/expense baseline; CashDrawer/PaymentMethod master và aging projection còn là release scope gap | [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md) đã tick; verify pass. |
 | Phase 7 — POS Checkout End-to-End | Hoàn thành POS local/UI/service baseline; orchestration/receipt/performance cần acceptance review Phase 12 | [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md) đã tick; verify pass. |
-| Phase 8 — Sales Orders, Returns & Warranty | Hoàn thành sales/return/exchange/warranty baseline; deposit cancellation/attachment Drive/policy reversal còn là release scope gap | [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md) và [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md) đã tick; verify pass. |
+| Phase 8 — Sales Orders, Returns & Warranty | Hoàn thành sales/return/exchange/warranty baseline; attachment Drive/policy reversal còn là release scope gap | [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md) và [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md) đã tick; verify pass. |
 | Phase 9 — Purchasing & Supplier Operations | Hoàn thành purchasing backend baseline; purchasing UI/full production adapter thuộc release hardening | [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md) đã tick; verify pass. |
 | Phase 10 — Dashboard, Reporting & Export | Hoàn thành dashboard/report/export baseline; worker-backed export, drill-down resolver và archive coverage đã có local hardening; production export/archive drill còn là release gap | [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md) đã tick; verify pass. |
-| Phase 11 — Operations, Backup, Archive & Health | Hoàn thành operations local baseline; Drive adapter, restore replacement/session revoke production và Apps Script dry-run còn là release hardening gap | [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md) đã tick; verify pass. |
+| Phase 11 — Operations, Backup, Archive & Health | Hoàn thành operations local baseline và private Drive lifecycle baseline cho attachment; restore replacement/session revoke production và Apps Script dry-run còn là release hardening gap | [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md) đã tick phần baseline; verify pass ở lát cắt đã triển khai. |
 | Phase 12 — Release Hardening & Acceptance | Local hardening gates đã chạy; release vẫn Blocked vì còn thiếu production/dry-run evidence | [`2026-07-27-release-hardening-acceptance-phase-12.md`](2026-07-27-release-hardening-acceptance-phase-12.md), `docs/architecture/release-hardening.md`. |
 
 ## Current Baseline
@@ -232,7 +232,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement `CatalogPosProjection` theo Branch/Warehouse/version, không chứa cost/supplier/secret.
 - [x] Implement customer quick create, duplicate warning và customer group snapshot source.
 - [x] Test scan/search no backend per keystroke khi cache warm.
-- [ ] Test price/promotion stale conflict cho checkout.
+- [x] Test price/promotion stale conflict cho checkout.
 
 **Exit gate:** POS có thể tải cache catalog 10.000 SKU/variant trong profile test, scan/search local đạt budget, quote trả kết quả deterministic và conflict code ổn định.
 
@@ -253,13 +253,13 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement quantity milli-unit và value VND integer.
 - [x] Implement moving weighted average cost theo Warehouse + Variant.
 - [x] Implement `InventoryMovement` append-only và `InventoryBalance` projection batch update.
-- [ ] Implement opening balance/import-safe flow; không ghi trực tiếp balance.
+- [x] Implement opening balance/import-safe flow; không ghi trực tiếp balance.
 - [x] Implement `issueForSale`, `reserve`, `release`, `receive`, `return.receive/resolve`.
-- [ ] Implement lot FEFO và serial state guard.
-- [ ] Implement transfer state và stocktake state.
-- [ ] Test two receipts average cost, issue value rounding, concurrent last stock, expired lot, serial uniqueness, negative stock approval.
+- [x] Implement lot FEFO và serial state guard.
+- [x] Implement transfer state và stocktake state.
+- [x] Test two receipts average cost, issue value rounding, concurrent last stock, expired lot, serial uniqueness, negative stock approval.
 
-**Tracking hiện tại:** Core receive/issue/reserve/release/return quarantine/restock, table registry, API composition, local fake backend và Inventory/Purchasing UI shell đã triển khai trong [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md). Opening/import-safe flow, lot/serial guard, transfer/stocktake state và full concurrency/performance matrix vẫn để mở cho các slice sau.
+**Tracking hiện tại:** Core receive/issue/reserve/release/return quarantine/restock, table registry, API composition, local fake backend và Inventory/Purchasing UI shell đã triển khai trong [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md). Transfer/stocktake baseline, API composition, sheet-backed persistence và workbench UI đã triển khai trong [`2026-08-01-inventory-transfer-stocktake-baseline.md`](2026-08-01-inventory-transfer-stocktake-baseline.md). Opening/import-safe, `InventoryLotBalance`, `SerialState`, expired-lot guard, serial saleable guard và local test matrix average-cost/rounding/last-stock/negative-stock đã triển khai trong [`2026-08-01-inventory-opening-lot-serial-guard.md`](2026-08-01-inventory-opening-lot-serial-guard.md).
 
 **Exit gate:** Backend có thể tăng/giảm/reserve tồn qua command, balance đối soát được từ movement, không có đường sửa số dư trực tiếp.
 
@@ -278,15 +278,15 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Steps:**
 
-- [ ] Implement CashDrawer/PaymentMethod master.
+- [x] Implement CashDrawer/PaymentMethod master.
 - [x] Implement `finance.shift.open/close/lock` và policy một cashier/một drawer.
 - [x] Implement `finance.payment.record` với nhiều allocation.
-- [ ] Implement receivable/payable obligation ledger và aging projection.
+- [x] Implement receivable/payable obligation ledger và aging projection.
 - [x] Implement payment reversal/counter-transaction, không sửa payment gốc.
 - [x] Implement expense approval tạo disbursement/cash transaction.
 - [x] Test POS thiếu ca bị chặn, partial payment tạo receivable, overpayment tạo credit, reversal không sửa nguồn.
 
-**Tracking hiện tại:** Shift open/close/lock, payment record multi-allocation, receivable partial/settled, overpayment customer credit, reversal, expense cash transaction, POS missing-shift integration test, TableRegistry, API composition, local fake backend và Finance/Shifts UI shell đã triển khai trong [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md) và Phase 7. CashDrawer/PaymentMethod management commands, payable aging đầy đủ và finance performance/concurrency matrix vẫn để mở cho các slice sau.
+**Tracking hiện tại:** Shift open/close/lock, payment record multi-allocation, receivable partial/settled, payable obligation, overpayment customer credit, reversal, expense cash transaction, POS missing-shift integration test, TableRegistry, API composition, local fake backend và Finance/Shifts UI shell đã triển khai trong [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md), Phase 7 và slice Finance master/aging ngày 2026-08-02. CashDrawer/PaymentMethod master commands, `finance.master.get`, `finance.aging.get`, due-date aging buckets và local fake backend parity đã có test. Finance performance/concurrency matrix vẫn để mở cho các slice hardening sau.
 
 **Exit gate:** POS command có thể gọi Finance để ghi payment/AR/shift an toàn trong cùng command.
 
@@ -311,14 +311,14 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [ ] Implement POS checkout command with Sales -> Catalog -> Inventory -> Finance -> CRM orchestration.
 - [ ] Revalidate scope, shift, quote, stock, lot/serial, credit, tender total và idempotency trong commit.
 - [ ] Return structured conflict: `PRICE_CHANGED`, `PROMOTION_CHANGED`, `INSUFFICIENT_STOCK`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED`.
-- [ ] Return immutable receipt snapshot for K80/A4 browser print; print/reprint không tạo ledger.
+- [x] Return immutable receipt snapshot for K80/A4 browser print; print/reprint không tạo ledger.
 - [x] Implement POS UI from `app-pos-checkout.html` only after opening artifact/local preview.
 - [ ] Test full payment, partial payment, insufficient stock, missing serial, quote conflict, timeout retry, duplicate prevention, print no-ledger.
 - [x] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
 
 **Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + actor metadata + CommandTransaction một lần, receipt in được và retry không duplicate.
 
-**Tracking hiện tại:** Phase 7 baseline đã triển khai trong [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md): Sales contracts/schema, in-memory repository/service, API operations, TableRegistry Sales, local cart state, local fake backend Sales, POS UI interactive, full payment, partial receivable, insufficient stock, missing shift, price stale conflict và idempotency duplicate prevention. CRM policy ledger, lot/serial backend guard đầy đủ, credit policy, đủ toàn bộ conflict code runtime, print/reprint UI action không tạo ledger, timeout recovery và benchmark p95/p99 vẫn để mở.
+**Tracking hiện tại:** Phase 7 baseline đã triển khai trong [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md): Sales contracts/schema, in-memory repository/service, API operations, TableRegistry Sales, local cart state, local fake backend Sales, POS UI interactive, full payment, partial receivable, insufficient stock, missing shift, price stale conflict, idempotency duplicate prevention, receipt snapshot và print/reprint UI action không tạo ledger. Baseline hiện chưa bật voucher/points/promotion budget nên `PROMOTION_CHANGED`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED` là disabled policy cho tới khi module tương ứng được bật. CRM policy ledger, lot/serial backend guard đầy đủ, credit policy, timeout recovery và benchmark p95/p99 vẫn để mở.
 
 ## Phase 8: Sales Orders, Manual Online, Return & Warranty
 
@@ -334,7 +334,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement online manual lifecycle: Draft -> Confirmed -> Packing -> Shipped -> Delivered.
 - [x] Implement reservation ở Confirmed, issue/revenue/AR ở Shipped, Delivered không ledger lần hai.
 - [x] Implement cancel trước Shipped.
-- [ ] Implement deposit credit/refund behavior khi hủy đơn có đặt cọc.
+- [x] Implement deposit credit/refund behavior khi hủy đơn có đặt cọc.
 - [x] Implement return by source, fast return permission, inspection Quarantine/Restock/Scrap.
 - [x] Implement exchange as Return + new SaleOrder linked.
 - [x] Implement WarrantyCase lifecycle and attachment references.
@@ -342,7 +342,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Exit gate:** Chứng từ bán và hậu mãi giữ bất biến lịch sử, mọi sửa sai đi qua return/reversal/adjustment.
 
-**Tracking hiện tại:** Phase 8 baseline đã triển khai trong [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md), bổ sung Phase 8B trong [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md): Sales order list/detail query, online `Draft -> Confirmed -> Packing -> Shipped -> Delivered`, reservation ở Confirmed, release+issue+receivable ở Shipped, Delivered không tạo ledger lần hai, cancel trước Shipped baseline, return theo đơn gốc vào Quarantine/Restock/KeepQuarantine/Scrap, return refund/customer credit, fast-return denial, exchange = Return + SaleOrder mới liên kết với net settlement, WarrantyCase open/transition kèm attachment IDs, API/local fake backend và UI shell `orders` theo handoff Approved. Deposit credit/refund thật khi hủy đơn có đặt cọc, attachment Drive flow, CRM policy reversal đầy đủ và performance benchmark vẫn để mở.
+**Tracking hiện tại:** Phase 8 baseline đã triển khai trong [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md), bổ sung Phase 8B trong [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md): Sales order list/detail query, online `Draft -> Confirmed -> Packing -> Shipped -> Delivered`, reservation ở Confirmed, release+issue+receivable ở Shipped, Delivered không tạo ledger lần hai, cancel trước Shipped baseline, deposit cancel giữ `CustomerCredit` hoặc ghi refund counter-payment theo lựa chọn, return theo đơn gốc vào Quarantine/Restock/KeepQuarantine/Scrap, return refund/customer credit, fast-return denial, exchange = Return + SaleOrder mới liên kết với net settlement, WarrantyCase open/transition kèm attachment IDs, API/local fake backend và UI shell `orders` theo handoff Approved. Attachment Drive flow, CRM policy reversal đầy đủ và performance benchmark vẫn để mở.
 
 ## Phase 9: Purchasing & Supplier Operations
 
@@ -406,7 +406,9 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 **Steps:**
 
 - [x] Implement ImportBatch/ImportStagingRow canonical flow: template, upload, validate, confirm, commit by worker/chunk.
-- [ ] Implement attachment metadata and private Drive access; không trả public URL.
+- [x] Implement attachment metadata and private Drive access; không trả public URL.
+  - [x] `operations.attachment.upload` ghi file vào thư mục Drive Attachments riêng tư qua `DriveGateway.savePrivateAttachment`, lưu metadata và không trả public URL.
+  - [x] `operations.attachment.list/delete/download` kiểm quyền/scope, logical delete, trả content base64 qua backend khi storage hỗ trợ và không trả public URL.
 - [x] Superseded by ADR 0017: AuditOutbox delivery worker không còn là baseline cần release.
 - [x] Implement daily/manual backup manifest with checksums and retention 30 newest daily.
 - [ ] Implement restore prepare -> replacement resources -> Owner switch -> revoke sessions -> health check; không overwrite production.
@@ -416,7 +418,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Exit gate:** App có backup/restore/archive/health story đủ để bán một lần và vận hành dài hạn.
 
-**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Audit delivery/search đã bị superseded bởi ADR 0017 và không còn là baseline. Đã bổ sung `runImportCommitChunk` để commit import theo chunk/idempotent và scheduled worker wiring cho batch `Committing`; đã bổ sung `runArchiveChunk` và scheduled archive job cho closed transaction partition. Các checkbox master còn mở vì cần production Drive adapter cho attachment/backup/restore replacement resources, session revoke thật khi restore switch và Apps Script drill trên tài nguyên Google thật.
+**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Audit delivery/search đã bị superseded bởi ADR 0017 và không còn là baseline. Đã bổ sung `runImportCommitChunk` để commit import theo chunk/idempotent và scheduled worker wiring cho batch `Committing`; đã bổ sung `runArchiveChunk` và scheduled archive job cho closed transaction partition. Đã bổ sung `operations.attachment.upload/list/delete/download` + `DriveGateway.save/read/trashPrivateAttachment` để ghi, đọc và logical delete file trong thư mục Drive Attachments riêng tư trên production, không trả public URL. Các checkbox master còn mở vì cần backup/restore replacement resources, session revoke thật khi restore switch và Apps Script drill trên tài nguyên Google thật.
 
 ## Phase 12: Full Release Hardening
 

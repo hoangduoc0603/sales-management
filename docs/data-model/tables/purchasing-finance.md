@@ -18,10 +18,10 @@ All approved mutations have partition key, command correlation and actor metadat
 
 | Table | Lifecycle | Cột typed chính | JSON/snapshot |
 | --- | --- | --- | --- |
-| `CashDrawer` / `PaymentMethod` | master | ID, `branchId`, code, name, type, status, direct-sale eligibility | provider/config display metadata; no secret. |
+| `CashDrawer` / `PaymentMethod` | master | ID, `branchId` với CashDrawer, code, name, type, status, `directSaleEnabled` | provider/config display metadata; no secret. |
 | `Payment` | document | `paymentId`, `partitionKey`, `branchId`, payer/payee type and ID, source document, amount VND, method, status, effectiveAt, `shiftId`, reversal reference | tender/reference snapshot. |
 | `CashTransaction` | append-only ledger | `cashTransactionId`, partition, Branch, drawer/account, transaction type, amount VND signed, effectiveAt, payment/source/reversal ID, actor/approver, `shiftId` | reason/evidence snapshot. |
-| `ReceivableLedger` / `PayableLedger` | append-only obligation ledger | ID, partition, Branch, customer/supplier, source document, due date, original/allocated/remaining VND, status, reversal reference | obligation terms snapshot. |
+| `ReceivableLedger` / `PayableLedger` | append-only obligation ledger | ID, partition, Branch, customer/supplier, source document, `dueDate`, original/allocated/remaining VND, status, reversal reference | obligation terms snapshot. |
 | `PaymentAllocation` | append-only allocation | `allocationId`, partition, `paymentId`, receivable/payable ID, amount VND, allocatedAt, reversal reference | allocation reason. |
 | `CustomerCredit` / `SupplierPrepayment` | append-only balance evidence | ID, partition, party ID, source payment/refund, amount VND, consumed/reversed amount, status | source/effective snapshot. |
 | `Shift` | document/state | `shiftId`, partition, Branch, CashDrawer, Warehouse, cashier, status, openedAt, submitted/closed/locked times, opening/expected/actual/variance VND, approver | tender breakdown/reason/close evidence. |

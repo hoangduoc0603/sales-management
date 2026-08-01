@@ -5,6 +5,14 @@ export interface RuntimeConfigDTO {
   appVersion: string;
   schemaVersion: number;
   driveRootFolderId: string;
+  driveFolders?: {
+    attachments: { id: string; name: string };
+    backups: { id: string; name: string };
+    exports: { id: string; name: string };
+    archive: { id: string; name: string };
+    templates: { id: string; name: string };
+    generatedDocuments: { id: string; name: string };
+  };
   storage: {
     core: { spreadsheetId: string };
     runtime: { spreadsheetId: string };

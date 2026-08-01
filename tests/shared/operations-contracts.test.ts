@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseAttachmentAccessRequest,
+  parseAttachmentDeleteRequest,
+  parseAttachmentListRequest,
+  parseAttachmentUploadRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -11,7 +14,7 @@ import {
   parseRestoreSwitchRequest,
   parseRuntimeCleanupRequest,
 } from '../../shared/schemas/operations/operations';
-import type { AttachmentAccessResponse } from '../../shared/contracts/operations/operations';
+import type { AttachmentAccessResponse, AttachmentUploadResponse } from '../../shared/contracts/operations/operations';
 
 describe('operations contracts', () => {
   it('registers operations required for import, attachment, backup, restore, health and runtime lifecycle', () => {
@@ -21,8 +24,11 @@ describe('operations contracts', () => {
         'operations.import.upload',
         'operations.import.validate',
         'operations.import.commit',
+        'operations.attachment.upload',
+        'operations.attachment.list',
         'operations.attachment.complete',
         'operations.attachment.download',
+        'operations.attachment.delete',
         'operations.backup.request',
         'operations.backup.list',
         'operations.restore.prepare',
@@ -64,6 +70,27 @@ describe('operations contracts', () => {
   });
 
   it('validates attachment access without exposing public Drive URL in the response contract', () => {
+    const uploadRequest = parseAttachmentUploadRequest({
+      objectType: 'Expense',
+      objectId: 'expense-1',
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      fileName: 'receipt.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 1024,
+      checksum: 'checksum-1',
+      contentBase64: 'cmVjZWlwdA==',
+      commandId: 'cmd-attachment-upload-1',
+      idempotencyKey: 'idem-attachment-upload-1',
+    });
+    expect(uploadRequest).toMatchObject({ objectType: 'Expense', fileName: 'receipt.pdf' });
+
+    expect(
+      parseAttachmentListRequest({
+        objectType: 'Expense',
+        objectId: 'expense-1',
+      }),
+    ).toMatchObject({ objectId: 'expense-1' });
     expect(
       parseAttachmentAccessRequest({
         attachmentId: 'att-1',
@@ -71,7 +98,33 @@ describe('operations contracts', () => {
         objectId: 'expense-1',
       }),
     ).toMatchObject({ attachmentId: 'att-1' });
+    expect(
+      parseAttachmentDeleteRequest({
+        attachmentId: 'att-1',
+        objectType: 'Expense',
+        objectId: 'expense-1',
+        commandId: 'cmd-attachment-delete-1',
+        idempotencyKey: 'idem-attachment-delete-1',
+      }),
+    ).toMatchObject({ attachmentId: 'att-1' });
 
+    const uploadResponse: AttachmentUploadResponse = {
+      attachment: {
+        attachmentId: 'att-1',
+        objectType: 'Expense',
+        objectId: 'expense-1',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        driveFileId: 'drive-file-1',
+        fileName: 'receipt.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        checksum: 'checksum-1',
+        status: 'Available',
+        uploadedBy: 'user-admin',
+        uploadedAt: '2026-07-27T00:00:00.000Z',
+      },
+    };
     const response: AttachmentAccessResponse = {
       attachment: {
         attachmentId: 'att-1',
@@ -90,8 +143,11 @@ describe('operations contracts', () => {
       },
       accessToken: 'internal-download-token',
       expiresAt: '2026-07-27T00:05:00.000Z',
+      contentBase64: 'cmVjZWlwdA==',
     };
 
+    expect(JSON.stringify(uploadResponse)).not.toContain('https://drive.google.com');
+    expect(JSON.stringify(uploadResponse)).not.toContain('publicUrl');
     expect(JSON.stringify(response)).not.toContain('https://drive.google.com');
     expect(JSON.stringify(response)).not.toContain('publicUrl');
   });

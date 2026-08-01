@@ -174,10 +174,26 @@ export function parseSalesOnlineTransitionRequest(value: unknown): SalesOnlineTr
   return salesOnlineTransitionRequestSchema.parse(value);
 }
 
-export const salesOnlineCancelRequestSchema = salesOnlineTransitionRequestSchema.extend({
-  reason: nonEmptyTrimmed,
-  depositTreatment: z.enum(['KeepCustomerCredit', 'Refund']).optional(),
-});
+export const salesOnlineCancelRequestSchema = salesOnlineTransitionRequestSchema
+  .extend({
+    reason: nonEmptyTrimmed,
+    depositTreatment: z.enum(['KeepCustomerCredit', 'Refund']).optional(),
+    cashDrawerId: optionalNonEmptyTrimmed,
+    paymentMethodId: optionalNonEmptyTrimmed,
+    approverId: optionalNonEmptyTrimmed,
+    shiftId: optionalNonEmptyTrimmed,
+  })
+  .superRefine((value, context) => {
+    if (value.depositTreatment !== 'Refund') return;
+    for (const fieldName of ['cashDrawerId', 'paymentMethodId', 'approverId'] as const) {
+      if (value[fieldName] !== undefined) continue;
+      context.addIssue({
+        code: 'custom',
+        path: [fieldName],
+        message: 'Refund deposit requires cash drawer, payment method and approver.',
+      });
+    }
+  });
 
 export function parseSalesOnlineCancelRequest(value: unknown): SalesOnlineCancelRequest {
   return salesOnlineCancelRequestSchema.parse(value);

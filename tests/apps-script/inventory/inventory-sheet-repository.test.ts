@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type {
   InventoryBalanceDTO,
+  InventoryLotBalanceDTO,
   InventoryMovementDTO,
+  SerialStateDTO,
+  StocktakeLineDTO,
+  StocktakeSessionDTO,
+  StockTransferDTO,
+  StockTransferLineDTO,
 } from '../../../shared/contracts/inventory/inventory';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
 import { createSheetInventoryRepository } from '../../../apps-script/src/repositories/inventory/inventory-repository';
@@ -151,6 +157,72 @@ describe('Sheet-backed InventoryRepository', () => {
       },
     ]);
   });
+
+  it('persists stock transfer and stocktake document state as versioned rows', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.saveStockTransfer(transferFixture);
+    repository.saveStockTransfer({ ...transferFixture, status: 'Approved', approvedBy: 'manager-1', approvedAt: '2026-07-27T01:05:00.000Z' });
+    repository.saveStockTransferLines([transferLineFixture]);
+    repository.saveStocktakeSession(stocktakeSessionFixture);
+    repository.saveStocktakeLines([stocktakeLineFixture]);
+
+    expect(repository.getStockTransfer('transfer-1')).toMatchObject({
+      transferId: 'transfer-1',
+      status: 'Approved',
+      approvedBy: 'manager-1',
+    });
+    expect(repository.listStockTransferLines('transfer-1')).toEqual([transferLineFixture]);
+    expect(repository.getStocktakeSession('stocktake-1')).toEqual(stocktakeSessionFixture);
+    expect(repository.listStocktakeLines('stocktake-1')).toEqual([stocktakeLineFixture]);
+    expect(gateway.appendRequests.map((request) => request.tableName)).toEqual([
+      'StockTransfer',
+      'StockTransfer',
+      'StockTransferLine',
+      'StocktakeSession',
+      'StocktakeLine',
+    ]);
+    expect(gateway.appendRequests[1]?.rows[0]).toMatchObject({ id: 'transfer-1:v2', recordVersion: 2 });
+  });
+
+  it('persists latest lot balance and serial state projection rows', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.applyLotProjection(lotBalanceFixture);
+    repository.applyLotProjection({ ...lotBalanceFixture, availableMilli: 700 });
+    repository.saveSerialState(serialStateFixture);
+    repository.saveSerialState({ ...serialStateFixture, status: 'Sold', updatedAt: '2026-07-27T02:00:00.000Z' });
+
+    expect(repository.getLotBalance('warehouse-1', 'variant-1', 'lot-1')).toMatchObject({
+      lotId: 'lot-1',
+      availableMilli: 700,
+    });
+    expect(repository.listLotBalances('warehouse-1', 'variant-1')).toHaveLength(1);
+    expect(repository.getSerialState('SERIAL-001')).toMatchObject({
+      serialId: 'SERIAL-001',
+      status: 'Sold',
+    });
+    expect(gateway.appendRequests.map((request) => request.tableName)).toEqual([
+      'InventoryLotBalance',
+      'InventoryLotBalance',
+      'SerialState',
+      'SerialState',
+    ]);
+    expect(gateway.appendRequests[1]?.rows[0]).toMatchObject({
+      id: 'lot-balance-warehouse-1-variant-1-lot-1:v2',
+      recordVersion: 2,
+    });
+  });
 });
 
 const movementFixture: InventoryMovementDTO = {
@@ -194,6 +266,72 @@ const balanceRowFixture = {
   quarantineMilli: 0,
   inventoryValueVnd: 100000,
   asOfMovementId: 'movement-1',
+};
+
+const transferFixture: StockTransferDTO = {
+  transferId: 'transfer-1',
+  tenantId: 'tenant-default',
+  sourceWarehouseId: 'warehouse-source',
+  destinationWarehouseId: 'warehouse-destination',
+  status: 'PendingApproval',
+  reasonCode: 'replenishment',
+  createdBy: 'user-admin',
+  createdAt: '2026-07-27T01:00:00.000Z',
+};
+
+const transferLineFixture: StockTransferLineDTO = {
+  transferLineId: 'transfer-line-1',
+  transferId: 'transfer-1',
+  variantId: 'variant-1',
+  quantityMilli: 10_000,
+  receivedQuantityMilli: 0,
+  unitCostVnd: 100_000,
+};
+
+const stocktakeSessionFixture: StocktakeSessionDTO = {
+  stocktakeSessionId: 'stocktake-1',
+  tenantId: 'tenant-default',
+  warehouseId: 'warehouse-1',
+  status: 'InProgress',
+  snapshotAt: '2026-07-27T01:00:00.000Z',
+  scopeVariantIds: ['variant-1'],
+  createdBy: 'counter-1',
+  createdAt: '2026-07-27T01:00:00.000Z',
+};
+
+const stocktakeLineFixture: StocktakeLineDTO = {
+  stocktakeLineId: 'stocktake-line-1',
+  stocktakeSessionId: 'stocktake-1',
+  variantId: 'variant-1',
+  snapshotQuantityMilli: 10_000,
+  countedQuantityMilli: 9_000,
+  varianceMilli: -1_000,
+  movementsAfterSnapshotCount: 1,
+  reasonCode: 'count-diff',
+};
+
+const lotBalanceFixture: InventoryLotBalanceDTO = {
+  lotBalanceId: 'lot-balance-warehouse-1-variant-1-lot-1',
+  tenantId: 'tenant-default',
+  warehouseId: 'warehouse-1',
+  variantId: 'variant-1',
+  lotId: 'lot-1',
+  lotCode: 'LOT-2408-A',
+  expiryDate: '2026-08-31',
+  onHandMilli: 1000,
+  availableMilli: 1000,
+  quarantineMilli: 0,
+  asOfMovementId: 'movement-1',
+};
+
+const serialStateFixture: SerialStateDTO = {
+  serialId: 'SERIAL-001',
+  tenantId: 'tenant-default',
+  warehouseId: 'warehouse-1',
+  variantId: 'variant-1',
+  status: 'Saleable',
+  sourceMovementId: 'movement-1',
+  updatedAt: '2026-07-27T00:00:00.000Z',
 };
 
 class FakeSheetGateway {

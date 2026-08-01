@@ -359,6 +359,10 @@ function ensureFixtureInventory(
   if (currentAvailable >= fixtureQuantityTargetMilli) return;
 
   const deltaMilli = fixtureQuantityTargetMilli - currentAvailable;
+  const hasMovementHistory = deps.inventoryRepository
+    .listMovements()
+    .some((movement) => movement.warehouseId === fixtureWarehouseId && movement.variantId === variantId);
+  const sourceType = hasMovementHistory ? 'PurchaseReceipt' : 'OpeningBalance';
   const received = inventoryService.receive({
     commandId: `cmd-pos-acceptance-opening-${variantId}-${deltaMilli}`,
     idempotencyKey: `idem-pos-acceptance-opening-${variantId}-${deltaMilli}`,
@@ -367,8 +371,8 @@ function ensureFixtureInventory(
     quantityMilli: deltaMilli,
     unitCostVnd: fixtureUnitCostVnd,
     sourceDocument: {
-      sourceType: 'OpeningBalance',
-      sourceId: `opening-pos-acceptance-${variantId}`,
+      sourceType,
+      sourceId: `${sourceType === 'OpeningBalance' ? 'opening' : 'receipt'}-pos-acceptance-${variantId}`,
     },
   });
   if (!received.ok) {
@@ -385,6 +389,7 @@ function ensureFixtureFinanceMaster(deps: PosAcceptanceDrillDependencies): void 
     name: 'Két tiền chính',
     drawerType: 'Cash',
     status: 'Active',
+    directSaleEnabled: true,
   });
   deps.financeRepository.savePaymentMethod({
     paymentMethodId: fixturePaymentMethodId,
@@ -393,6 +398,7 @@ function ensureFixtureFinanceMaster(deps: PosAcceptanceDrillDependencies): void 
     name: 'Tiền mặt',
     methodType: 'Cash',
     status: 'Active',
+    directSaleEnabled: true,
   });
 }
 

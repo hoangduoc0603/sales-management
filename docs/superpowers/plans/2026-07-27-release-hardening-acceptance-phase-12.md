@@ -46,9 +46,9 @@ Baseline hiện đã có nhiều contract/service/repository in-memory, API comp
 | Phase 4 | Price/promotion stale conflict cho checkout. | Cần có nếu POS dùng pricing/promotion cache. |
 | Phase 5 | Opening balance/import-safe flow, lot FEFO/serial guard, transfer/stocktake, concurrency/performance matrix. | Opening balance và stocktake gần như bắt buộc để cửa hàng bắt đầu dùng; lot/serial/transfer có thể bật theo cấu hình nhưng phải có guard rõ nếu UI cho phép. |
 | Phase 6 | CashDrawer/PaymentMethod master, receivable/payable aging projection. | PaymentMethod/CashDrawer cần cho POS thực tế; aging projection cần cho công nợ bán được. |
-| Phase 8 | Deposit credit/refund khi hủy đơn có đặt cọc; attachment Drive flow; CRM policy reversal đầy đủ. | Cần ít nhất policy rõ và test nếu cho nhận cọc. |
+| Phase 8 | Attachment Drive flow và CRM policy reversal đầy đủ. Deposit credit/refund khi hủy đơn có đặt cọc đã có baseline test. | Cần chốt file đính kèm và policy reversal trong release đầu; deposit cancel đã có evidence local. |
 | Phase 10 | Archive coverage partial, drill-down token revalidates permission, worker-backed export không giữ ScriptLock. | Cần cho báo cáo/export production và bảo mật dữ liệu nhạy cảm. |
-| Phase 11 | Import worker/chunk, attachment private Drive, backup retention, restore replacement, archive read-only routing. | Cần cho vận hành dài hạn; audit delivery đã superseded bởi ADR 0017. |
+| Phase 11 | Import worker/chunk, backup retention, restore replacement, archive read-only routing. | Attachment private Drive lifecycle đã có baseline production adapter; các phần lifecycle còn lại cần cho vận hành dài hạn. Audit delivery đã superseded bởi ADR 0017. |
 
 ### Decision points cần user duyệt trong Phase 12
 

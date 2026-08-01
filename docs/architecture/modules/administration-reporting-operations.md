@@ -54,7 +54,7 @@ Attachment: PendingUpload -> Available | Unavailable | Deleted
 
 `report.export.request` chốt query specification, actor, scope, selected columns và snapshot `asOf` trước khi tạo `ExportRun`. Backend bỏ cột/row ngoài permission trước khi render CSV/XLSX. Export nhỏ có thể hoàn thành đồng bộ ngoài ScriptLock; export lớn luôn worker/checkpoint và ghi file vào `Exports/` private. `export.download` lại xác thực actor/scope/run owner; không trả public Drive URL. File hết TTL chuyển `Expired` và chỉ cleanup file kỹ thuật theo policy.
 
-`attachment.upload.begin/complete`, `attachment.list/download/delete` luôn kiểm tra quyền xem/sửa object nguồn trước Drive access. Metadata giữ object ID, partition, checksum/version, lifecycle và actor metadata; delete logical giữ history trên record metadata. Integrity worker chuyển metadata thành `Unavailable` nếu file bị xóa ngoài ứng dụng.
+`attachment.upload` baseline nhận nội dung file nhỏ dạng base64, ghi vào thư mục Drive Attachments riêng tư và chỉ lưu metadata; không trả public URL. `attachment.upload.begin/complete` có thể bổ sung sau cho file lớn/chunked upload. `attachment.list/download/delete` luôn kiểm tra quyền xem/sửa object nguồn trước Drive access; download trả nội dung qua backend/token nội bộ, không trả Drive URL. Metadata giữ object ID, partition, checksum/version, lifecycle và actor metadata; delete logical giữ history trên record metadata. Integrity worker chuyển metadata thành `Unavailable` nếu file bị xóa ngoài ứng dụng.
 
 Baseline không có `audit.search` hoặc `audit.deliver`; khi cần xem ai tạo/sửa/duyệt/hủy, UI/API đọc field actor metadata trên record nguồn.
 

@@ -349,7 +349,14 @@ describe('Google Workspace adapter seams', () => {
 
   it('creates private tenant Drive folders without public URLs', () => {
     const driveApp = new FakeDriveApp();
-    const gateway = createDriveGateway({ driveApp });
+    const gateway = createDriveGateway({
+      driveApp,
+      utilities: {
+        base64Decode: (value) => [...value].map((char) => char.charCodeAt(0)),
+        base64Encode: (data) => String.fromCharCode(...data),
+        newBlob: (data, mimeType, fileName) => ({ data, mimeType, fileName }),
+      },
+    });
 
     const manifest = gateway.createTenantFolders({ businessName: 'Công ty Cenio Retail' });
 
@@ -362,6 +369,50 @@ describe('Google Workspace adapter seams', () => {
     expect(manifest.attachments.name).toBe('Attachments');
     expect(JSON.stringify(manifest)).not.toContain('https://drive.google.com');
     expect(driveApp.permissionCalls).toEqual([]);
+  });
+
+  it('stores private attachment files in the configured Drive folder without public URLs', () => {
+    const driveApp = new FakeDriveApp();
+    const gateway = createDriveGateway({
+      driveApp,
+      utilities: {
+        base64Decode: (value) => [...value].map((char) => char.charCodeAt(0)),
+        base64Encode: (data) => String.fromCharCode(...data),
+        newBlob: (data, mimeType, fileName) => ({ data, mimeType, fileName }),
+      },
+    });
+    const manifest = gateway.createTenantFolders({ businessName: 'Công ty Cenio Retail' });
+
+    const file = gateway.savePrivateAttachment({
+      folderId: manifest.attachments.id,
+      fileName: 'receipt.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: 'cmVjZWlwdA==',
+    });
+
+    expect(file).toEqual({
+      driveFileId: 'file-1-receipt.pdf',
+      fileName: 'receipt.pdf',
+      mimeType: 'application/pdf',
+    });
+    expect(driveApp.createdFiles).toEqual([
+      {
+        folderId: manifest.attachments.id,
+        blob: {
+          data: [...'cmVjZWlwdA=='].map((char) => char.charCodeAt(0)),
+          mimeType: 'application/pdf',
+          fileName: 'receipt.pdf',
+        },
+      },
+    ]);
+    expect(JSON.stringify(file)).not.toContain('https://drive.google.com');
+    expect(driveApp.permissionCalls).toEqual([]);
+
+    expect(gateway.readPrivateAttachment({ driveFileId: file.driveFileId })).toEqual({
+      contentBase64: 'cmVjZWlwdA==',
+    });
+    gateway.trashPrivateAttachment({ driveFileId: file.driveFileId });
+    expect(driveApp.getFileById(file.driveFileId).trashed).toBe(true);
   });
 
   it('stores runtime config in script properties as JSON without exposing secrets in Sheets', () => {
@@ -553,26 +604,72 @@ class FakeSheetsAdvancedService {
 }
 
 class FakeDriveApp {
-  readonly root = new FakeFolder('root', 'root');
+  readonly root: FakeFolder;
+  readonly createdFiles: Array<{ folderId: string; blob: unknown }> = [];
   readonly permissionCalls: string[] = [];
+
+  constructor() {
+    this.root = new FakeFolder('root', 'root', this);
+  }
 
   createFolder(name: string): FakeFolder {
     return this.root.createFolder(name);
+  }
+
+  getFolderById(id: string): FakeFolder {
+    const folder = this.root.findFolderById(id);
+    if (folder === undefined) throw new Error(`Missing folder ${id}`);
+    return folder;
+  }
+
+  getFileById(id: string): FakeDriveFile {
+    const file = this.root.findFileById(id);
+    if (file === undefined) throw new Error(`Missing file ${id}`);
+    return file;
   }
 }
 
 class FakeFolder {
   readonly children: FakeFolder[] = [];
+  readonly files: FakeDriveFile[] = [];
 
   constructor(
     readonly id: string,
     readonly name: string,
+    private readonly driveApp?: FakeDriveApp,
   ) {}
 
   createFolder(name: string): FakeFolder {
-    const folder = new FakeFolder(`folder-${this.children.length + 1}-${name}`, name);
+    const folder = new FakeFolder(`folder-${this.children.length + 1}-${name}`, name, this.driveApp);
     this.children.push(folder);
     return folder;
+  }
+
+  createFile(blob: unknown): FakeDriveFile {
+    const fileName = typeof blob === 'object' && blob !== null && 'fileName' in blob ? String(blob.fileName) : 'file';
+    const file = new FakeDriveFile(`file-${this.files.length + 1}-${fileName}`, fileName, blob);
+    this.files.push(file);
+    this.driveApp?.createdFiles.push({ folderId: this.id, blob });
+    return file;
+  }
+
+  findFolderById(id: string): FakeFolder | undefined {
+    if (this.id === id) return this;
+    for (const child of this.children) {
+      const found = child.findFolderById(id);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+
+  findFileById(id: string): FakeDriveFile | undefined {
+    const direct = this.files.find((file) => file.id === id);
+    if (direct !== undefined) return direct;
+    for (const child of this.children) {
+      const found = child.findFileById(id);
+      if (found !== undefined) return found;
+    }
+    return undefined;
   }
 
   getId(): string {
@@ -581,6 +678,35 @@ class FakeFolder {
 
   getName(): string {
     return this.name;
+  }
+}
+
+class FakeDriveFile {
+  trashed = false;
+
+  constructor(
+    readonly id: string,
+    readonly name: string,
+    private readonly blob: unknown,
+  ) {}
+
+  getId(): string {
+    return this.id;
+  }
+
+  getName(): string {
+    return this.name;
+  }
+
+  getBlob(): { getBytes(): number[] } {
+    const data = typeof this.blob === 'object' && this.blob !== null && 'data' in this.blob && Array.isArray(this.blob.data)
+      ? this.blob.data
+      : [];
+    return { getBytes: () => data };
+  }
+
+  setTrashed(trashed: boolean): void {
+    this.trashed = trashed;
   }
 }
 

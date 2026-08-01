@@ -23,6 +23,7 @@ export interface CashDrawerDTO {
   name: string;
   drawerType: 'Cash' | 'Bank' | 'Wallet';
   status: 'Active' | 'Disabled';
+  directSaleEnabled: boolean;
 }
 
 export interface PaymentMethodDTO {
@@ -32,6 +33,7 @@ export interface PaymentMethodDTO {
   name: string;
   methodType: 'Cash' | 'BankTransfer' | 'Card' | 'QR' | 'Credit';
   status: 'Active' | 'Disabled';
+  directSaleEnabled: boolean;
 }
 
 export interface ShiftDTO {
@@ -91,11 +93,14 @@ export interface ObligationDTO {
   obligationType: 'Receivable' | 'Payable';
   partyId: string;
   sourceDocument: FinanceSourceDocumentDTO;
+  dueDate: string;
   originalAmountVnd: number;
   allocatedAmountVnd: number;
   remainingAmountVnd: number;
   status: 'Open' | 'PartiallyPaid' | 'Settled' | 'Reversed';
 }
+
+export type FinanceAgingBucket = 'Current' | '1-30' | '31-60' | '61-90' | '90+';
 
 export interface PaymentAllocationDTO {
   allocationId: string;
@@ -238,6 +243,79 @@ export interface FinanceExpenseApproveRequest {
   payeeName: string;
   reason: string;
   approverId: string;
+}
+
+export interface FinanceCashDrawerUpsertRequest {
+  commandId: string;
+  idempotencyKey: string;
+  cashDrawerId?: string;
+  branchId: string;
+  drawerCode: string;
+  name: string;
+  drawerType: CashDrawerDTO['drawerType'];
+  status: CashDrawerDTO['status'];
+  directSaleEnabled?: boolean;
+}
+
+export interface FinancePaymentMethodUpsertRequest {
+  commandId: string;
+  idempotencyKey: string;
+  paymentMethodId?: string;
+  methodCode: string;
+  name: string;
+  methodType: PaymentMethodDTO['methodType'];
+  status: PaymentMethodDTO['status'];
+  directSaleEnabled?: boolean;
+}
+
+export interface FinanceMasterDataRequest {
+  branchId?: string;
+  includeDisabled?: boolean;
+}
+
+export interface FinanceMasterDataResponse {
+  cashDrawers: readonly CashDrawerDTO[];
+  paymentMethods: readonly PaymentMethodDTO[];
+}
+
+export interface FinanceAgingProjectionRequest {
+  asOfDate: string;
+  branchId?: string;
+  obligationType?: ObligationDTO['obligationType'];
+  includeSettled?: boolean;
+}
+
+export interface FinanceAgingRowDTO {
+  obligationId: string;
+  branchId: string;
+  obligationType: ObligationDTO['obligationType'];
+  partyId: string;
+  sourceDocument: FinanceSourceDocumentDTO;
+  dueDate: string;
+  daysOverdue: number;
+  bucket: FinanceAgingBucket;
+  originalAmountVnd: number;
+  allocatedAmountVnd: number;
+  remainingAmountVnd: number;
+  status: ObligationDTO['status'];
+}
+
+export interface FinanceAgingTotalsDTO {
+  totalRemainingVnd: number;
+  currentVnd: number;
+  bucket1To30Vnd: number;
+  bucket31To60Vnd: number;
+  bucket61To90Vnd: number;
+  bucket90PlusVnd: number;
+}
+
+export interface FinanceAgingProjectionResponse {
+  generatedAt: string;
+  asOfDate: string;
+  branchId?: string;
+  obligationType?: ObligationDTO['obligationType'];
+  rows: readonly FinanceAgingRowDTO[];
+  totals: FinanceAgingTotalsDTO;
 }
 
 export interface FinancePaymentRecordResponse {

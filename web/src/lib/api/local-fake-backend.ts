@@ -22,8 +22,23 @@ import type {
   CustomerQuickCreateResponse,
   CustomerSearchResponse,
 } from '@shared/contracts/crm/customer';
-import type { InventoryBalanceSummaryResponse } from '@shared/contracts/inventory/inventory';
-import type { FinanceSummaryResponse } from '@shared/contracts/finance/finance';
+import type {
+  InventoryBalanceSummaryResponse,
+  InventoryStocktakeResponse,
+  InventoryTransferResponse,
+} from '@shared/contracts/inventory/inventory';
+import type {
+  CashDrawerDTO,
+  CashTransactionDTO,
+  CustomerCreditDTO,
+  FinanceAgingProjectionResponse,
+  FinanceMasterDataResponse,
+  FinancePaymentRecordResponse,
+  FinanceSummaryResponse,
+  ObligationDTO,
+  PaymentDTO,
+  PaymentMethodDTO,
+} from '@shared/contracts/finance/finance';
 import type {
   ReportingDashboardResponse,
   ReportingExportResponse,
@@ -32,7 +47,10 @@ import type {
 import type {
   AttachmentAccessResponse,
   AttachmentCompleteResponse,
+  AttachmentDeleteResponse,
+  AttachmentListResponse,
   AttachmentMetadataDTO,
+  AttachmentUploadResponse,
   BackupListResponse,
   BackupResponse,
   BackupRunDTO,
@@ -87,7 +105,22 @@ import {
   parseCustomerQuickCreateRequest,
   parseCustomerSearchRequest,
 } from '@shared/schemas/crm/customer';
-import { parseInventoryBalanceSummaryRequest } from '@shared/schemas/inventory/inventory';
+import {
+  parseInventoryBalanceSummaryRequest,
+  parseInventoryStocktakeApproveRequest,
+  parseInventoryStocktakeOpenRequest,
+  parseInventoryStocktakeSubmitRequest,
+  parseInventoryTransferApproveRequest,
+  parseInventoryTransferCreateRequest,
+  parseInventoryTransferReceiveRequest,
+  parseInventoryTransferShipRequest,
+} from '@shared/schemas/inventory/inventory';
+import {
+  parseFinanceAgingProjectionRequest,
+  parseFinanceCashDrawerUpsertRequest,
+  parseFinanceMasterDataRequest,
+  parseFinancePaymentMethodUpsertRequest,
+} from '@shared/schemas/finance/finance';
 import { parseDisableWarehouseRequest } from '@shared/schemas/platform/administration';
 import { parseAuthChangeOwnPasswordRequest, parseAuthLoginRequest } from '@shared/schemas/platform/auth';
 import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap';
@@ -111,6 +144,9 @@ import {
 import {
   parseAttachmentAccessRequest,
   parseAttachmentCompleteRequest,
+  parseAttachmentDeleteRequest,
+  parseAttachmentListRequest,
+  parseAttachmentUploadRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -198,6 +234,65 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
   const attachments = new Map<string, AttachmentMetadataDTO>();
   const backupRuns = new Map<string, BackupRunDTO>();
   const restoreRuns = new Map<string, RestoreRunDTO>();
+  const cashDrawers = new Map<string, CashDrawerDTO>([
+    [
+      'drawer-main',
+      {
+        cashDrawerId: 'drawer-main',
+        tenantId: 'tenant-default',
+        branchId: 'branch-default',
+        drawerCode: 'MAIN',
+        name: 'Két chính',
+        drawerType: 'Cash',
+        status: 'Active',
+        directSaleEnabled: true,
+      },
+    ],
+  ]);
+  const paymentMethods = new Map<string, PaymentMethodDTO>([
+    [
+      'cash',
+      {
+        paymentMethodId: 'cash',
+        tenantId: 'tenant-default',
+        methodCode: 'CASH',
+        name: 'Tiền mặt',
+        methodType: 'Cash',
+        status: 'Active',
+        directSaleEnabled: true,
+      },
+    ],
+    [
+      'bank',
+      {
+        paymentMethodId: 'bank',
+        tenantId: 'tenant-default',
+        methodCode: 'BANK',
+        name: 'Chuyển khoản',
+        methodType: 'BankTransfer',
+        status: 'Active',
+        directSaleEnabled: true,
+      },
+    ],
+  ]);
+  const financeObligations = new Map<string, ObligationDTO>([
+    [
+      'local-receivable-overdue',
+      {
+        obligationId: 'local-receivable-overdue',
+        tenantId: 'tenant-default',
+        branchId: 'branch-default',
+        obligationType: 'Receivable',
+        partyId: 'customer-1',
+        sourceDocument: { sourceType: 'SaleOrder', sourceId: 'SO-LOCAL-001' },
+        dueDate: '2026-07-20',
+        originalAmountVnd: 2_160_000,
+        allocatedAmountVnd: 0,
+        remainingAmountVnd: 2_160_000,
+        status: 'Open',
+      },
+    ],
+  ]);
   const partitions = new Map<string, PartitionDTO>([
     [
       'transaction',
@@ -448,6 +543,111 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             user,
             () => createLocalInventoryBalanceSummary(),
           );
+        case 'inventory.transfer.create':
+          try {
+            parseInventoryTransferCreateRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryTransferResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalTransferResponse(apiRequest.payload, nextId, 'PendingApproval'),
+          );
+        case 'inventory.transfer.approve':
+          try {
+            parseInventoryTransferApproveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryTransferResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalTransferResponse(apiRequest.payload, nextId, 'Approved'),
+          );
+        case 'inventory.transfer.ship':
+          try {
+            parseInventoryTransferShipRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryTransferResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalTransferResponse(apiRequest.payload, nextId, 'Shipped'),
+          );
+        case 'inventory.transfer.receive':
+          try {
+            parseInventoryTransferReceiveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryTransferResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalTransferResponse(apiRequest.payload, nextId, 'Received'),
+          );
+        case 'inventory.stocktake.open':
+          try {
+            parseInventoryStocktakeOpenRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryStocktakeResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalStocktakeResponse(apiRequest.payload, nextId, 'InProgress'),
+          );
+        case 'inventory.stocktake.submit':
+          try {
+            parseInventoryStocktakeSubmitRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryStocktakeResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalStocktakeResponse(apiRequest.payload, nextId, 'Submitted'),
+          );
+        case 'inventory.stocktake.approve':
+          try {
+            parseInventoryStocktakeApproveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, InventoryStocktakeResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalStocktakeResponse(apiRequest.payload, nextId, 'Approved'),
+          );
         case 'finance.summary.get':
           return withSession<T, FinanceSummaryResponse>(
             apiRequest,
@@ -456,6 +656,66 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             now,
             user,
             () => createLocalFinanceSummary(),
+          );
+        case 'finance.master.get':
+          try {
+            parseFinanceMasterDataRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, FinanceMasterDataResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalFinanceMasterData(apiRequest.payload, cashDrawers, paymentMethods),
+          );
+        case 'finance.cashDrawer.upsert':
+          try {
+            parseFinanceCashDrawerUpsertRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, { cashDrawer: CashDrawerDTO }>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalCashDrawer(apiRequest.payload, cashDrawers, nextId),
+          );
+        case 'finance.paymentMethod.upsert':
+          try {
+            parseFinancePaymentMethodUpsertRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, { paymentMethod: PaymentMethodDTO }>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalPaymentMethod(apiRequest.payload, paymentMethods, nextId),
+          );
+        case 'finance.aging.get':
+          try {
+            parseFinanceAgingProjectionRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, FinanceAgingProjectionResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalFinanceAging(apiRequest.payload, financeObligations, now),
           );
         case 'purchasing.supplier.create':
           try {
@@ -686,6 +946,36 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             user,
             () => commitLocalImport(apiRequest.payload, importBatches, importRows, now),
           );
+        case 'operations.attachment.upload':
+          try {
+            parseAttachmentUploadRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, AttachmentUploadResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            (session) => uploadLocalAttachment(apiRequest.payload, session.actor.userId, attachments, nextId, now),
+          );
+        case 'operations.attachment.list':
+          try {
+            parseAttachmentListRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, AttachmentListResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => listLocalAttachments(apiRequest.payload, attachments),
+          );
         case 'operations.attachment.complete':
           try {
             parseAttachmentCompleteRequest(apiRequest.payload);
@@ -715,6 +1005,21 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             now,
             user,
             () => accessLocalAttachment(apiRequest.payload, attachments, now),
+          );
+        case 'operations.attachment.delete':
+          try {
+            parseAttachmentDeleteRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, AttachmentDeleteResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => deleteLocalAttachment(apiRequest.payload, attachments, now),
           );
         case 'operations.backup.request':
           try {
@@ -1395,6 +1700,7 @@ function transitionLocalOnlineSale(
             obligationType: 'Receivable',
             partyId: order.customerId ?? 'walk-in',
             sourceDocument: { sourceType: 'SaleOrder', sourceId: order.saleOrderId },
+            dueDate: now().toISOString().slice(0, 10),
             originalAmountVnd: order.receivableVnd,
             allocatedAmountVnd: 0,
             remainingAmountVnd: order.receivableVnd,
@@ -1402,6 +1708,69 @@ function transitionLocalOnlineSale(
           }
         : undefined,
   };
+  if (operation === 'sales.online.cancel' && order.paidVnd > 0) {
+    const cancelInput = input as ReturnType<typeof parseSalesOnlineCancelRequest>;
+    const sourceDocument = { sourceType: 'SaleOrder' as const, sourceId: order.saleOrderId };
+    if ((cancelInput.depositTreatment ?? 'KeepCustomerCredit') === 'KeepCustomerCredit') {
+      if (order.customerId === undefined) {
+        return localOperationError('INVALID_INPUT', 'Giữ tiền cọc thành tín dụng khách cần có khách hàng trên đơn.', operation, now);
+      }
+      response.customerCredit = {
+        creditId: `local-credit-${order.saleOrderId}`,
+        tenantId: 'tenant-default',
+        branchId: order.branchId,
+        customerId: order.customerId,
+        sourcePaymentId: order.saleOrderId,
+        sourceDocument,
+        amountVnd: order.paidVnd,
+        consumedAmountVnd: 0,
+        status: 'Open',
+      } satisfies CustomerCreditDTO;
+    } else {
+      if (
+        cancelInput.cashDrawerId === undefined ||
+        cancelInput.paymentMethodId === undefined ||
+        cancelInput.approverId === undefined
+      ) {
+        return localOperationError('INVALID_INPUT', 'Hoàn tiền cọc cần quỹ, phương thức thanh toán và người duyệt.', operation, now);
+      }
+      const payment: PaymentDTO = {
+        paymentId: `local-refund-payment-${order.saleOrderId}`,
+        tenantId: 'tenant-default',
+        branchId: order.branchId,
+        cashDrawerId: cancelInput.cashDrawerId,
+        paymentMethodId: cancelInput.paymentMethodId,
+        amountVnd: -order.paidVnd,
+        payerType: order.customerId === undefined ? 'Other' : 'Customer',
+        payerId: order.customerId,
+        sourceDocument,
+        status: 'Approved',
+        effectiveAt: timestamp,
+        shiftId: cancelInput.shiftId,
+      };
+      const cashTransaction: CashTransactionDTO = {
+        cashTransactionId: `local-refund-cash-${order.saleOrderId}`,
+        tenantId: 'tenant-default',
+        branchId: order.branchId,
+        cashDrawerId: cancelInput.cashDrawerId,
+        transactionType: 'Refund',
+        amountVnd: -order.paidVnd,
+        effectiveAt: timestamp,
+        paymentId: payment.paymentId,
+        sourceDocument,
+        actorId: cancelInput.approverId,
+        approverId: cancelInput.approverId,
+        shiftId: cancelInput.shiftId,
+        idempotencyKey: `${cancelInput.idempotencyKey}-deposit-refund`,
+      };
+      response.financeResult = {
+        payment,
+        cashTransaction,
+        allocations: [],
+        obligations: [],
+      } satisfies FinancePaymentRecordResponse;
+    }
+  }
   commandResults.set(input.idempotencyKey, response);
   return response;
 }
@@ -1802,6 +2171,106 @@ function createLocalInventoryBalanceSummary(): InventoryBalanceSummaryResponse {
   };
 }
 
+function createLocalTransferResponse(
+  payload: unknown,
+  nextId: (prefix: string) => string,
+  status: InventoryTransferResponse['transfer']['status'],
+): InventoryTransferResponse {
+  const request = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+  const transferId = String(request.transferId ?? nextId('transfer'));
+  const createLines = Array.isArray(request.lines) ? (request.lines as Record<string, unknown>[]) : [];
+  const receiveLines = Array.isArray(request.receivedLines) ? (request.receivedLines as Record<string, unknown>[]) : [];
+  const sourceWarehouseId = String(request.sourceWarehouseId ?? 'warehouse-default');
+  const destinationWarehouseId = String(request.destinationWarehouseId ?? 'warehouse-secondary');
+  const lines =
+    createLines.length > 0
+      ? createLines.map((line, index) => ({
+          transferLineId: String(line.transferLineId ?? `local-transfer-line-${index + 1}`),
+          transferId,
+          variantId: String(line.variantId ?? 'variant-milk-1l'),
+          quantityMilli: Number(line.quantityMilli ?? 4_000),
+          receivedQuantityMilli: status === 'Received' ? Number(line.quantityMilli ?? 4_000) : 0,
+          unitCostVnd: 100_000,
+        }))
+      : receiveLines.map((line, index) => ({
+          transferLineId: String(line.transferLineId ?? `local-transfer-line-${index + 1}`),
+          transferId,
+          variantId: 'variant-milk-1l',
+          quantityMilli: Number(line.receivedQuantityMilli ?? 4_000),
+          receivedQuantityMilli: Number(line.receivedQuantityMilli ?? 4_000),
+          unitCostVnd: 100_000,
+        }));
+
+  return {
+    transfer: {
+      transferId,
+      tenantId: 'tenant-default',
+      sourceWarehouseId,
+      destinationWarehouseId,
+      status,
+      reasonCode: typeof request.reasonCode === 'string' ? request.reasonCode : 'replenishment',
+      createdBy: 'user-admin',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      approvedBy: status === 'Approved' || status === 'Shipped' || status === 'Received' ? 'manager-1' : undefined,
+      approvedAt: status === 'Approved' || status === 'Shipped' || status === 'Received' ? '2026-07-27T00:05:00.000Z' : undefined,
+      shippedBy: status === 'Shipped' || status === 'Received' ? 'warehouse-1' : undefined,
+      shippedAt: status === 'Shipped' || status === 'Received' ? '2026-07-27T00:10:00.000Z' : undefined,
+      receivedBy: status === 'Received' ? 'warehouse-2' : undefined,
+      receivedAt: status === 'Received' ? '2026-07-27T00:15:00.000Z' : undefined,
+    },
+    lines,
+  };
+}
+
+function createLocalStocktakeResponse(
+  payload: unknown,
+  nextId: (prefix: string) => string,
+  status: InventoryStocktakeResponse['session']['status'],
+): InventoryStocktakeResponse {
+  const request = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+  const stocktakeSessionId = String(request.stocktakeSessionId ?? nextId('stocktake'));
+  const submittedLines = Array.isArray(request.lines) ? (request.lines as Record<string, unknown>[]) : [];
+  const lines =
+    submittedLines.length > 0
+      ? submittedLines.map((line, index) => ({
+          stocktakeLineId: String(line.stocktakeLineId ?? `local-stocktake-line-${index + 1}`),
+          stocktakeSessionId,
+          variantId: 'variant-milk-1l',
+          snapshotQuantityMilli: 10_000,
+          countedQuantityMilli: Number(line.countedQuantityMilli ?? 9_000),
+          varianceMilli: Number(line.countedQuantityMilli ?? 9_000) - 10_000,
+          movementsAfterSnapshotCount: 1,
+          reasonCode: typeof line.reasonCode === 'string' ? line.reasonCode : 'count-diff',
+        }))
+      : [
+          {
+            stocktakeLineId: 'local-stocktake-line-1',
+            stocktakeSessionId,
+            variantId: 'variant-milk-1l',
+            snapshotQuantityMilli: 10_000,
+            movementsAfterSnapshotCount: 0,
+          },
+        ];
+
+  return {
+    session: {
+      stocktakeSessionId,
+      tenantId: 'tenant-default',
+      warehouseId: String(request.warehouseId ?? 'warehouse-default'),
+      status,
+      snapshotAt: '2026-07-27T00:00:00.000Z',
+      scopeVariantIds: ['variant-milk-1l'],
+      createdBy: 'counter-1',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      submittedBy: status === 'Submitted' || status === 'Approved' ? 'counter-1' : undefined,
+      submittedAt: status === 'Submitted' || status === 'Approved' ? '2026-07-27T00:10:00.000Z' : undefined,
+      approvedBy: status === 'Approved' ? 'manager-1' : undefined,
+      approvedAt: status === 'Approved' ? '2026-07-27T00:15:00.000Z' : undefined,
+    },
+    lines,
+  };
+}
+
 function createLocalFinanceSummary(): FinanceSummaryResponse {
   return {
     generatedAt: '2026-07-27T00:00:00.000Z',
@@ -1811,6 +2280,138 @@ function createLocalFinanceSummary(): FinanceSummaryResponse {
     receivableOpenVnd: 2_160_000,
     payableOpenVnd: 0,
   };
+}
+
+function createLocalFinanceMasterData(
+  payload: unknown,
+  cashDrawers: Map<string, CashDrawerDTO>,
+  paymentMethods: Map<string, PaymentMethodDTO>,
+): FinanceMasterDataResponse {
+  const input = parseFinanceMasterDataRequest(payload);
+  const includeDisabled = input.includeDisabled ?? false;
+  return {
+    cashDrawers: [...cashDrawers.values()]
+      .filter((drawer) => input.branchId === undefined || drawer.branchId === input.branchId)
+      .filter((drawer) => includeDisabled || drawer.status === 'Active')
+      .sort((a, b) => a.drawerCode.localeCompare(b.drawerCode)),
+    paymentMethods: [...paymentMethods.values()]
+      .filter((method) => includeDisabled || method.status === 'Active')
+      .sort((a, b) => a.methodCode.localeCompare(b.methodCode)),
+  };
+}
+
+function createLocalCashDrawer(
+  payload: unknown,
+  cashDrawers: Map<string, CashDrawerDTO>,
+  nextId: (prefix: string) => string,
+): { cashDrawer: CashDrawerDTO } {
+  const input = parseFinanceCashDrawerUpsertRequest(payload);
+  const cashDrawer: CashDrawerDTO = {
+    cashDrawerId: input.cashDrawerId ?? nextId('cash-drawer'),
+    tenantId: 'tenant-default',
+    branchId: input.branchId,
+    drawerCode: input.drawerCode,
+    name: input.name,
+    drawerType: input.drawerType,
+    status: input.status,
+    directSaleEnabled: input.directSaleEnabled ?? true,
+  };
+  cashDrawers.set(cashDrawer.cashDrawerId, cashDrawer);
+  return { cashDrawer };
+}
+
+function createLocalPaymentMethod(
+  payload: unknown,
+  paymentMethods: Map<string, PaymentMethodDTO>,
+  nextId: (prefix: string) => string,
+): { paymentMethod: PaymentMethodDTO } {
+  const input = parseFinancePaymentMethodUpsertRequest(payload);
+  const paymentMethod: PaymentMethodDTO = {
+    paymentMethodId: input.paymentMethodId ?? nextId('payment-method'),
+    tenantId: 'tenant-default',
+    methodCode: input.methodCode,
+    name: input.name,
+    methodType: input.methodType,
+    status: input.status,
+    directSaleEnabled: input.directSaleEnabled ?? true,
+  };
+  paymentMethods.set(paymentMethod.paymentMethodId, paymentMethod);
+  return { paymentMethod };
+}
+
+function createLocalFinanceAging(
+  payload: unknown,
+  obligations: Map<string, ObligationDTO>,
+  now: () => Date,
+): FinanceAgingProjectionResponse {
+  const input = parseFinanceAgingProjectionRequest(payload);
+  const asOfDate = toLocalDateOnly(input.asOfDate);
+  const rows = [...obligations.values()]
+    .filter((obligation) => input.branchId === undefined || obligation.branchId === input.branchId)
+    .filter((obligation) => input.obligationType === undefined || obligation.obligationType === input.obligationType)
+    .filter((obligation) => (input.includeSettled ?? false) || obligation.status !== 'Settled')
+    .filter((obligation) => obligation.status !== 'Reversed')
+    .map((obligation) => {
+      const daysOverdue = Math.max(0, diffLocalDays(asOfDate, toLocalDateOnly(obligation.dueDate)));
+      return {
+        obligationId: obligation.obligationId,
+        branchId: obligation.branchId,
+        obligationType: obligation.obligationType,
+        partyId: obligation.partyId,
+        sourceDocument: obligation.sourceDocument,
+        dueDate: obligation.dueDate,
+        daysOverdue,
+        bucket: resolveLocalAgingBucket(daysOverdue),
+        originalAmountVnd: obligation.originalAmountVnd,
+        allocatedAmountVnd: obligation.allocatedAmountVnd,
+        remainingAmountVnd: obligation.remainingAmountVnd,
+        status: obligation.status,
+      };
+    })
+    .sort((a, b) => b.daysOverdue - a.daysOverdue || b.remainingAmountVnd - a.remainingAmountVnd);
+
+  return {
+    generatedAt: now().toISOString(),
+    asOfDate: input.asOfDate,
+    branchId: input.branchId,
+    obligationType: input.obligationType,
+    rows,
+    totals: rows.reduce(
+      (totals, row) => {
+        totals.totalRemainingVnd += row.remainingAmountVnd;
+        if (row.bucket === 'Current') totals.currentVnd += row.remainingAmountVnd;
+        if (row.bucket === '1-30') totals.bucket1To30Vnd += row.remainingAmountVnd;
+        if (row.bucket === '31-60') totals.bucket31To60Vnd += row.remainingAmountVnd;
+        if (row.bucket === '61-90') totals.bucket61To90Vnd += row.remainingAmountVnd;
+        if (row.bucket === '90+') totals.bucket90PlusVnd += row.remainingAmountVnd;
+        return totals;
+      },
+      {
+        totalRemainingVnd: 0,
+        currentVnd: 0,
+        bucket1To30Vnd: 0,
+        bucket31To60Vnd: 0,
+        bucket61To90Vnd: 0,
+        bucket90PlusVnd: 0,
+      },
+    ),
+  };
+}
+
+function resolveLocalAgingBucket(daysOverdue: number): 'Current' | '1-30' | '31-60' | '61-90' | '90+' {
+  if (daysOverdue <= 0) return 'Current';
+  if (daysOverdue <= 30) return '1-30';
+  if (daysOverdue <= 60) return '31-60';
+  if (daysOverdue <= 90) return '61-90';
+  return '90+';
+}
+
+function toLocalDateOnly(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+}
+
+function diffLocalDays(later: Date, earlier: Date): number {
+  return Math.floor((later.getTime() - earlier.getTime()) / 86_400_000);
 }
 
 function createLocalSupplier(
@@ -2013,6 +2614,7 @@ function approveLocalGoodsReceipt(
       obligationType: 'Payable',
       partyId: existing.goodsReceipt.supplierId,
       sourceDocument: { sourceType: 'PurchaseReceipt', sourceId: existing.goodsReceipt.goodsReceiptId },
+      dueDate: now().toISOString().slice(0, 10),
       originalAmountVnd: existing.goodsReceipt.totalPayableVnd,
       allocatedAmountVnd: 0,
       remainingAmountVnd: existing.goodsReceipt.totalPayableVnd,
@@ -2079,6 +2681,7 @@ function approveLocalSupplierReturn(
           obligationType: 'Payable' as const,
           partyId: existing.supplierReturn.supplierId,
           sourceDocument: { sourceType: 'PurchaseReceipt' as const, sourceId: existing.supplierReturn.goodsReceiptId ?? 'receipt-local' },
+          dueDate: now().toISOString().slice(0, 10),
           originalAmountVnd: 110_000,
           allocatedAmountVnd: existing.supplierReturn.totalVnd,
           remainingAmountVnd: 110_000 - existing.supplierReturn.totalVnd,
@@ -2470,6 +3073,33 @@ function completeLocalAttachment(
   return { attachment };
 }
 
+function uploadLocalAttachment(
+  payload: unknown,
+  actorId: string,
+  attachments: Map<string, AttachmentMetadataDTO>,
+  nextId: (prefix: string) => string,
+  now: () => Date,
+): AttachmentUploadResponse {
+  const input = parseAttachmentUploadRequest(payload);
+  const attachment: AttachmentMetadataDTO = {
+    attachmentId: nextId('attachment'),
+    objectType: input.objectType,
+    objectId: input.objectId,
+    branchId: input.branchId,
+    warehouseId: input.warehouseId,
+    driveFileId: `local-private-drive-file-${nextId('file')}`,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    checksum: input.checksum,
+    status: 'Available',
+    uploadedBy: actorId,
+    uploadedAt: now().toISOString(),
+  };
+  attachments.set(attachment.attachmentId, attachment);
+  return { attachment };
+}
+
 function accessLocalAttachment(
   payload: unknown,
   attachments: Map<string, AttachmentMetadataDTO>,
@@ -2490,7 +3120,42 @@ function accessLocalAttachment(
     attachment,
     accessToken: `attachment-access-token-${attachment.attachmentId}`,
     expiresAt: new Date(now().getTime() + 10 * 60 * 1000).toISOString(),
+    contentBase64: `local-private-content-${attachment.driveFileId}`,
   };
+}
+
+function listLocalAttachments(
+  payload: unknown,
+  attachments: Map<string, AttachmentMetadataDTO>,
+): AttachmentListResponse {
+  const input = parseAttachmentListRequest(payload);
+  return {
+    attachments: [...attachments.values()]
+      .filter((attachment) => attachment.objectType === input.objectType)
+      .filter((attachment) => attachment.objectId === input.objectId)
+      .filter((attachment) => attachment.status !== 'Deleted')
+      .filter((attachment) => input.branchId === undefined || attachment.branchId === input.branchId)
+      .filter((attachment) => input.warehouseId === undefined || attachment.warehouseId === input.warehouseId),
+  };
+}
+
+function deleteLocalAttachment(
+  payload: unknown,
+  attachments: Map<string, AttachmentMetadataDTO>,
+  now: () => Date,
+): AttachmentDeleteResponse | ApiResult<AttachmentDeleteResponse> {
+  const input = parseAttachmentDeleteRequest(payload);
+  const attachment = attachments.get(input.attachmentId);
+  if (attachment === undefined || attachment.objectType !== input.objectType || attachment.objectId !== input.objectId) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy tệp đính kèm hợp lệ.', 'operations.attachment.delete', now);
+  }
+  const deleted: AttachmentMetadataDTO = {
+    ...attachment,
+    status: 'Deleted',
+    deletedAt: now().toISOString(),
+  };
+  attachments.set(deleted.attachmentId, deleted);
+  return { attachment: deleted };
 }
 
 function requestLocalBackup(

@@ -50,6 +50,7 @@ describe('Production repository aggregate', () => {
       name: 'Tiền mặt',
       methodType: 'Cash',
       status: 'Active',
+      directSaleEnabled: true,
     });
     repositories.customerRepository.saveCustomer({
       customerId: 'customer-1',

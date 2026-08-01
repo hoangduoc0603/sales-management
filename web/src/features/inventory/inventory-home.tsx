@@ -47,12 +47,27 @@ const defaultRows: readonly InventoryHomeRow[] = [
   },
 ];
 
+const inventoryTabIds = [
+  'inventory',
+  'transfer',
+  'stocktake',
+  'adjustment',
+  'scrap',
+  'negative-cost',
+  'trace',
+  'purchase',
+] as const;
+
+type InventoryTabId = (typeof inventoryTabIds)[number];
+
 export function InventoryHome({
   generatedAt = '2026-07-27T00:00:00.000Z',
   route,
   rows = defaultRows,
 }: InventoryHomeProps) {
-  const [selectedTab, setSelectedTab] = useState(route === 'purchasing' ? 'purchase' : 'inventory');
+  const [selectedTab, setSelectedTab] = useState<InventoryTabId>(() =>
+    route === 'purchasing' ? 'purchase' : readInventoryHashTab() ?? 'inventory',
+  );
   const selectedRow = rows[0];
   const totalAvailableMilli = useMemo(
     () => rows.reduce((sum, row) => sum + row.availableMilli, 0),
@@ -60,8 +75,26 @@ export function InventoryHome({
   );
 
   useEffect(() => {
-    setSelectedTab(route === 'purchasing' ? 'purchase' : 'inventory');
+    if (route === 'purchasing') {
+      setSelectedTab('purchase');
+      return;
+    }
+
+    const syncHash = () => setSelectedTab(readInventoryHashTab() ?? 'inventory');
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
   }, [route]);
+
+  const handleTabChange = (tabId: string) => {
+    const nextTab = isInventoryTabId(tabId) ? tabId : 'inventory';
+    setSelectedTab(nextTab);
+    if (route !== 'purchasing' && nextTab !== 'inventory') {
+      window.history.replaceState(null, '', `#${nextTab}`);
+    } else if (route !== 'purchasing') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
 
   return (
     <div className="cn-inventory-shell">
@@ -81,7 +114,7 @@ export function InventoryHome({
       </header>
 
       <Tabs
-        onChange={setSelectedTab}
+        onChange={handleTabChange}
         selectedId={selectedTab}
         items={[
           {
@@ -98,8 +131,33 @@ export function InventoryHome({
           },
           {
             id: 'transfer',
-            label: 'Transfers & stocktake',
-            content: <TransferStocktakeWorkspace />,
+            label: 'Transfer',
+            content: <TransferWorkbench />,
+          },
+          {
+            id: 'stocktake',
+            label: 'Stocktake',
+            content: <StocktakeWorkbench />,
+          },
+          {
+            id: 'adjustment',
+            label: 'Adjustment',
+            content: <AdjustmentWorkbench />,
+          },
+          {
+            id: 'scrap',
+            label: 'Scrap',
+            content: <ScrapWorkbench />,
+          },
+          {
+            id: 'negative-cost',
+            label: 'Negative cost',
+            content: <NegativeCostWorkbench />,
+          },
+          {
+            id: 'trace',
+            label: 'Trace',
+            content: <TraceWorkbench />,
           },
           {
             id: 'purchase',
@@ -129,6 +187,16 @@ export function InventoryHome({
       </Panel>
     </div>
   );
+}
+
+function readInventoryHashTab(): InventoryTabId | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const hash = window.location.hash.replace('#', '');
+  return isInventoryTabId(hash) ? hash : undefined;
+}
+
+function isInventoryTabId(value: string): value is InventoryTabId {
+  return inventoryTabIds.includes(value as InventoryTabId);
 }
 
 function InventoryWorkspace({
@@ -264,40 +332,294 @@ function InventoryWorkspace({
   );
 }
 
-function TransferStocktakeWorkspace() {
+function TransferWorkbench() {
   return (
-    <div className="cn-catalog-grid">
+    <div className="cn-inventory-workbench-grid">
       <Panel
-        description="Draft → Pending Approval → Approved → Shipped → Partially Received → Received."
-        title="Transfers"
+        action={<Badge tone="info">Partially received</Badge>}
+        description="Kho nguồn và kho nhận đều được kiểm tra lại khi duyệt/xuất/nhận."
+        title="Điều chuyển TRF-240726-041"
       >
-        <div className="cn-mini-list">
-          <div className="cn-mini-row">
+        <WorkflowSteps
+          steps={[
+            { label: 'Draft', state: 'done' },
+            { label: 'Approved', state: 'done' },
+            { label: 'Shipped', state: 'done' },
+            { label: 'Partially received', state: 'active' },
+          ]}
+        />
+        <div className="cn-workbench-list">
+          <div className="cn-workbench-row">
             <span>
-              <strong>TR-260726-0018 · Kho trung tâm → Kho cửa hàng</strong>
-              <small>12 chai · shipped 09:20</small>
+              <strong>Kho nguồn · Kho bán lẻ</strong>
+              <small>Người tạo: Linh Nguyễn · đã xuất 4 dòng.</small>
             </span>
-            <Badge tone="info">Shipped</Badge>
+            <Badge tone="success">Shipped</Badge>
           </div>
-          <div className="cn-mini-row">
+          <div className="cn-workbench-row">
             <span>
-              <strong>TR-260725-0011 · nhận một phần</strong>
-              <small>8 bộ gửi · 5 bộ đã nhận · 3 bộ in-transit.</small>
+              <strong>Kho nhận · Kho Hàng mẫu</strong>
+              <small>Còn 1 line chênh lệch nhận thực tế.</small>
             </span>
-            <Badge tone="warning">Partially received</Badge>
+            <Badge tone="warning">Cần xử lý</Badge>
           </div>
+        </div>
+        <div className="cn-table-scroll cn-workbench-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Variant</th>
+                <th>Xuất</th>
+                <th>Đã nhận</th>
+                <th>Chênh lệch</th>
+                <th>Lot / serial</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>Senka 120g</strong>
+                  <small>SRM-120</small>
+                </td>
+                <td className="num">12</td>
+                <td className="num">10</td>
+                <td className="num">−2</td>
+                <td><Badge tone="info">LOT-2407-A</Badge></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Khăn giấy 80 tờ</strong>
+                  <small>KG-80</small>
+                </td>
+                <td className="num">24</td>
+                <td className="num">24</td>
+                <td className="num">0</td>
+                <td><Badge tone="success">Khớp</Badge></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </Panel>
       <Panel
-        description="Snapshot hệ thống khi mở phiên; movement sau snapshot hiển thị riêng."
-        title="Stocktake"
+        description="Không sửa quantity đã ship; chênh lệch nhận cần lý do và approval."
+        title="Approval guard"
       >
+        <div className="cn-notice cn-notice-warning">
+          <strong>Chênh lệch cần xử lý</strong>
+          <span>Nhận thiếu/hỏng phải có lý do chuẩn hóa trước khi hoàn tất phiếu nhận.</span>
+        </div>
+        <div className="cn-workbench-actions">
+          <Button variant="primary">Gửi duyệt chênh lệch</Button>
+          <Button variant="secondary">Từ chối nhận</Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function StocktakeWorkbench() {
+  return (
+    <div className="cn-inventory-workbench-grid">
+      <Panel
+        action={<Badge tone="info">Đang đếm</Badge>}
+        description="System snapshot được giữ cùng scope trước lúc nhập count."
+        title="Stocktake STK-240726-08"
+      >
+        <div className="cn-workbench-list">
+          <div className="cn-workbench-row">
+            <span>
+              <strong>Snapshot lúc 09:00</strong>
+              <small>CN Quận 3 · Kho bán lẻ · 428 variants.</small>
+            </span>
+            <Badge tone="success">Locked snapshot</Badge>
+          </div>
+        </div>
+        <div className="cn-notice cn-notice-warning">
+          <strong>Có 03 movement sau snapshot</strong>
+          <span>Variance phải tách rõ movement-after-snapshot trước khi gửi duyệt.</span>
+        </div>
+        <div className="cn-table-scroll cn-workbench-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Variant</th>
+                <th>System</th>
+                <th>Counted</th>
+                <th>After snapshot</th>
+                <th>Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Senka 120g</td>
+                <td className="num">18</td>
+                <td className="num">16</td>
+                <td className="num">−1 sale</td>
+                <td className="num">−1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+      <Panel title="Variance approval">
         <StateBlock
-          description="Variance phải submit để Approve/Reject; không tự ghi đè snapshot."
-          title="Kiểm kho cần approval trước movement"
+          description="Counter không được tự duyệt phiên kiểm kho. Approved mới tạo CountAdjustment movement."
+          title="Cần người duyệt"
+          tone="warning"
+        />
+        <div className="cn-workbench-actions">
+          <Button variant="primary">Gửi duyệt variance</Button>
+          <Button variant="secondary">Lưu nháp</Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function AdjustmentWorkbench() {
+  return (
+    <div className="cn-inventory-workbench-grid">
+      <Panel
+        action={<Badge tone="warning">Pending approval</Badge>}
+        description="Không ghi số dư trực tiếp; chỉ tạo movement có lý do/evidence."
+        title="Điều chỉnh tồn"
+      >
+        <div className="cn-choice-row">
+          <button className="active" type="button">Sai lệch kiểm kê</button>
+          <button type="button">Hàng hỏng</button>
+          <button type="button">Khác</button>
+        </div>
+        <div className="cn-workbench-row">
+          <span>
+            <strong>SRM-120 · Kho bán lẻ</strong>
+            <small>Điều chỉnh <span className="num">−1</span> · evidence: bien-ban-kiem-ke.pdf</small>
+          </span>
+          <Badge tone="info">Draft movement</Badge>
+        </div>
+      </Panel>
+      <Panel title="Evidence policy">
+        <div className="cn-notice cn-notice-warning">
+          <strong>Attachment bắt buộc nếu vượt ngưỡng</strong>
+          <span>Approval mới thay đổi stock card; không update trực tiếp balance.</span>
+        </div>
+        <div className="cn-workbench-actions">
+          <Button variant="primary">Submit approval</Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ScrapWorkbench() {
+  return (
+    <div className="cn-inventory-workbench-grid">
+      <Panel
+        action={<Badge tone="warning">Quarantine</Badge>}
+        description="Chọn lot/serial, lý do và bằng chứng trước khi submit."
+        title="Scrap & quarantine"
+      >
+        <div className="cn-workbench-row">
+          <span>
+            <strong>LOT-2407-A</strong>
+            <small>Senka 120g · hết hạn 30/07/2026 · 4 units.</small>
+          </span>
+          <Badge tone="warning">Blocked sale</Badge>
+        </div>
+        <div className="cn-choice-row">
+          <button className="active" type="button">Quarantine</button>
+          <button type="button">Scrap</button>
+          <button type="button">Restock</button>
+        </div>
+      </Panel>
+      <Panel title="Approval">
+        <StateBlock
+          description="Scrap chỉ có hiệu lực sau approval; hàng quarantine không được bán."
+          title="Guard theo trạng thái hàng"
           tone="info"
         />
+        <div className="cn-workbench-actions">
+          <Button variant="primary">Gửi duyệt</Button>
+        </div>
       </Panel>
+    </div>
+  );
+}
+
+function NegativeCostWorkbench() {
+  return (
+    <div className="cn-inventory-workbench-grid">
+      <Panel
+        action={<Badge tone="danger">Blocked</Badge>}
+        description="Temporary cost là state có approval, không phải silent balance edit."
+        title="Negative stock exception"
+      >
+        <div className="cn-notice cn-notice-danger">
+          <strong>Tồn khả dụng không đủ cho SRM-120</strong>
+          <span>Chỉ Manager/Owner có thể phê duyệt ngoại lệ, có temporary cost và lý do.</span>
+        </div>
+        <dl className="cn-workbench-kv">
+          <div><dt>Available</dt><dd className="num">0</dd></div>
+          <div><dt>Requested</dt><dd className="num">2</dd></div>
+          <div><dt>Temporary cost</dt><dd className="num">92.000 ₫</dd></div>
+        </dl>
+      </Panel>
+      <Panel title="Quyền hiện tại">
+        <Badge tone="danger">Không có quyền duyệt</Badge>
+        <div className="cn-workbench-actions">
+          <Button variant="secondary">Yêu cầu ngoại lệ</Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function TraceWorkbench() {
+  return (
+    <div className="cn-inventory-workbench-grid">
+      <Panel
+        action={<Badge tone="info">LOT-2407-A</Badge>}
+        description="Tra cứu trail từ receipt, transfer, adjustment đến sale/return nguồn."
+        title="Trace lot / serial"
+      >
+        <div className="cn-workbench-list">
+          <div className="cn-workbench-row">
+            <span>
+              <strong>GRN-240701-12</strong>
+              <small>Nhập 48 · 01/07 · supplier receipt.</small>
+            </span>
+            <Badge tone="success">Nguồn</Badge>
+          </div>
+          <div className="cn-workbench-row">
+            <span>
+              <strong>TRF-240726-041</strong>
+              <small>Xuất 12 · kho bán lẻ → kho Hàng mẫu.</small>
+            </span>
+            <Badge tone="info">Transfer</Badge>
+          </div>
+          <div className="cn-workbench-row">
+            <span>
+              <strong>SCR-240730-02</strong>
+              <small>Quarantine 4 · expiry guard.</small>
+            </span>
+            <Badge tone="warning">Quarantine</Badge>
+          </div>
+        </div>
+      </Panel>
+      <Panel description="Immutable card." title="Movement ledger">
+        <Button variant="secondary">Mở source drill-down</Button>
+      </Panel>
+    </div>
+  );
+}
+
+function WorkflowSteps({ steps }: { steps: readonly { label: string; state: 'active' | 'done' | 'todo' }[] }) {
+  return (
+    <div className="cn-workflow-steps" aria-label="Trạng thái chứng từ">
+      {steps.map((step) => (
+        <span className={`cn-workflow-step cn-workflow-step-${step.state}`} key={step.label}>
+          {step.label}
+        </span>
+      ))}
     </div>
   );
 }

@@ -153,7 +153,7 @@
 
 ## Self-Review
 
-- Spec coverage: covers list/detail, online lifecycle baseline, reservation/issue/AR/deliver no duplicate ledger, return by source/fast-return guard/restock, warranty case baseline and UI shell. Phase 8B bổ sung return refund/customer credit, KeepQuarantine/Scrap và exchange net settlement.
-- Intentional gaps: deposit credit/refund behavior khi hủy đơn có đặt cọc, attachment upload/download and full CRM policy reversal remain open for later slices.
+- Spec coverage: covers list/detail, online lifecycle baseline, reservation/issue/AR/deliver no duplicate ledger, cancel deposit credit/refund, return by source/fast-return guard/restock, warranty case baseline and UI shell. Phase 8B bổ sung return refund/customer credit, KeepQuarantine/Scrap và exchange net settlement.
+- Intentional gaps: attachment upload/download and full CRM policy reversal remain open for later slices.
 - Placeholder scan: no TBD/TODO placeholders.
 - Type consistency: service method and operation names use the `sales.<area>.<verb>` convention already used by Phase 7.

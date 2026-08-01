@@ -27,7 +27,9 @@ export type AppIconName =
   | 'box'
   | 'fileAlert'
   | 'warning'
-  | 'currency';
+  | 'currency'
+  | 'close'
+  | 'print';
 
 export interface AppIconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: AppIconName;
@@ -186,8 +188,23 @@ function renderIcon(name: AppIconName): ReactNode {
       return <path d="m6 9 6 6 6-6" />;
     case 'chevronRight':
       return <path d="m9 6 6 6-6 6" />;
+    case 'close':
+      return (
+        <>
+          <path d="M6 6l12 12" />
+          <path d="M18 6 6 18" />
+        </>
+      );
     case 'check':
       return <path d="m5 12 4 4 10-10" />;
+    case 'print':
+      return (
+        <>
+          <path d="M6 9V4h12v5" />
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+          <path d="M6 14h12v7H6Z" />
+        </>
+      );
     case 'refresh':
       return (
         <>
