@@ -11,7 +11,6 @@ describe('Production repository aggregate', () => {
       sheetGateway: gateway,
       tableDefinitions: createPlatformTableDefinitions(),
       transactionPartitionKey: 'FY2026-P01',
-      auditPartitionKey: 'AUDIT-2026-07',
       credentialVerifierStore: new FakeCredentialVerifierStore(),
     });
 
@@ -21,14 +20,6 @@ describe('Production repository aggregate', () => {
       status: 'Committed',
       createdAt: '2026-07-27T08:00:00.000Z',
       updatedAt: '2026-07-27T08:00:00.000Z',
-    });
-    repositories.auditOutboxRepository.append({
-      eventId: 'event-1',
-      commandId: 'cmd-1',
-      actorId: 'user-admin',
-      action: 'bootstrap.install',
-      status: 'Pending',
-      createdAt: '2026-07-27T08:00:00.000Z',
     });
     repositories.catalogRepository.saveProduct({
       productId: 'product-1',
@@ -131,7 +122,6 @@ describe('Production repository aggregate', () => {
 
     expect(gateway.appendRequests.map((request) => [request.tableName, request.partitionKey])).toEqual([
       ['CommandTransaction', 'FY2026-P01'],
-      ['AuditOutbox', 'FY2026-P01'],
       ['Product', undefined],
       ['InventoryMovement', 'FY2026-P01'],
       ['PaymentMethod', undefined],
@@ -154,7 +144,6 @@ describe('Production repository aggregate', () => {
         sheetGateway: new FakeSheetGateway(),
         tableDefinitions,
         transactionPartitionKey: 'FY2026-P01',
-        auditPartitionKey: 'AUDIT-2026-07',
         credentialVerifierStore: new FakeCredentialVerifierStore(),
       }),
     ).toThrow(/Missing sales table definition: SaleOrder/);

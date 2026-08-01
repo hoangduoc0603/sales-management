@@ -16,6 +16,6 @@ Các tài liệu tại đây mô tả Solution/System Design đã được phê 
 - [LLD Inventory](modules/inventory.md): ledger/balance, moving average, lot/serial, transfer và stocktake.
 - [LLD Purchasing](modules/purchasing.md): PO, receipt, chi phí mua muộn và return NCC.
 - [LLD Finance và Shift](modules/finance-shifts.md): payment, allocation, công nợ, két/ca và chi phí.
-- [LLD Administration, Reporting và Operations](modules/administration-reporting-operations.md): user/role/scope, import/export, audit, báo cáo, backup/restore và vận hành.
+- [LLD Administration, Reporting và Operations](modules/administration-reporting-operations.md): user/role/scope, import/export, báo cáo, backup/restore, actor metadata và vận hành.
 - [Rà soát mức sẵn sàng LLD](lld-traceability-review.md): truy vết SRS–LLD–schema–ADR và quality gate trước implementation.
 - [Cấu trúc thư mục](folder-structure.md): nguồn chuẩn về vị trí, trách nhiệm và ranh giới của các thư mục.

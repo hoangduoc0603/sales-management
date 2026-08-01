@@ -13,7 +13,7 @@ Backup manifest-first mọi storage partition/config/schema/checksum/attachment 
 
 ## Hệ quả
 
-Restore lâu hơn overwrite trực tiếp nhưng an toàn/kiểm tra được. Cần revoke session, audit và health-check sau switch.
+Restore lâu hơn overwrite trực tiếp nhưng an toàn/kiểm tra được. Cần revoke session, actor metadata trên restore run và health-check sau switch.
 
 ## Phương án không chọn
 

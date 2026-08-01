@@ -125,14 +125,14 @@ describe('operations API composition', () => {
 
     expect(
       api.invoke({
-        operation: 'operations.audit.search',
-        requestId: 'req-audit',
+        operation: 'operations.audit.search' as never,
+        requestId: 'req-audit-disabled',
         sessionToken: login.data.sessionToken,
         payload: {
           dateRange: { from: '2026-07-27', to: '2026-07-27' },
           pageSize: 50,
         },
       }),
-    ).toMatchObject({ ok: true, data: { events: expect.any(Array) } });
+    ).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
   });
 });

@@ -109,7 +109,7 @@ export function CatalogCrmHome({ route }: CatalogCrmHomeProps) {
         </Panel>
 
         <Panel
-          description="Template → private upload/staging → validation → confirmation → audit."
+          description="Template → private upload/staging → validation → confirmation; batch và record lưu người thực hiện."
           title="Catalog import"
         >
           <StateBlock

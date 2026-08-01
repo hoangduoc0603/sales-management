@@ -83,14 +83,12 @@ function createOperationsMaintenanceContext_() {
     }),
     tableDefinitions,
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
-    auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
     credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
   });
 
   let sequence = 0;
   const operationsService = createOperationsService({
     repository: repositories.operationsRepository,
-    auditOutboxRepository: repositories.auditOutboxRepository,
     tenantId: runtimeConfig.tenantId,
     appVersion: runtimeConfig.appVersion,
     schemaVersion: runtimeConfig.schemaVersion,

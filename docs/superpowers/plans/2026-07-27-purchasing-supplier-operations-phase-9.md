@@ -75,7 +75,7 @@
 - [x] Add failing tests for SupplierReturn limit and payable reduction behavior.
 - [x] Implement SupplierReturn approval with Inventory `PurchaseReturn` and Finance payable reduction handling.
 - [x] Implement SupplierReturn `Refund`/`Replacement`/SupplierPrepayment behavior.
-- [x] Implement Purchasing `AuditOutbox` for GoodsReceipt/SupplierReturn approval.
+- [x] Superseded by ADR 0017: GoodsReceipt/SupplierReturn approval lưu `approvedBy/approvedAt`, không ghi `AuditOutbox`.
 - [x] Wire Apps Script API and local fake backend.
 - [x] Run targeted tests.
 

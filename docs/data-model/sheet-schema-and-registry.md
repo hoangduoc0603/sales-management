@@ -15,13 +15,13 @@ Mỗi logical table có một definition versioned tối thiểu:
 type TableDefinition = {
   tableName: string;
   owner: BoundedContext;
-  storageRole: 'core' | 'runtime' | 'transaction' | 'audit';
+  storageRole: 'core' | 'runtime' | 'transaction';
   sheetName: string;
-  lifecycle: 'master' | 'runtime' | 'document' | 'ledger' | 'projection' | 'audit';
+  lifecycle: 'master' | 'runtime' | 'document' | 'ledger' | 'projection';
   schemaVersion: number;
   primaryKey: string;
   headers: readonly ColumnDefinition[];
-  partitionPolicy: 'none' | 'transaction-period' | 'audit-period';
+  partitionPolicy: 'none' | 'transaction-period';
   lookupKeys: readonly LookupKeyDefinition[];
 };
 ```

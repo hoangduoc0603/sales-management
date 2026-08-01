@@ -33,9 +33,6 @@ import type {
   AttachmentAccessResponse,
   AttachmentCompleteResponse,
   AttachmentMetadataDTO,
-  AuditDeliveryResponse,
-  AuditEventDTO,
-  AuditSearchResponse,
   BackupListResponse,
   BackupResponse,
   BackupRunDTO,
@@ -114,8 +111,6 @@ import {
 import {
   parseAttachmentAccessRequest,
   parseAttachmentCompleteRequest,
-  parseAuditDeliveryRequest,
-  parseAuditSearchRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -201,7 +196,6 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
   const importBatches = new Map<string, ImportBatchDTO>();
   const importRows = new Map<string, ImportStagingRowDTO[]>();
   const attachments = new Map<string, AttachmentMetadataDTO>();
-  const auditEvents: AuditEventDTO[] = [];
   const backupRuns = new Map<string, BackupRunDTO>();
   const restoreRuns = new Map<string, RestoreRunDTO>();
   const partitions = new Map<string, PartitionDTO>([
@@ -722,36 +716,6 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             user,
             () => accessLocalAttachment(apiRequest.payload, attachments, now),
           );
-        case 'operations.audit.search':
-          try {
-            parseAuditSearchRequest(apiRequest.payload);
-          } catch {
-            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
-          }
-
-          return withSession<T, AuditSearchResponse>(
-            apiRequest,
-            meta,
-            sessions,
-            now,
-            user,
-            () => searchLocalAudit(apiRequest.payload, auditEvents, now),
-          );
-        case 'operations.audit.deliver':
-          try {
-            parseAuditDeliveryRequest(apiRequest.payload);
-          } catch {
-            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
-          }
-
-          return withSession<T, AuditDeliveryResponse>(
-            apiRequest,
-            meta,
-            sessions,
-            now,
-            user,
-            () => deliverLocalAudit(apiRequest.payload, auditEvents, now),
-          );
         case 'operations.backup.request':
           try {
             parseBackupRequest(apiRequest.payload);
@@ -1151,8 +1115,6 @@ function createLocalAdminActor(authVersion: number): ActorContextDTO {
       'operations.import.manage',
       'operations.attachment.manage',
       'operations.attachment.view',
-      'operations.audit.view',
-      'operations.audit.deliver',
       'operations.backup.manage',
       'operations.restore.manage',
       'operations.health.view',
@@ -2531,46 +2493,6 @@ function accessLocalAttachment(
   };
 }
 
-function searchLocalAudit(payload: unknown, events: AuditEventDTO[], now: () => Date): AuditSearchResponse {
-  const input = parseAuditSearchRequest(payload);
-  const baselineEvent: AuditEventDTO = {
-    eventId: 'local-audit-bootstrap',
-    action: 'platform.bootstrap.install',
-    objectType: 'Tenant',
-    objectId: 'tenant-default',
-    actorId: 'user-admin',
-    branchId: 'branch-default',
-    warehouseId: 'warehouse-default',
-    occurredAt: now().toISOString(),
-    result: 'Delivered',
-    summary: { source: 'local-fake' },
-  };
-  const filtered = [baselineEvent, ...events]
-    .filter((event) => input.actorId === undefined || event.actorId === input.actorId)
-    .filter((event) => input.action === undefined || event.action === input.action)
-    .filter((event) => input.objectType === undefined || event.objectType === input.objectType)
-    .filter((event) => input.objectId === undefined || event.objectId === input.objectId)
-    .filter((event) => input.branchId === undefined || event.branchId === input.branchId)
-    .filter((event) => input.warehouseId === undefined || event.warehouseId === input.warehouseId)
-    .slice(0, input.pageSize);
-  return { events: filtered };
-}
-
-function deliverLocalAudit(payload: unknown, events: AuditEventDTO[], now: () => Date): AuditDeliveryResponse {
-  const input = parseAuditDeliveryRequest(payload);
-  events.push({
-    eventId: `local-audit-${input.runId}`,
-    action: 'operations.audit.deliver',
-    objectType: 'AuditOutbox',
-    objectId: input.runId,
-    actorId: 'system',
-    occurredAt: now().toISOString(),
-    result: 'Delivered',
-    summary: { deliveredCount: input.maxEvents },
-  });
-  return { runId: input.runId, deliveredCount: input.maxEvents, failedCount: 0 };
-}
-
 function requestLocalBackup(
   payload: unknown,
   actorId: string,
@@ -2881,15 +2803,6 @@ function createLocalPlatformTableDefinitions(): readonly TableDefinitionDTO[] {
       'createdAt',
       'updatedAt',
       'resultJson',
-    ]),
-    table('AuditOutbox', 'transaction', 'audit', 'transaction-period', [
-      'id',
-      'eventId',
-      'commandId',
-      'actorId',
-      'action',
-      'status',
-      'createdAt',
     ]),
     table('Session', 'runtime', 'runtime', 'none', [
       'id',

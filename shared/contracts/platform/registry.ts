@@ -9,17 +9,16 @@ export type BoundedContext =
   | 'reporting'
   | 'operations';
 
-export type StorageRole = 'core' | 'runtime' | 'transaction' | 'audit';
+export type StorageRole = 'core' | 'runtime' | 'transaction';
 
 export type TableLifecycle =
   | 'master'
   | 'runtime'
   | 'document'
   | 'ledger'
-  | 'projection'
-  | 'audit';
+  | 'projection';
 
-export type PartitionPolicy = 'none' | 'transaction-period' | 'audit-period';
+export type PartitionPolicy = 'none' | 'transaction-period';
 
 export type ColumnType = 'string' | 'integer' | 'boolean' | 'timestamp' | 'enum' | 'json';
 

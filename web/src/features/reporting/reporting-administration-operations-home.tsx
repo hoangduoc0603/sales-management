@@ -46,7 +46,7 @@ export function ReportingAdministrationOperationsHome({
           <p className="cn-breadcrumb">Reporting / Administration / Operations</p>
           <h1>{isAdminRoute ? 'Quản trị & vận hành hệ thống' : 'Báo cáo, quản trị & vận hành'}</h1>
           <p>
-            Báo cáo, export, audit, user/role/scope, import, attachment, backup/restore và health theo
+            Báo cáo, export, user/role/scope, import, attachment, backup/restore và health theo
             artifact Approved.
           </p>
         </div>
@@ -81,7 +81,7 @@ export function ReportingAdministrationOperationsHome({
           value={operationStatus}
         />
         <div className="cn-search-box" role="search">
-          <span>Tìm báo cáo, export run, audit hoặc user</span>
+          <span>Tìm báo cáo, export run, user hoặc tác vụ vận hành</span>
         </div>
       </div>
 
@@ -178,16 +178,16 @@ export function ReportingAdministrationOperationsHome({
         </Panel>
 
         <Panel
-          description="Audit search gồm pending+delivered; không lộ session token, password hoặc secret trong payload/export/error."
-          title="Audit & operations"
+          description="Operations health không lộ session token, password hoặc secret trong payload/export/error."
+          title="Operations health"
         >
           <div className="cn-mini-list">
             <div className="cn-mini-row">
               <span>
-                <strong>AuditOutbox pending</strong>
-                <small>Worker delivery idempotent sang AuditLog.</small>
+                <strong>Không lưu audit riêng</strong>
+                <small>Record nghiệp vụ lưu createdBy/updatedBy hoặc người duyệt tương ứng.</small>
               </span>
-              <Badge tone="warning">Pending</Badge>
+              <Badge tone="success">Baseline</Badge>
             </div>
           </div>
         </Panel>

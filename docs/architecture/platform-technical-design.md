@@ -32,11 +32,11 @@ type ApiResult<T> =
   | { ok: false; error: ApiError; meta: ApiMeta };
 ```
 
-`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Login trả kèm `currentScope`; phiên đã có token dùng `platform.session.bootstrap` để lấy actor + current scope trong một round-trip, không gọi tách `session.me` rồi `scope.getCurrent` trong luồng mở app. Token không được đưa vào telemetry, error, audit summary hoặc persisted command response.
+`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Login trả kèm `currentScope`; phiên đã có token dùng `platform.session.bootstrap` để lấy actor + current scope trong một round-trip, không gọi tách `session.me` rồi `scope.getCurrent` trong luồng mở app. Token không được đưa vào telemetry, error hoặc persisted command response.
 
 ## 2. Operation registry và pipeline
 
-Mỗi operation registry entry phải khai báo `kind` (`public`, `query`, `mutation`), input schema, output schema, required action, scope resolver, handler và policy telemetry/audit.
+Mỗi operation registry entry phải khai báo `kind` (`public`, `query`, `mutation`), input schema, output schema, required action, scope resolver, handler và policy telemetry khi cần.
 
 ```text
 invoke
@@ -57,11 +57,11 @@ invoke
 Mutation tạo/hoàn tất/duyệt/hủy/đảo phải mang `commandId` và `idempotencyKey`. Query, login và logout không được giả làm command nghiệp vụ.
 
 1. Ngoài lock: kiểm tra envelope, session, permission, payload và read hẹp không cạnh tranh.
-2. Trong `ScriptLock`: kiểm tra idempotency lần cuối, fresh-read dữ liệu cạnh tranh, chạy guard/state transition, cấp sequence cần thiết và batch-write document, ledger, projection và `AuditOutbox`.
-3. Append `CommandTransaction` `Committed` kèm response snapshot theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md), rồi gọi `SpreadsheetApp.flush()` trước release lock. Chỉ khi command là `Committed` mới trả success và cho report/read model tính kết quả.
+2. Trong `ScriptLock`: kiểm tra idempotency lần cuối, fresh-read dữ liệu cạnh tranh, chạy guard/state transition, cấp sequence cần thiết và batch-write document, ledger, projection bắt buộc cùng actor metadata trên record.
+3. Append `CommandTransaction` `Committed` kèm response snapshot theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md) và [ADR 0017](../decisions/0017-record-actor-metadata-no-standalone-audit.md), rồi gọi `SpreadsheetApp.flush()` trước release lock. Chỉ khi command là `Committed` mới trả success và cho report/read model tính kết quả.
 4. Khi timeout/unknown outcome, client gọi `command.getStatus` hoặc retry cùng key. Backend trả receipt/result đã commit hoặc recovery outcome; không tạo command mới.
 
-Lock không được bao gồm Drive, PDF, export, report, full catalog reload, network call, worker dispatch hoặc audit partition write. `LockService.getScriptLock()` được dùng; `DocumentLock` không phải nền tảng cho standalone Web App.
+Lock không được bao gồm Drive, PDF, export, report, full catalog reload, network call hoặc worker dispatch. `LockService.getScriptLock()` được dùng; `DocumentLock` không phải nền tảng cho standalone Web App.
 
 ## 4. Error contract và client behavior
 
@@ -89,7 +89,7 @@ Mọi `ApiMeta` có `requestId`, `operation`, `serverTime`, `durationMs`, stage 
 | Vị trí | Trách nhiệm |
 | --- | --- |
 | `apps-script/src/api/` | `invoke`, registry, ApiContext, input/output mapping. |
-| `apps-script/src/services/platform/` | auth/session, permission, command coordinator, runtime/worker, audit/outbox policy. |
+| `apps-script/src/services/platform/` | auth/session, permission, command coordinator, runtime/worker và policy actor metadata. |
 | `apps-script/src/repositories/` | table-aware repository, query mapping và partition route. |
 | `apps-script/src/infrastructure/` | Sheet/Drive/Cache/Lock/Properties/Clock/ID/telemetry adapter. |
 | `web/src/lib/` | Promise wrapper, typed client, error normalization và cache namespace. |

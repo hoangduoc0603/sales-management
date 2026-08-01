@@ -4,7 +4,7 @@ import { createProductionPlatformRepositories } from '../../../apps-script/src/b
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 
 describe('production platform repository wiring', () => {
-  it('wires command journal and audit outbox to SheetGateway with the active transaction partition', () => {
+  it('wires command journal to SheetGateway with the active transaction partition', () => {
     const gateway = new FakeSheetGateway();
     const repositories = createProductionPlatformRepositories({
       sheetGateway: gateway,
@@ -20,26 +20,15 @@ describe('production platform repository wiring', () => {
       createdAt: '2026-07-27T00:00:00.000Z',
       updatedAt: '2026-07-27T00:00:01.000Z',
     });
-    repositories.auditOutboxRepository.append({
-      eventId: 'audit-1',
-      commandId: 'cmd-1',
-      actorId: 'user-1',
-      action: 'sales.checkout.complete',
-      status: 'Pending',
-      createdAt: '2026-07-27T00:00:01.000Z',
-    });
-
     expect(repositories.commandRepository.findByIdempotencyKey('checkout-1')?.status).toBe('Committed');
-    expect(repositories.auditOutboxRepository.list()).toHaveLength(1);
     expect(gateway.appendRequests.map((request) => [request.tableName, request.partitionKey])).toEqual([
       ['CommandTransaction', 'FY2026-P01'],
-      ['AuditOutbox', 'FY2026-P01'],
     ]);
   });
 
   it('fails fast when required platform table definitions are missing', () => {
     const gateway = new FakeSheetGateway();
-    const tableDefinitions = createPlatformTableDefinitions().filter((table) => table.tableName !== 'AuditOutbox');
+    const tableDefinitions = createPlatformTableDefinitions().filter((table) => table.tableName !== 'CommandTransaction');
 
     expect(() =>
       createProductionPlatformRepositories({
@@ -47,7 +36,7 @@ describe('production platform repository wiring', () => {
         tableDefinitions,
         transactionPartitionKey: 'FY2026-P01',
       }),
-    ).toThrow(/Missing platform table definition: AuditOutbox/);
+    ).toThrow(/Missing platform table definition: CommandTransaction/);
   });
 });
 

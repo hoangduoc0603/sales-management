@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseAttachmentAccessRequest,
-  parseAuditDeliveryRequest,
-  parseAuditSearchRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -16,7 +14,7 @@ import {
 import type { AttachmentAccessResponse } from '../../shared/contracts/operations/operations';
 
 describe('operations contracts', () => {
-  it('registers operations required for import, attachment, audit, backup, restore, health and runtime lifecycle', () => {
+  it('registers operations required for import, attachment, backup, restore, health and runtime lifecycle', () => {
     expect(operationNames).toEqual(
       expect.arrayContaining([
         'operations.import.template',
@@ -25,8 +23,6 @@ describe('operations contracts', () => {
         'operations.import.commit',
         'operations.attachment.complete',
         'operations.attachment.download',
-        'operations.audit.search',
-        'operations.audit.deliver',
         'operations.backup.request',
         'operations.backup.list',
         'operations.restore.prepare',
@@ -100,25 +96,7 @@ describe('operations contracts', () => {
     expect(JSON.stringify(response)).not.toContain('publicUrl');
   });
 
-  it('validates audit delivery/search, backup, restore, health, partition and cleanup requests', () => {
-    expect(
-      parseAuditSearchRequest({
-        dateRange: { from: '2026-07-01', to: '2026-07-27' },
-        actorId: 'user-admin',
-        action: 'backup.request',
-        objectType: 'BackupRun',
-        branchId: 'branch-default',
-        pageSize: 50,
-      }),
-    ).toMatchObject({ pageSize: 50 });
-
-    expect(
-      parseAuditDeliveryRequest({
-        runId: 'run-audit-1',
-        maxEvents: 100,
-      }),
-    ).toMatchObject({ maxEvents: 100 });
-
+  it('validates backup, restore, health, partition and cleanup requests', () => {
     expect(
       parseBackupRequest({
         backupType: 'Manual',

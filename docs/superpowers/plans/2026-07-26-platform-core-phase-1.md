@@ -4,21 +4,21 @@
 
 **Goal:** Xây platform runtime nền tảng để mọi domain sau này đi qua cùng typed RPC gateway, session nội bộ, permission/scope backend, command idempotency và registry/schema seam.
 
-**Architecture:** Phase này mở rộng foundation hiện có theo hướng contract-first: `shared/` định nghĩa operation/auth/session/command/table registry contract; `apps-script/src/api/` sở hữu pipeline và operation registry; `apps-script/src/services/platform/` sở hữu auth, authorization và command coordinator; `apps-script/src/repositories/` và `apps-script/src/infrastructure/` chỉ cung cấp seam testable, chưa hard-code Google Sheets thật. Mọi mutation mẫu dùng command journal và audit outbox contract trước khi domain nghiệp vụ được triển khai.
+**Architecture:** Phase này mở rộng foundation hiện có theo hướng contract-first: `shared/` định nghĩa operation/auth/session/command/table registry contract; `apps-script/src/api/` sở hữu pipeline và operation registry; `apps-script/src/services/platform/` sở hữu auth, authorization và command coordinator; `apps-script/src/repositories/` và `apps-script/src/infrastructure/` chỉ cung cấp seam testable, chưa hard-code Google Sheets thật. Mọi mutation mẫu dùng command journal và actor metadata trên record; audit outbox trong bản kế hoạch gốc đã superseded bởi ADR 0017.
 
 **Tech Stack:** TypeScript, Zod, Vitest, Google Apps Script type definitions, React/Vite foundation hiện có.
 
 ## Global Constraints
 
-- Trước khi code phải đọc `AGENTS.md`, `docs/architecture/folder-structure.md`, `docs/architecture/lld-traceability-review.md`, `docs/architecture/detailed-design.md`, `docs/architecture/platform-technical-design.md`, `docs/architecture/security-and-access.md`, `docs/data-model/sheet-schema-and-registry.md`, `docs/data-model/storage-partitioning-and-lifecycle.md`, ADR `0001`, `0005`, `0008`, `0009`, `0010`.
+- Trước khi code phải đọc `AGENTS.md`, `docs/architecture/folder-structure.md`, `docs/architecture/lld-traceability-review.md`, `docs/architecture/detailed-design.md`, `docs/architecture/platform-technical-design.md`, `docs/architecture/security-and-access.md`, `docs/data-model/sheet-schema-and-registry.md`, `docs/data-model/storage-partitioning-and-lifecycle.md`, ADR `0001`, `0005`, `0009`, `0010`, `0017`.
 - Không dùng Google identity làm actor ứng dụng. Login công khai duy nhất là `platform.auth.login`.
 - Mọi operation ngoài login phải có session hợp lệ và được kiểm tra permission/scope ở backend trước handler.
-- Không lưu password/token plaintext trong source, log, telemetry, audit hoặc command response.
+- Không lưu password/token plaintext trong source, log, telemetry hoặc command response.
 - Session idle expiry là 1 giờ; absolute expiry là 8 giờ; đổi role/scope/reset password/disable user phải revoke bằng `authVersion`.
 - Login sai 5 lần liên tiếp khóa account 15 phút.
 - Mutation nghiệp vụ phải có `commandId` và `idempotencyKey`; retry cùng idempotency key không tạo outcome trùng.
 - `CommandTransaction` có trạng thái `Preparing`, `Committed`, `Failed`; chỉ `Committed` mới được trả như success nghiệp vụ.
-- Command tạo audit outbox bền vững cùng transaction hot path; worker delivery sang audit partition không nằm trong Phase 1.
+- Command không tạo audit outbox trong baseline; record nghiệp vụ/vận hành phải lưu actor metadata theo ADR 0017.
 - Không hard-code spreadsheet ID, sheet name, header index, Drive folder ID, row number hoặc secret.
 - Table registry/migration chỉ tạo table hoặc append cột; không đổi nghĩa cột cũ.
 
@@ -333,18 +333,17 @@ Run: `npx vitest run tests/apps-script/platform/authorization.test.ts tests/apps
 
 Expected: PASS.
 
-## Task 5: Command Coordinator, Idempotency and Audit Outbox Contract
+## Task 5: Command Coordinator, Idempotency and Actor Metadata Baseline
 
 **Files:**
 - Create: `apps-script/src/services/platform/command/command-coordinator.ts`
 - Create: `apps-script/src/repositories/platform/command-repository.ts`
-- Create: `apps-script/src/repositories/platform/audit-outbox-repository.ts`
 - Modify: `apps-script/src/bootstrap/create-api-composition.ts`
 - Test: `tests/apps-script/platform/command-coordinator.test.ts`
 
 **Interfaces:**
 - Produces: `CommandCoordinator.run`, `CommandCoordinator.getStatus`.
-- Consumes: `LockProvider`, `Clock`, command repository, audit outbox repository.
+- Consumes: `LockProvider`, `Clock`, command repository.
 
 - [x] **Step 1: Write failing test for idempotent committed command**
 
@@ -376,7 +375,7 @@ describe('CommandCoordinator', () => {
 
     expect(first).toEqual(second);
     expect(calls).toBe(1);
-    expect(coordinator.getAuditOutbox()).toHaveLength(1);
+    expect(coordinator.getStatus({ commandId: 'cmd-1' })?.status).toBe('Committed');
   });
 });
 ```
@@ -395,8 +394,7 @@ Within lock provider:
 2. create/update `Preparing`;
 3. run handler;
 4. store sanitized result JSON;
-5. append audit outbox event;
-6. mark `Committed`.
+5. mark `Committed` with sanitized result snapshot.
 
 - [x] **Step 4: Run test to verify it passes**
 
@@ -449,7 +447,7 @@ Expected: FAIL because table registry service does not exist.
 
 - [x] **Step 3: Implement registry service**
 
-Include Phase 1 logical tables: `CommandTransaction`, `AuditOutbox`, `Session`, `UserAccount`, `RolePermission`, `UserScope`, `SchemaMigration`, `PartitionRegistry`.
+Include Phase 1 logical tables: `CommandTransaction`, `Session`, `UserAccount`, `RolePermission`, `UserScope`, `SchemaMigration`, `PartitionRegistry`.
 
 - [x] **Step 4: Run test to verify it passes**
 
@@ -531,6 +529,6 @@ Expected: PASS.
 
 ## Self-Review
 
-- Spec coverage: Phase 1 covers API boundary, internal session, backend permission/scope seam, command journal, audit outbox contract, table registry/header mapping and operation allowlist. It deliberately does not implement Google Sheets physical adapter, Drive folders, worker delivery, tenant bootstrap UI or domain services; those belong to later phases in the master implementation plan.
+- Spec coverage: Phase 1 covers API boundary, internal session, backend permission/scope seam, command journal, actor metadata baseline, table registry/header mapping and operation allowlist. It deliberately does not implement Google Sheets physical adapter, Drive folders, worker delivery, tenant bootstrap UI or domain services; those belong to later phases in the master implementation plan.
 - Placeholder scan: clear; each task includes exact files, interfaces, tests and commands.
 - Type consistency: operation names and produced service names are reused consistently across tasks.

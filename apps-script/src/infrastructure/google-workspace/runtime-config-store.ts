@@ -9,7 +9,6 @@ export interface RuntimeConfigDTO {
     core: { spreadsheetId: string };
     runtime: { spreadsheetId: string };
     transaction: { activePartitionKey: string; spreadsheetId: string };
-    audit: { activePartitionKey: string; spreadsheetId: string };
   };
   maintenanceMode: boolean;
 }

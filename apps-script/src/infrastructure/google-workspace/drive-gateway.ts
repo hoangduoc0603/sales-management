@@ -47,7 +47,6 @@ export function createDriveGateway(deps: DriveGatewayDependencies): DriveGateway
         database.createFolder('Core Data'),
         database.createFolder('Runtime Data'),
         database.createFolder('Transaction Data'),
-        database.createFolder('Audit Data'),
       ].map(toFolderManifest);
 
       return {

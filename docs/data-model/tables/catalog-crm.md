@@ -28,7 +28,7 @@ Các bảng dùng base columns của registry (`id`, `tenantId`, `schemaVersion`
 | --- | --- | --- | --- |
 | `Customer` | master | `customerId`, `customerCode`, `displayName`, `phoneNormalized`, `emailNormalized`, `customerGroupId`, `status`, `mergedIntoCustomerId` | contact/address/note |
 | `CustomerGroup` | master | `customerGroupId`, `name`, `assignmentMode`, `status`, `priority` | condition rule |
-| `CustomerMerge` | immutable audit/master | `mergeId`, `sourceCustomerId`, `targetCustomerId`, `mergedAt`, `mergedBy`, `reason` | before/after summary |
+| `CustomerMerge` | immutable master/evidence | `mergeId`, `sourceCustomerId`, `targetCustomerId`, `mergedAt`, `mergedBy`, `reason` | before/after summary |
 | `LoyaltyPolicyVersion` | master/versioned | `policyVersionId`, `effectiveFrom`, `effectiveTo`, `earnRate`, `redeemRate`, `expiryPolicy`, `status` | eligibility/rounding rule |
 | `WarrantyPolicyVersion` | master/versioned | `policyVersionId`, `productId`, `variantId`, `durationDays`, `effectiveFrom`, `effectiveTo`, `status` | terms snapshot |
 
@@ -44,7 +44,7 @@ Customer source đã `Merged` không selectable cho giao dịch mới. `phoneNor
 | `CommissionLedger` | append-only ledger | `commissionEntryId`, `partitionKey`, `staffId`, `saleOrderId`, `saleLineId`, `ruleVersionId`, `amountVnd`, `reversalOfEntryId`, `status` | rule/base snapshot |
 | `WarrantyCase` | document | `warrantyCaseId`, `partitionKey`, `customerId`, `saleOrderId`, `saleLineId`, `variantId`, `serialId`, `policyVersionId`, `receivedAt`, `status` | issue/resolution/attachment refs |
 
-`PromotionApplication`, `VoucherUsage`, `PointLedger` và `CommissionLedger` are batch-appended with Sale command and only count when source command is `Committed`. Warranty state updates and import commits create their own command/audit/outbox. `ImportBatch`/`ImportStagingRow` là hạ tầng dùng chung, được định nghĩa duy nhất tại [Operations–Reporting tables](operations-reporting.md).
+`PromotionApplication`, `VoucherUsage`, `PointLedger` và `CommissionLedger` are batch-appended with Sale command and only count when source command is `Committed`. Warranty state updates and import commits create their own command and store actor metadata on source records. `ImportBatch`/`ImportStagingRow` là hạ tầng dùng chung, được định nghĩa duy nhất tại [Operations–Reporting tables](operations-reporting.md).
 
 ## 4. Index/projection and retention rules
 

@@ -2,7 +2,6 @@ import type { CatalogRepository } from '../repositories/catalog/catalog-reposito
 import type { FinanceRepository } from '../repositories/finance/finance-repository';
 import type { InventoryRepository } from '../repositories/inventory/inventory-repository';
 import type { SalesRepository } from '../repositories/sales/sales-repository';
-import type { AuditOutboxRepository } from '../repositories/platform/audit-outbox-repository';
 import type { CommandRepository } from '../repositories/platform/command-repository';
 import type { LockProvider } from '../infrastructure/platform/runtime';
 import { createPropertiesCredentialVerifierStore } from '../infrastructure/google-workspace/credential-verifier-store';
@@ -41,7 +40,6 @@ export interface PosAcceptanceDrillDependencies {
   financeRepository: FinanceRepository;
   salesRepository: SalesRepository;
   commandRepository: CommandRepository;
-  auditOutboxRepository: AuditOutboxRepository;
   lockProvider: LockProvider;
   now: () => Date;
   newId(prefix: string): string;
@@ -129,7 +127,6 @@ export function runPosAcceptanceDrill(deps: PosAcceptanceDrillDependencies): Pos
   });
   const commandCoordinator = createCommandCoordinator({
     commandRepository: deps.commandRepository,
-    auditOutboxRepository: deps.auditOutboxRepository,
     lockProvider: deps.lockProvider,
     now: deps.now,
     newId: deps.newId,
@@ -268,7 +265,6 @@ export function runPosAcceptanceDrillForAppsScript_(): PosAcceptanceDrillForApps
     }),
     tableDefinitions,
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
-    auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
     credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
   });
   let sequence = 0;
@@ -280,7 +276,6 @@ export function runPosAcceptanceDrillForAppsScript_(): PosAcceptanceDrillForApps
       financeRepository: repositories.financeRepository,
       salesRepository: repositories.salesRepository,
       commandRepository: repositories.commandRepository,
-      auditOutboxRepository: repositories.auditOutboxRepository,
       lockProvider: createAppsScriptLockProvider({
         lockService: LockService,
         spreadsheetApp: SpreadsheetApp,

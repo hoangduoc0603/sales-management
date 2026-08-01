@@ -20,7 +20,6 @@ const requiredOpenGaps = [
   'reporting-archive-drilldown-worker-export',
   'operations-import-worker-chunk',
   'operations-private-attachment-drive',
-  'operations-audit-delivery',
   'operations-backup-retention',
   'operations-restore-replacement',
   'operations-archive-readonly-routing',

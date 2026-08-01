@@ -216,7 +216,6 @@ const runtimeConfig: RuntimeConfigDTO = {
     core: { spreadsheetId: 'spreadsheet-core' },
     runtime: { spreadsheetId: 'spreadsheet-runtime' },
     transaction: { activePartitionKey: 'FY2026-P01', spreadsheetId: 'spreadsheet-transaction' },
-    audit: { activePartitionKey: 'AUDIT-2026-07', spreadsheetId: 'spreadsheet-audit' },
   },
   maintenanceMode: false,
 };

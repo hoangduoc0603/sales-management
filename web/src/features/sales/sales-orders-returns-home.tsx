@@ -190,7 +190,7 @@ export function SalesOrdersReturnsHome({
             <div className="cn-mini-row">
               <span>
                 <strong>Fast return cần quyền riêng</strong>
-                <small>Không có đơn gốc phải có approval/audit; UI không tự suy diễn quyền.</small>
+                <small>Không có đơn gốc phải có phê duyệt và lý do; UI không tự suy diễn quyền.</small>
               </span>
               <Badge tone="danger">Restricted</Badge>
             </div>

@@ -13,7 +13,7 @@ Deploy Web App public, chạy bằng quyền tài khoản Google khách triển 
 
 ## Hệ quả
 
-API phải xác thực cả read/print/export/file; URL public không trả business data. Cần credential verifier bảo mật, session revoke, lockout, rate limit và audit. Browser cache/UI không phải security boundary.
+API phải xác thực cả read/print/export/file; URL public không trả business data. Cần credential verifier bảo mật, session revoke, lockout, rate limit và actor metadata trên record thay đổi. Browser cache/UI không phải security boundary.
 
 ## Phương án không chọn
 

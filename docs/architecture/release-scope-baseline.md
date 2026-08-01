@@ -27,7 +27,7 @@ Tài liệu này phân loại các gap còn mở trong master plan để quyết
 | `inventory-concurrency-performance-matrix` | 5 | `MustFixBeforeRelease` | Tồn kho ảnh hưởng trực tiếp POS và dữ liệu; cần test concurrency/rounding tối thiểu. | Test two receipts average cost, issue rounding, last stock concurrency, negative stock policy. |
 | `cashdrawer-paymentmethod-master` | 6 | `MustFixBeforeRelease` | POS thực tế cần phương thức thanh toán và két/ca tiền mặc định. | Seed/master command hoặc bootstrap tạo PaymentMethod/CashDrawer mặc định, test POS dùng được. |
 | `receivable-payable-aging-projection` | 6 | `MustFixBeforeRelease` | Công nợ là phạm vi bản đầu; aging giúp vận hành thu/chi và báo cáo. | AR/AP aging projection test theo due date/scope. |
-| `pos-checkout-orchestration` | 7 | `MustFixBeforeRelease` | Đây là luồng sellable chính. | Acceptance test checkout tạo SaleOrder Completed, InventoryMovement, Payment/AR và AuditOutbox đúng một lần. |
+| `pos-checkout-orchestration` | 7 | `MustFixBeforeRelease` | Đây là luồng sellable chính. | Acceptance test checkout tạo SaleOrder Completed, InventoryMovement, Payment/AR, actor metadata và CommandTransaction đúng một lần. |
 | `pos-commit-revalidation` | 7 | `MustFixBeforeRelease` | Backend phải là source of truth cho scope, ca, quote, stock, tender và idempotency. | Commit test revalidate scope/shift/quote/stock/tender/idempotency. |
 | `pos-structured-conflicts` | 7 | `MustFixBeforeRelease` | UI POS cần mã lỗi ổn định để người dùng xử lý retry/conflict. | Test conflict codes `PRICE_CHANGED`, `PROMOTION_CHANGED`, `INSUFFICIENT_STOCK`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED` hoặc disabled policy tương ứng. |
 | `pos-receipt-snapshot-print` | 7 | `MustFixBeforeRelease` | In phiếu/hóa đơn bán hàng là phạm vi đã chốt. | Receipt snapshot immutable; print/reprint không tạo ledger mới. |
@@ -36,11 +36,10 @@ Tài liệu này phân loại các gap còn mở trong master plan để quyết
 | `reporting-archive-drilldown-worker-export` | 10 | `MustFixBeforeRelease` | Export/report và sensitive drill-down phải không bypass quyền hoặc cạnh tranh POS. | Drill-down token revalidates permission; export lớn chạy worker; archive coverage metadata rõ. |
 | `operations-import-worker-chunk` | 11 | `CanShipDisabled` | Import hàng loạt có thể chưa bật nếu có cách nhập thủ công/seed ban đầu; nếu bật phải worker/chunk. | UI import disabled hoặc ImportBatch worker test retry không duplicate. |
 | `operations-private-attachment-drive` | 11 | `MustFixBeforeRelease` | File đính kèm thuộc phạm vi chứng từ/chi phí/bảo hành; không được public URL. | Drive attachment adapter private, metadata lifecycle và download kiểm quyền. |
-| `operations-audit-delivery` | 11 | `MustFixBeforeRelease` | Audit outbox là ADR Accepted và bắt buộc cho command nghiệp vụ. | Worker delivery idempotent từ AuditOutbox sang AuditLog, audit search gồm pending+delivered. |
 | `operations-backup-retention` | 11 | `MustFixBeforeRelease` | Mô hình bán một lần cần backup để khách vận hành dài hạn. | Backup manifest checksum, 30 daily retention, manual backup by Owner. |
 | `operations-restore-replacement` | 11 | `MustFixBeforeRelease` | Restore không overwrite production là ADR Accepted. | Replacement resources, Owner switch, revoke session, health-check và drill evidence. |
 | `operations-archive-readonly-routing` | 11 | `MustFixBeforeRelease` | Archive tránh đầy Sheet và không được phá truy vấn lịch sử. | Close/archive partition read-only, report/export route theo partition registry. |
-| `operations-production-test-matrix` | 11 | `MustFixBeforeRelease` | Operations liên quan dữ liệu dài hạn; không được chỉ có baseline in-memory. | Test import retry, attachment permission, audit search, backup checksum, restore switch, archive routing. |
+| `operations-production-test-matrix` | 11 | `MustFixBeforeRelease` | Operations liên quan dữ liệu dài hạn; không được chỉ có baseline in-memory. | Test import retry, attachment permission, backup checksum, restore switch, archive routing. |
 
 ## 4. UI-disabled items nếu ship trước khi hoàn thiện
 

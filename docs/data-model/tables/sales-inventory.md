@@ -3,7 +3,7 @@
 **Trạng thái:** Đã phê duyệt phần Sales/POS/Return; Inventory sẽ bổ sung bảng movement/balance/lot/serial.  
 **Nguồn:** [LLD Sales](../../architecture/modules/sales-pos-returns.md), [LLD Catalog–CRM](../../architecture/modules/catalog-crm.md), [Sheet schema](../sheet-schema-and-registry.md)
 
-Tất cả bảng transaction có `partitionKey`, technical ID, tenant/scope, lifecycle timestamp/actor, command/audit correlation và chỉ có hiệu lực khi source command `Committed`.
+Tất cả bảng transaction có `partitionKey`, technical ID, tenant/scope, lifecycle timestamp/actor, command correlation và chỉ có hiệu lực khi source command `Committed`.
 
 | Table | Lifecycle | Cột typed chính | JSON/snapshot |
 | --- | --- | --- | --- |
@@ -28,4 +28,4 @@ Tất cả bảng transaction có `partitionKey`, technical ID, tenant/scope, li
 | `StockTransfer` / `StockTransferLine` | document | `transferId`, source/destination warehouse, `status`, line variant/quantity/received quantity | reason/variance/attachment refs |
 | `StocktakeSession` / `StocktakeLine` | document | `sessionId`, warehouse, `status`, snapshot quantity, counted quantity, variance | scope/reason/approval refs |
 
-All quantity columns are milli-units and all inventory value/cost totals VND integers. `InventoryBalance` is rebuildable from ledger but is never manually edited; reconciliation output is an audited worker result.
+All quantity columns are milli-units and all inventory value/cost totals VND integers. `InventoryBalance` is rebuildable from ledger but is never manually edited; reconciliation output records actor/system metadata on its worker result.

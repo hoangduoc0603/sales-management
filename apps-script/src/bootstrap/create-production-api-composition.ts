@@ -42,7 +42,6 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
     sheetGateway: deps.sheetGateway,
     tableDefinitions,
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
-    auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
     credentialVerifierStore: deps.credentialVerifierStore,
     platformCacheStore: deps.platformCacheStore,
   });

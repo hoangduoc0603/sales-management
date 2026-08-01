@@ -45,7 +45,7 @@ Tenant cấu hình giá mua và giá bán là đã gồm hoặc chưa gồm VAT;
 
 Đơn hỗ trợ tiền mặt, chuyển khoản thủ công, QR hiển thị, thẻ, COD và phương thức tùy cấu hình. QR ở bản đầu chỉ hiển thị thông tin để khách thanh toán; nhân viên phải ghi nhận khoản thu, hệ thống không tự xác nhận biến động ngân hàng. Một đơn có thể có nhiều khoản thu và nhiều phương thức; từng khoản tham chiếu `Payment`/`CashTransaction` tại `SRS-FIN-003`.
 
-Khoản tender nhập trên POS Draft chỉ là dữ liệu tạm của giỏ. Hệ thống chỉ tạo CashTransaction/Payment chính thức trong cùng thao tác atomic với `Completed`; nếu hoàn tất bị chặn hoặc Draft bị hủy thì không có khoản thu chính thức. Với đơn online, khoản đặt cọc thu trước `Shipped` được tạo CustomerCredit/Deposit liên kết đơn, chưa tạo doanh thu hoặc receivable; khi Shipped, hệ thống tạo nghĩa vụ rồi phân bổ deposit. Nếu online bị Cancelled trước Shipped, deposit phải được giữ thành CustomerCredit hoặc hoàn bằng Refund có audit, không được tự xóa.
+Khoản tender nhập trên POS Draft chỉ là dữ liệu tạm của giỏ. Hệ thống chỉ tạo CashTransaction/Payment chính thức trong cùng thao tác atomic với `Completed`; nếu hoàn tất bị chặn hoặc Draft bị hủy thì không có khoản thu chính thức. Với đơn online, khoản đặt cọc thu trước `Shipped` được tạo CustomerCredit/Deposit liên kết đơn, chưa tạo doanh thu hoặc receivable; khi Shipped, hệ thống tạo nghĩa vụ rồi phân bổ deposit. Nếu online bị Cancelled trước Shipped, deposit phải được giữ thành CustomerCredit hoặc hoàn bằng Refund có `createdBy/approvedBy`, không được tự xóa.
 
 ### SRS-SAL-008 — Bán chịu, đặt cọc và trạng thái thanh toán
 
@@ -85,7 +85,7 @@ Draft ──confirm──> Confirmed ──start packing──> Packing ──sh
 - `Packing`: vẫn giữ tồn; lưu người đóng gói khi có.
 - `Shipped`: xác nhận giao/đưa cho đơn vị vận chuyển; giảm on-hand, giải phóng reservation tương ứng, ghi doanh thu/công nợ/giá vốn và tạo nghĩa vụ COD khi phù hợp.
 - `Delivered`: xác nhận kết quả giao; không trừ tồn hay ghi doanh thu lần thứ hai.
-- `Cancelled`: chỉ hợp lệ trước `Shipped`; giải phóng reservation. Hủy một phần thực hiện bằng giảm/hủy dòng còn chưa ship và audit, không được âm thầm sửa dòng đã ship.
+- `Cancelled`: chỉ hợp lệ trước `Shipped`; giải phóng reservation. Hủy một phần thực hiện bằng giảm/hủy dòng còn chưa ship và lưu `cancelledBy/cancelledAt`, không được âm thầm sửa dòng đã ship.
 
 Hệ thống phải lưu nguồn đơn, người nhận, số điện thoại, địa chỉ, phương thức giao, phí ship, COD, mã tham chiếu bên ngoài nếu có và các mốc thời gian riêng. Không được tự suy đoán Delivered từ khoản tiền đã thu.
 
@@ -97,7 +97,7 @@ Return mặc định phải tham chiếu đơn Completed/Shipped/Delivered gốc
 
 ### SRS-SAL-013 — Fast return và kiểm hàng
 
-Fast return không có đơn gốc chỉ dành cho Manager/Owner hoặc user được cấp quyền riêng. User phải chọn khách nếu có, hàng, số lượng, chính sách giá hoàn, giá vốn dùng để nhập lại, lý do, Warehouse/kho chờ kiểm và thông tin kiểm hàng. Hệ thống phải audit lý do và người duyệt. Hàng trả mặc định vào Quarantine, không tăng `available`; chỉ người có quyền kiểm mới quyết định `Restock`, `KeepQuarantine` hoặc `Scrap` theo `SRS-INV-012`.
+Fast return không có đơn gốc chỉ dành cho Manager/Owner hoặc user được cấp quyền riêng. User phải chọn khách nếu có, hàng, số lượng, chính sách giá hoàn, giá vốn dùng để nhập lại, lý do, Warehouse/kho chờ kiểm và thông tin kiểm hàng. Hệ thống phải lưu lý do và người duyệt trên return record. Hàng trả mặc định vào Quarantine, không tăng `available`; chỉ người có quyền kiểm mới quyết định `Restock`, `KeepQuarantine` hoặc `Scrap` theo `SRS-INV-012`.
 
 ### SRS-SAL-014 — Hoàn tiền và đổi hàng
 
@@ -111,7 +111,7 @@ Với hàng serial/IMEI, đơn Completed/Shipped phải chọn serial cụ thể
 
 ### SRS-SAL-016 — In qua trình duyệt
 
-Hệ thống phải cung cấp xem trước, in và in lại phiếu theo mẫu K80 hoặc A4. Mẫu phải chứa tối thiểu thông tin doanh nghiệp/chi nhánh, mã chứng từ, thời điểm, người bán, hàng hóa, số lượng, giá, chiết khấu, thuế, thanh toán, khách khi có và QR/mã tra cứu nếu được cấu hình. In lại không làm thay đổi chứng từ và phải audit khi tenant bật audit in.
+Hệ thống phải cung cấp xem trước, in và in lại phiếu theo mẫu K80 hoặc A4. Mẫu phải chứa tối thiểu thông tin doanh nghiệp/chi nhánh, mã chứng từ, thời điểm, người bán, hàng hóa, số lượng, giá, chiết khấu, thuế, thanh toán, khách khi có và QR/mã tra cứu nếu được cấu hình. In lại không làm thay đổi chứng từ; baseline không lưu audit in riêng.
 
 Hệ thống không tích hợp driver/API máy in và không tuyên bố phiếu in là hóa đơn điện tử ký số. User có quyền export có thể tải bản PDF/dữ liệu phiếu, trong phạm vi quyền dữ liệu.
 

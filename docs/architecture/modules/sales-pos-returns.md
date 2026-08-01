@@ -30,11 +30,11 @@ Return: Draft -> ReceivedForInspection -> Resolved | Cancelled
 
 | Command | Input/quyền chính | Hậu quả |
 | --- | --- | --- |
-| `sales.draft.save` | Branch/Warehouse scope, cart snapshot, `draftId?` | Persist Draft/version/audit; không financial/inventory ledger. |
-| `sales.pos.complete` | open shift khi policy yêu cầu, command/idempotency, quote/tender | Atomically SaleOrder `Completed`, Inventory issue, Finance payment/AR, CRM policy ledger, AuditOutbox, receipt. |
+| `sales.draft.save` | Branch/Warehouse scope, cart snapshot, `draftId?` | Persist Draft/version với `createdBy/updatedBy`; không financial/inventory ledger. |
+| `sales.pos.complete` | open shift khi policy yêu cầu, command/idempotency, quote/tender | Atomically SaleOrder `Completed`, Inventory issue, Finance payment/AR, CRM policy ledger, actor metadata và receipt. |
 | `sales.online.confirm` | order Draft, available stock | `Confirmed` + reservation; không revenue/on-hand. |
 | `sales.online.ship` | `Packing|Confirmed`, fulfillment/tender validation | `Shipped` + issue/revenue/cost/AR/payment allocation. |
-| `sales.online.cancel` | state trước Shipped | release reservation; xử lý deposit thành credit/refund, audit. |
+| `sales.online.cancel` | state trước Shipped | release reservation; xử lý deposit thành credit/refund, lưu `cancelledBy/cancelledAt`. |
 | `sales.return.create/resolve` | source order or privileged fast-return, quantity/reason | Return document; accepted inspection creates domain reversals. |
 
 Mọi command revalidate Branch/Warehouse, product/unit/lot/serial, quote, price override approval, stock exception, credit policy, shift/tender total và idempotency trong commit protocol. Mismatch cached data trả conflict có detail; không commit phần order/ledger nào.
@@ -59,6 +59,6 @@ Return line computes maximum return quantity from source sale less resolved retu
 
 ## 6. POS performance and tests
 
-Adapter keeps a single in-flight complete command per cart/command ID. It uses `command.getStatus` then same idempotency key after timeout. The hot path excludes Drive, PDF, export, report, full history and audit partition I/O.
+Adapter keeps a single in-flight complete command per cart/command ID. It uses `command.getStatus` then same idempotency key after timeout. The hot path excludes Drive, PDF, export, report and full history I/O.
 
 Tests cover warm-cache scan/no RPC, explicit draft save/reopen/cancel, shift requirement, POS full/partial payment, online reservation/cancel/ship/deliver, quote conflict, retry duplicate prevention, source/fast return permission, exchange net settlement, print no-ledger, and concurrent last-stock/voucher cases.

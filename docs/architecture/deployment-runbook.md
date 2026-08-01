@@ -232,7 +232,7 @@ Hành vi:
 - tạo đúng một installable time-driven trigger gọi `warmRuntime_` mỗi 5 phút;
 - nếu đã có trigger `warmRuntime_` cũ/duplicate, script xoá duplicate rồi tạo lại một trigger mới;
 - không xoá hoặc thay đổi trigger `scheduledWorker_`;
-- warm-up chỉ đọc runtime config, auth profile admin và current scope mặc định để làm ấm Apps Script runtime/cache; không đăng nhập, không tạo session, không ghi audit, không chạy backup/export/archive.
+- warm-up chỉ đọc runtime config, auth profile admin và current scope mặc định để làm ấm Apps Script runtime/cache; không đăng nhập, không tạo session, không chạy backup/export/archive.
 
 Kiểm tra trạng thái bằng function `getWarmupTriggerStatus`. Kết quả trả về gồm `triggerCount`, `lastStartedAt`, `lastCompletedAt`, `lastDurationMs`, `lastStatus` và `lastError` nếu lần warm-up gần nhất lỗi.
 
@@ -247,7 +247,7 @@ Hành vi:
 - tạo đúng một installable time-driven trigger gọi `scheduledWorker_` mỗi 5 phút;
 - nếu đã có trigger `scheduledWorker_` cũ/duplicate, script xoá duplicate rồi tạo lại một trigger mới;
 - không xoá hoặc thay đổi trigger `warmRuntime_`;
-- worker chạy các tác vụ nền đã thiết kế: audit delivery, export lớn, import commit, archive, health check, backup daily và baseline reporting projection hiện tại;
+- worker chạy các tác vụ nền đã thiết kế: export lớn, import commit, archive, health check, backup daily và baseline reporting projection hiện tại;
 - worker không hoàn tất POS, không tạo ledger cốt lõi thay command đồng bộ và không giữ lock POS fast path.
 
 Kiểm tra trạng thái bằng function `getScheduledWorkerTriggerStatus`. Khi cần tắt trên tenant test, chạy `removeScheduledWorkerTriggers`.

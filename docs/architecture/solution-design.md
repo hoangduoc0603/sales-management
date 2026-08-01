@@ -31,7 +31,7 @@ Ràng buộc kỹ thuật cố định:
           v
 [Apps Script Web App - quyền tài khoản khách triển khai]
           |
-          +-- Platform: auth, permission, config, data, runtime, audit,
+          +-- Platform: auth, permission, config, data, runtime,
           |             backup, Drive, API/error handling
           |
           +-- Domain: Catalog, Sales, Inventory, Purchasing, Finance,
@@ -54,7 +54,7 @@ Web App có URL public để nhân viên không cần Google account. Public URL
 | Server-authoritative commit | Cache chỉ dùng cho read model. Server luôn xác nhận quyền, trạng thái, giá/promotion, tồn, tiền và công nợ trước khi commit. |
 | Modular monolith | Một Apps Script deployment cho mỗi tenant; tách platform và domain rõ ràng thay vì microservice hoặc module gọi chéo repository. |
 | Ledger bất biến | Tồn, tiền và công nợ truy vết qua ledger/chứng từ nguồn. Sai sót dùng hủy, điều chỉnh hoặc reversal; không sửa số tổng hợp làm nguồn sự thật. |
-| Partition từ đầu | Không đặt toàn bộ dữ liệu vào một Spreadsheet. Transaction/Audit phân vùng theo kỳ và archive read-only. |
+| Partition từ đầu | Không đặt toàn bộ dữ liệu vào một Spreadsheet. Transaction phân vùng theo kỳ và archive read-only. |
 | Ownership của khách | Resource config, deployment, backup và upgrade thuộc tài khoản Google của khách; hỗ trợ bên ngoài chỉ theo quyền có thời hạn. |
 | Quan sát được | API có request ID, duration/stage/I/O metrics; mọi quyết định mở rộng dựa trên telemetry và benchmark, không dựa vào giả định. |
 
@@ -62,7 +62,7 @@ Web App có URL public để nhân viên không cần Google account. Public URL
 
 | Context | Sở hữu | Giao tiếp đồng bộ trong command |
 | --- | --- | --- |
-| Platform | auth/session, permission scope, config, registry/migration, runtime, audit/outbox, Drive, backup/export/archive | Cung cấp capability dùng chung; không chứa quy tắc bán/kho/tiền. |
+| Platform | auth/session, permission scope, config, registry/migration, runtime, actor metadata policy, Drive, backup/export/archive | Cung cấp capability dùng chung; không chứa quy tắc bán/kho/tiền. |
 | Catalog | product, variant, barcode, unit, price list | Trả snapshot/product pricing cho Sales. |
 | Sales | POS cart, Sale Order, return/exchange, trạng thái bán, receipt | Điều phối checkout; không tự ghi inventory/cash ledger. |
 | Inventory | movement, balance, reservation, lot/serial, transfer, stocktake | Nhận lệnh issue/receive/adjust có nguồn chứng từ. |
@@ -83,7 +83,7 @@ Apps Script:
   -> auth + permission + input validation
   -> fresh read hẹp của dữ liệu cần xác nhận
   -> commit ngắn: idempotency, sale, inventory, finance, CRM,
-     materialized balance, audit outbox
+     materialized balance, actor metadata
   -> receipt snapshot
 Browser:
   -> render/in K80 hoặc A4 bằng receipt snapshot
@@ -95,7 +95,7 @@ Nếu giá, promotion hoặc tồn đã thay đổi sau khi browser đồng bộ
 
 | Nhóm thiết kế | Yêu cầu nguồn |
 | --- | --- |
-| Tenant, Branch/Warehouse, technical ID, lock/idempotency, ledger, session, audit, backup/archive | `SRS-OVR-001` đến `SRS-OVR-011`, `SRS-OVR-019` đến `SRS-OVR-024` |
+| Tenant, Branch/Warehouse, technical ID, lock/idempotency, ledger, session, actor metadata, backup/archive | `SRS-OVR-001` đến `SRS-OVR-011`, `SRS-OVR-019` đến `SRS-OVR-024` |
 | Capacity và POS performance | `SRS-OVR-012` đến `SRS-OVR-018`, `SRS-OVR-020` đến `SRS-OVR-022` |
 | Checkout, snapshot, return, in phiếu | `SRS-SAL-*`, `SRS-INV-*`, `SRS-FIN-*`, `SRS-CRM-*` |
 | Access, import/export, attachment, reporting, health | `SRS-ACC-*` |
@@ -117,4 +117,4 @@ Mã `SRS-OVR-020` đến `SRS-OVR-024` được bổ sung cùng Solution Design 
 
 ## 8. Pattern Cenio được tham chiếu
 
-Thiết kế này tham chiếu Cenio ở các pattern: layered architecture, `TableRegistry`/header mapping/migration, API boundary, batch I/O/runtime governance, cache-aside, Drive metadata, fake Apps Script test harness và ADR discipline. Không sao chép implementation/policy Cenio nguyên trạng: Sales dùng public Web App + internal session đã chốt; không dùng Google email identity, không coi compensating unit of work là ACID, không để business audit tắt mặc định và không dùng restore overwrite production. Chi tiết rà soát gốc nằm tại [báo cáo Cenio](../../tmp/cenio-solution-system-design-review.md).
+Thiết kế này tham chiếu Cenio ở các pattern: layered architecture, `TableRegistry`/header mapping/migration, API boundary, batch I/O/runtime governance, cache-aside, Drive metadata, fake Apps Script test harness và ADR discipline. Không sao chép implementation/policy Cenio nguyên trạng: Sales dùng public Web App + internal session đã chốt; không dùng Google email identity, không coi compensating unit of work là ACID, không dùng audit nghiệp vụ riêng trong baseline và không dùng restore overwrite production. Chi tiết rà soát gốc nằm tại [báo cáo Cenio](../../tmp/cenio-solution-system-design-review.md).

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
 import { createAppendOnlySheetRecordRepository } from '../../../apps-script/src/repositories/platform/sheet-record-repository';
 
-interface AuditRecord {
-  auditId: string;
+interface AppendRecord {
+  recordId: string;
   tenantId: string;
   action: string;
   payloadJson: {
@@ -14,49 +14,49 @@ interface AuditRecord {
 
 describe('append-only Sheet record repository', () => {
   it('reads typed records through SheetGateway and returns defensive copies', () => {
-    const gateway = new FakeSheetRecordGateway<AuditRecord>([
+    const gateway = new FakeSheetRecordGateway<AppendRecord>([
       {
-        auditId: 'audit-1',
+        recordId: 'record-1',
         tenantId: 'tenant-1',
         action: 'Login',
         payloadJson: { schemaVersion: 1, source: 'auth' },
       },
     ]);
-    const repository = createAppendOnlySheetRecordRepository<AuditRecord>({
+    const repository = createAppendOnlySheetRecordRepository<AppendRecord>({
       gateway,
-      table: auditTable,
+      table: appendOnlyTable,
       partitionKey: 'FY2026-P01',
     });
 
     const records = repository.list();
     records[0]!.payloadJson.source = 'mutated';
 
-    expect(repository.findById('audit-1')).toEqual({
-      auditId: 'audit-1',
+    expect(repository.findById('record-1')).toEqual({
+      recordId: 'record-1',
       tenantId: 'tenant-1',
       action: 'Login',
       payloadJson: { schemaVersion: 1, source: 'auth' },
     });
-    expect(gateway.readRequests).toContainEqual({ tableName: 'AuditLog', partitionKey: 'FY2026-P01' });
+    expect(gateway.readRequests).toContainEqual({ tableName: 'AppendOnlyRecord', partitionKey: 'FY2026-P01' });
   });
 
   it('appends records by table registry metadata and rejects duplicate primary keys', () => {
-    const gateway = new FakeSheetRecordGateway<AuditRecord>([
+    const gateway = new FakeSheetRecordGateway<AppendRecord>([
       {
-        auditId: 'audit-1',
+        recordId: 'record-1',
         tenantId: 'tenant-1',
         action: 'Login',
         payloadJson: { schemaVersion: 1, source: 'auth' },
       },
     ]);
-    const repository = createAppendOnlySheetRecordRepository<AuditRecord>({
+    const repository = createAppendOnlySheetRecordRepository<AppendRecord>({
       gateway,
-      table: auditTable,
+      table: appendOnlyTable,
       partitionKey: 'FY2026-P01',
     });
 
     repository.append({
-      auditId: 'audit-2',
+      recordId: 'record-2',
       tenantId: 'tenant-1',
       action: 'CheckoutCommitted',
       payloadJson: { schemaVersion: 1, source: 'sales' },
@@ -64,11 +64,11 @@ describe('append-only Sheet record repository', () => {
 
     expect(gateway.appendRequests).toEqual([
       {
-        tableName: 'AuditLog',
+        tableName: 'AppendOnlyRecord',
         partitionKey: 'FY2026-P01',
         rows: [
           {
-            auditId: 'audit-2',
+            recordId: 'record-2',
             tenantId: 'tenant-1',
             action: 'CheckoutCommitted',
             payloadJson: { schemaVersion: 1, source: 'sales' },
@@ -78,25 +78,25 @@ describe('append-only Sheet record repository', () => {
     ]);
     expect(() =>
       repository.append({
-        auditId: 'audit-2',
+        recordId: 'record-2',
         tenantId: 'tenant-1',
         action: 'Duplicate',
         payloadJson: { schemaVersion: 1, source: 'test' },
       }),
-    ).toThrow(/DuplicatePrimaryKey:AuditLog.auditId/);
+    ).toThrow(/DuplicatePrimaryKey:AppendOnlyRecord.recordId/);
     expect(gateway.appendRequests).toHaveLength(1);
   });
 
   it('uses narrow primary-key lookup instead of full table read before appending when gateway supports it', () => {
-    const gateway = new FakeSheetRecordGateway<AuditRecord>([], { supportFindRowsByColumn: true });
-    const repository = createAppendOnlySheetRecordRepository<AuditRecord>({
+    const gateway = new FakeSheetRecordGateway<AppendRecord>([], { supportFindRowsByColumn: true });
+    const repository = createAppendOnlySheetRecordRepository<AppendRecord>({
       gateway,
-      table: auditTable,
+      table: appendOnlyTable,
       partitionKey: 'FY2026-P01',
     });
 
     repository.append({
-      auditId: 'audit-fast-1',
+      recordId: 'record-fast-1',
       tenantId: 'tenant-1',
       action: 'CheckoutCommitted',
       payloadJson: { schemaVersion: 1, source: 'sales' },
@@ -105,10 +105,10 @@ describe('append-only Sheet record repository', () => {
     expect(gateway.readRequests).toEqual([]);
     expect(gateway.findRequests).toEqual([
       {
-        tableName: 'AuditLog',
+        tableName: 'AppendOnlyRecord',
         partitionKey: 'FY2026-P01',
-        columnName: 'auditId',
-        value: 'audit-fast-1',
+        columnName: 'recordId',
+        value: 'record-fast-1',
       },
     ]);
     expect(gateway.appendRequests).toHaveLength(1);
@@ -118,31 +118,31 @@ describe('append-only Sheet record repository', () => {
     const gateway = new FakeSheetRecordGateway<Record<string, unknown>>([]);
     const repository = createAppendOnlySheetRecordRepository<Record<string, unknown>>({
       gateway,
-      table: auditTable,
+      table: appendOnlyTable,
       partitionKey: 'FY2026-P01',
     });
 
-    expect(() => repository.append({ tenantId: 'tenant-1' })).toThrow(/MissingPrimaryKey:AuditLog.auditId/);
+    expect(() => repository.append({ tenantId: 'tenant-1' })).toThrow(/MissingPrimaryKey:AppendOnlyRecord.recordId/);
     expect(gateway.appendRequests).toEqual([]);
   });
 });
 
-const auditTable: TableDefinitionDTO = {
-  tableName: 'AuditLog',
+const appendOnlyTable: TableDefinitionDTO = {
+  tableName: 'AppendOnlyRecord',
   owner: 'operations',
-  storageRole: 'audit',
-  sheetName: 'AuditLog',
-  lifecycle: 'audit',
+  storageRole: 'transaction',
+  sheetName: 'AppendOnlyRecord',
+  lifecycle: 'document',
   schemaVersion: 1,
-  primaryKey: 'auditId',
+  primaryKey: 'recordId',
   headers: [
-    { name: 'auditId', type: 'string', required: true },
+    { name: 'recordId', type: 'string', required: true },
     { name: 'tenantId', type: 'string', required: true },
     { name: 'action', type: 'enum', required: true },
     { name: 'payloadJson', type: 'json', required: false },
   ],
-  partitionPolicy: 'audit-period',
-  lookupKeys: [{ name: 'AuditLog.primary', columns: ['auditId'], unique: true }],
+  partitionPolicy: 'transaction-period',
+  lookupKeys: [{ name: 'AppendOnlyRecord.primary', columns: ['recordId'], unique: true }],
 };
 
 class FakeSheetRecordGateway<T extends Record<string, unknown>> {

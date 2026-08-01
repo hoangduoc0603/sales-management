@@ -10,10 +10,6 @@ import {
   type CredentialVerifierStore,
 } from '../repositories/platform/auth-repository';
 import {
-  createSheetAuditOutboxRepository,
-  type AuditOutboxRepository,
-} from '../repositories/platform/audit-outbox-repository';
-import {
   createSheetCommandRepository,
   type CommandRepository,
 } from '../repositories/platform/command-repository';
@@ -55,7 +51,6 @@ export interface ProductionRepositories {
   authRepository: AuthRepository;
   administrationRepository: AdministrationRepository;
   commandRepository: CommandRepository;
-  auditOutboxRepository: AuditOutboxRepository;
   catalogRepository: CatalogRepository;
   customerRepository: CustomerRepository;
   inventoryRepository: InventoryRepository;
@@ -70,7 +65,6 @@ export interface ProductionRepositoryDependencies {
   sheetGateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
   transactionPartitionKey: string;
-  auditPartitionKey: string;
   credentialVerifierStore: CredentialVerifierStore;
   platformCacheStore?: PlatformCacheStore;
 }
@@ -91,11 +85,6 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
     commandRepository: createSheetCommandRepository({
       gateway: deps.sheetGateway,
       table: findRequiredTable(deps.tableDefinitions, 'CommandTransaction', 'platform'),
-      partitionKey: deps.transactionPartitionKey,
-    }),
-    auditOutboxRepository: createSheetAuditOutboxRepository({
-      gateway: deps.sheetGateway,
-      table: findRequiredTable(deps.tableDefinitions, 'AuditOutbox', 'platform'),
       partitionKey: deps.transactionPartitionKey,
     }),
     catalogRepository: createSheetCatalogRepository({
@@ -135,7 +124,6 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
       transactionPartitionKey: deps.transactionPartitionKey,
-      auditPartitionKey: deps.auditPartitionKey,
     }),
   };
 }

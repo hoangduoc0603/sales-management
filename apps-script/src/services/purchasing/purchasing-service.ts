@@ -28,7 +28,6 @@ import type {
 } from '@shared/contracts/purchasing/purchasing';
 import type { FinanceService } from '../finance/finance-service';
 import type { InventoryService } from '../inventory/inventory-service';
-import type { AuditOutboxRepository } from '../../repositories/platform/audit-outbox-repository';
 import type { PurchasingRepository } from '../../repositories/purchasing/purchasing-repository';
 
 type PurchasingServiceResult<T> =
@@ -52,7 +51,6 @@ export interface PurchasingServiceDependencies {
   repository: PurchasingRepository;
   inventoryService: InventoryService;
   financeService: FinanceService;
-  auditOutboxRepository: AuditOutboxRepository;
   tenantId: string;
   now: () => Date;
   newId(prefix: string): string;
@@ -265,11 +263,6 @@ export function createPurchasingService(deps: PurchasingServiceDependencies): Pu
       };
       deps.repository.saveGoodsReceipt(approved);
       updatePoReceivedProjection(deps, approved, lines);
-      appendAuditOutbox(deps, {
-        commandId: input.commandId,
-        actorId: input.approverId,
-        action: 'purchasing.goodsReceipt.approve',
-      });
 
       return { ok: true, data: { goodsReceipt: approved, lines, inventoryMovements, payable } };
     },
@@ -446,29 +439,10 @@ export function createPurchasingService(deps: PurchasingServiceDependencies): Pu
       };
       deps.repository.saveSupplierReturn(approved);
       updateReceiptReturnedProjection(deps, approved, lines);
-      appendAuditOutbox(deps, {
-        commandId: input.commandId,
-        actorId: input.approverId,
-        action: 'purchasing.supplierReturn.approve',
-      });
 
       return { ok: true, data: { supplierReturn: approved, lines, inventoryMovements, payableAdjustment, supplierPrepayment } };
     },
   };
-}
-
-function appendAuditOutbox(
-  deps: PurchasingServiceDependencies,
-  input: { commandId: string; actorId: string; action: string },
-): void {
-  deps.auditOutboxRepository.append({
-    eventId: deps.newId('audit'),
-    commandId: input.commandId,
-    actorId: input.actorId,
-    action: input.action,
-    status: 'Pending',
-    createdAt: deps.now().toISOString(),
-  });
 }
 
 function savePoStatus(

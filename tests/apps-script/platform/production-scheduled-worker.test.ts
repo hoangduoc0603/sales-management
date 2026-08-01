@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryOperationsRepository } from '../../../apps-script/src/repositories/operations/operations-repository';
 import { createInMemoryAdministrationRepository } from '../../../apps-script/src/repositories/platform/administration-repository';
-import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { createInMemoryReportingRepository } from '../../../apps-script/src/repositories/reporting/reporting-repository';
 import { runProductionScheduledWorkerTick } from '../../../apps-script/src/bootstrap/run-production-scheduled-worker';
 
@@ -9,16 +8,7 @@ describe('Production scheduled worker tick', () => {
   it('runs health and daily backup jobs with BackgroundRun evidence', () => {
     const repository = createInMemoryOperationsRepository();
     const administrationRepository = createInMemoryAdministrationRepository();
-    const auditOutboxRepository = createInMemoryAuditOutboxRepository();
     const reportingRepository = createInMemoryReportingRepository();
-    auditOutboxRepository.append({
-      eventId: 'audit-1',
-      commandId: 'cmd-1',
-      actorId: 'user-admin',
-      action: 'sales.checkout.complete',
-      status: 'Pending',
-      createdAt: '2026-07-27T08:59:00.000Z',
-    });
     repository.savePartition({
       partitionId: 'partition-transaction-0',
       storageRole: 'transaction',
@@ -109,7 +99,6 @@ describe('Production scheduled worker tick', () => {
     const result = runProductionScheduledWorkerTick({
       repository,
       administrationRepository,
-      auditOutboxRepository,
       reportingRepository,
       tenantId: 'tenant-default',
       appVersion: '0.1.0',
@@ -119,16 +108,12 @@ describe('Production scheduled worker tick', () => {
     });
 
     expect(result.runs).toEqual([
-      expect.objectContaining({ runId: 'scheduled-audit-delivery', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-reporting-projection-baseline-2026-07-27', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-reporting-export', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-import-commit', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-archive-transaction', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-health-check', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-backup-daily-2026-07-27', status: 'Completed' }),
-    ]);
-    expect(repository.listAuditLogs()).toEqual([
-      expect.objectContaining({ eventId: 'audit-1', result: 'Delivered' }),
     ]);
     expect(repository.listHealthChecks()).toEqual([
       expect.objectContaining({ checkType: 'ScheduledWorker', status: 'Ok' }),

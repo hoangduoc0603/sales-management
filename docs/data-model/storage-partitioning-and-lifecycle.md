@@ -28,9 +28,8 @@ Sales Management - <Tên doanh nghiệp>/
 | --- | --- | --- |
 | Core | organization, Branch/Warehouse, user/role/scope, catalog, price/promotion/config, schema and partition registry | Ít ghi trên POS, cache-aside được. |
 | Runtime | session metadata, import staging, background run, health, TTL technical state | Không là nơi ghi transaction nóng; cleanup có policy. |
-| Active transaction partition | document, line, immutable inventory/cash/AR/AP/point ledger, materialized balance, command journal, audit outbox | Một Spreadsheet ghi nóng cho checkout; batch/narrow I/O. |
-| Audit partition | AuditLog append-only theo kỳ | Không đồng bộ mở/ghi trong checkout; nhận idempotent từ durable outbox. |
-| Archive | Partition transaction/audit đã đóng, read-only | Vẫn route/query/export/backup; không phá reference. |
+| Active transaction partition | document, line, immutable inventory/cash/AR/AP/point ledger, materialized balance, command journal | Một Spreadsheet ghi nóng cho checkout; batch/narrow I/O. |
+| Archive | Partition transaction đã đóng, read-only | Vẫn route/query/export/backup; không phá reference. |
 
 ## 2. Registry, schema và routing
 
@@ -45,17 +44,17 @@ Migration append missing column/table, giữ header cũ và ghi `SchemaMigration
 
 ## 3. Partition policy
 
-- Bootstrap tạo một active transaction partition và một active audit partition cho năm tài chính hiện hành.
+- Bootstrap tạo một active transaction partition cho năm tài chính hiện hành.
 - Sang năm tài chính, worker/preflight tạo partition `P01` tiếp theo với schema đúng trước khi có giao dịch mới.
 - Owner nhận cảnh báo capacity/latency; khi partition tăng đến ngưỡng vận hành cấu hình, hệ thống tạo `P02`, validate schema, switch write routing atomically và đóng `P01` read-only.
 - Cảnh báo và switch dùng ngưỡng dung lượng kết hợp latency/projection đã được cấu hình và kiểm chứng bằng benchmark; hệ thống phải cảnh báo đủ sớm để Owner tạo partition tiếp theo trước khi POS bị ảnh hưởng. Ngưỡng không thay thế kiểm tra quota/thực tế vận hành và chỉ Owner được thay đổi trong giới hạn an toàn.
-- Không tự xóa Order, ledger, audit hoặc attachment để mở chỗ. Chỉ runtime technical data có TTL cleanup.
+- Không tự xóa Order, ledger hoặc attachment để mở chỗ. Chỉ runtime technical data có TTL cleanup.
 
-Mỗi switch/close/archive/reopen phải audit. Archive giữ file ID và logical partition registry, nên attachment và cross-reference không đổi.
+Mỗi switch/close/archive/reopen phải lưu actor metadata trên record vận hành liên quan. Archive giữ file ID và logical partition registry, nên attachment và cross-reference không đổi.
 
 ## 4. Read/write strategy
 
-POS chỉ đọc active partition cho dữ liệu transaction cần xác nhận và ghi batch vào đó. Core master dùng cache versioned; data history/audit partition không được mở trong checkout. `InventoryBalance`, `CashBalance`, `ReceivableBalance`, `PayableBalance` và POS read model là projection trong active partition, có opening snapshot lúc bắt đầu partition mới và reconciliation với ledger.
+POS chỉ đọc active partition cho dữ liệu transaction cần xác nhận và ghi batch vào đó. Core master dùng cache versioned; data history partition không được mở trong checkout. `InventoryBalance`, `CashBalance`, `ReceivableBalance`, `PayableBalance` và POS read model là projection trong active partition, có opening snapshot lúc bắt đầu partition mới và reconciliation với ledger.
 
 Report theo date range lấy partition registry, mở đúng tập partition giao nhau với phạm vi; report nhiều partition, export lớn và rebuild projection chạy worker. Sheet database không chứa formula nghiệp vụ, `IMPORTRANGE`, pivot/conditional formatting nặng hoặc dashboard presentation.
 

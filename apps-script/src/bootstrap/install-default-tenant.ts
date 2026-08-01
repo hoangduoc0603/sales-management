@@ -96,10 +96,6 @@ function createInitialRuntimeConfig(tenantDisplayName: string, now: Date): Runti
     `Transaction Data ${toTransactionPartitionKey(now)}`,
     databaseFolders['Transaction Data'],
   );
-  const auditSpreadsheet = createSpreadsheetInFolder(
-    `Audit Data ${toAuditPartitionKey(now)}`,
-    databaseFolders['Audit Data'],
-  );
 
   return {
     tenantId: 'tenant-default',
@@ -112,10 +108,6 @@ function createInitialRuntimeConfig(tenantDisplayName: string, now: Date): Runti
       transaction: {
         activePartitionKey: toTransactionPartitionKey(now),
         spreadsheetId: transactionSpreadsheet.getId(),
-      },
-      audit: {
-        activePartitionKey: toAuditPartitionKey(now),
-        spreadsheetId: auditSpreadsheet.getId(),
       },
     },
     maintenanceMode: false,
@@ -134,8 +126,4 @@ function createSpreadsheetInFolder(name: string, folderId: string | undefined): 
 
 function toTransactionPartitionKey(now: Date): string {
   return `FY${now.getFullYear()}-P${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function toAuditPartitionKey(now: Date): string {
-  return `AUDIT-${now.toISOString().slice(0, 7)}`;
 }

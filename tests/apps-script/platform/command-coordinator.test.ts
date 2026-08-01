@@ -26,7 +26,10 @@ describe('CommandCoordinator', () => {
 
     expect(first).toEqual(second);
     expect(calls).toBe(1);
-    expect(coordinator.getAuditOutbox()).toHaveLength(1);
+    expect(coordinator.getStatus({ idempotencyKey: 'sale-1' })).toMatchObject({
+      commandId: 'cmd-1',
+      status: 'Committed',
+    });
   });
 
   it('records command execution stages when a performance tracker is active', () => {
@@ -43,9 +46,9 @@ describe('CommandCoordinator', () => {
 
     expect(performance.stages['command.findExistingMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.handlerMs']).toBeGreaterThanOrEqual(0);
-    expect(performance.stages['command.auditAppendMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.appendCommittedMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.totalWithLockMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages).not.toHaveProperty('command.auditAppendMs');
     expect(performance.stages).not.toHaveProperty('command.savePreparingMs');
   });
 });

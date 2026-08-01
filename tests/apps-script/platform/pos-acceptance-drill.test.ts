@@ -5,7 +5,6 @@ import { createInMemoryInventoryRepository } from '../../../apps-script/src/repo
 import { createInMemoryFinanceRepository } from '../../../apps-script/src/repositories/finance/finance-repository';
 import { createInMemorySalesRepository } from '../../../apps-script/src/repositories/sales/sales-repository';
 import { createInMemoryCommandRepository } from '../../../apps-script/src/repositories/platform/command-repository';
-import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { runPosAcceptanceDrill } from '../../../apps-script/src/bootstrap/pos-acceptance-drill';
 import { readPerformanceSnapshot, withPerformanceTracker } from '../../../apps-script/src/api/performance-tracker';
 
@@ -81,7 +80,6 @@ function createFixture() {
     financeRepository,
     salesRepository: createInMemorySalesRepository(),
     commandRepository: createInMemoryCommandRepository(),
-    auditOutboxRepository: createInMemoryAuditOutboxRepository(),
     lockProvider: createImmediateLockProvider(),
     now: () => new Date('2026-08-01T05:00:00.000Z'),
     newId(prefix: string) {

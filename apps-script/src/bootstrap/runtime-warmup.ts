@@ -56,7 +56,6 @@ export function warmRuntimeForAppsScript_(): RuntimeWarmupResult {
       }),
       tableDefinitions,
       transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
-      auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
       credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
       platformCacheStore: createAppsScriptCacheStore({ cacheService: CacheService }),
     });

@@ -163,7 +163,7 @@ export function FinanceHome({ summary = defaultSummary }: FinanceHomeProps) {
           title="Đóng ca & khóa sổ"
         >
           <StateBlock
-            description="Sau Locked không mở lại; mọi điều chỉnh dùng chứng từ mới có audit."
+            description="Sau Locked không mở lại; mọi điều chỉnh dùng chứng từ mới có người lập/người duyệt."
             title="Chênh lệch cần giải trình"
             tone="warning"
           />

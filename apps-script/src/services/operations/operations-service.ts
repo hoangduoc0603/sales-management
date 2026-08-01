@@ -4,11 +4,6 @@ import type {
   AttachmentAccessResponse,
   AttachmentCompleteRequest,
   AttachmentCompleteResponse,
-  AuditDeliveryRequest,
-  AuditDeliveryResponse,
-  AuditEventDTO,
-  AuditSearchRequest,
-  AuditSearchResponse,
   BackupListResponse,
   BackupManifestDTO,
   BackupRequest,
@@ -33,8 +28,6 @@ import type {
   RuntimeCleanupResponse,
 } from '@shared/contracts/operations/operations';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
-import type { AuditOutboxRepository } from '../../repositories/platform/audit-outbox-repository';
-import { runAuditDeliveryChunk } from './audit-delivery-worker';
 import { runImportCommitChunk } from './import-commit-worker';
 import type {
   OperationsPartitionRecord,
@@ -53,8 +46,6 @@ export interface OperationsService {
   commitImport(input: { actor: ActorContextDTO; request: ImportCommitRequest }): OperationsServiceResult<ImportCommitResponse>;
   completeAttachment(input: { actor: ActorContextDTO; request: AttachmentCompleteRequest }): OperationsServiceResult<AttachmentCompleteResponse>;
   downloadAttachment(input: { actor: ActorContextDTO; request: AttachmentAccessRequest }): OperationsServiceResult<AttachmentAccessResponse>;
-  searchAudit(input: { actor: ActorContextDTO; request: AuditSearchRequest }): OperationsServiceResult<AuditSearchResponse>;
-  deliverAudit(input: { actor: ActorContextDTO; request: AuditDeliveryRequest }): OperationsServiceResult<AuditDeliveryResponse>;
   requestBackup(input: { actor: ActorContextDTO; request: BackupRequest }): OperationsServiceResult<BackupResponse>;
   listBackups(input: { actor: ActorContextDTO }): OperationsServiceResult<BackupListResponse>;
   prepareRestore(input: { actor: ActorContextDTO; request: RestorePrepareRequest }): OperationsServiceResult<RestorePrepareResponse>;
@@ -66,7 +57,6 @@ export interface OperationsService {
 
 export interface OperationsServiceDependencies {
   repository: OperationsRepository;
-  auditOutboxRepository: AuditOutboxRepository;
   tenantId: string;
   appVersion: string;
   schemaVersion: number;
@@ -237,47 +227,6 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
           attachment,
           accessToken: `attachment-access-token-${lastSegment(attachment.attachmentId)}`,
           expiresAt: new Date(deps.now().getTime() + 5 * 60 * 1000).toISOString(),
-        },
-      };
-    },
-    searchAudit(input) {
-      const permissionError = requireAction(input.actor, 'operations.audit.view');
-      if (permissionError !== undefined) return permissionError;
-      const delivered = deps.repository.listAuditLogs();
-      const deliveredIds = new Set(delivered.map((event) => event.eventId));
-      const pending: AuditEventDTO[] = deps.auditOutboxRepository
-        .list()
-        .filter((event) => !deliveredIds.has(event.eventId))
-        .map((event) => ({
-          eventId: event.eventId,
-          action: event.action,
-          objectType: 'AuditOutbox',
-          objectId: event.commandId,
-          actorId: event.actorId,
-          occurredAt: event.createdAt,
-          result: event.status === 'Failed' ? 'Failed' : 'PendingDelivery',
-          summary: { deliveryStatus: event.status },
-        }));
-      const events = [...delivered, ...pending]
-        .filter((event) => filterAuditEvent(event, input.request))
-        .slice(0, input.request.pageSize);
-
-      return { ok: true, data: { events } };
-    },
-    deliverAudit(input) {
-      const permissionError = requireAction(input.actor, 'operations.audit.deliver');
-      if (permissionError !== undefined) return permissionError;
-      const result = runAuditDeliveryChunk({
-        auditOutboxRepository: deps.auditOutboxRepository,
-        operationsRepository: deps.repository,
-        maxEvents: input.request.maxEvents,
-      });
-      return {
-        ok: true,
-        data: {
-          runId: input.request.runId,
-          deliveredCount: result.deliveredCount,
-          failedCount: result.failedCount,
         },
       };
     },
@@ -466,18 +415,6 @@ function requireScope(
 function lastSegment(value: string): string {
   const parts = value.split('-');
   return parts[parts.length - 1] ?? '1';
-}
-
-function filterAuditEvent(event: AuditEventDTO, request: AuditSearchRequest): boolean {
-  const day = event.occurredAt.slice(0, 10);
-  if (day < request.dateRange.from || day > request.dateRange.to) return false;
-  if (request.actorId !== undefined && event.actorId !== request.actorId) return false;
-  if (request.action !== undefined && event.action !== request.action) return false;
-  if (request.objectType !== undefined && event.objectType !== request.objectType) return false;
-  if (request.objectId !== undefined && event.objectId !== request.objectId) return false;
-  if (request.branchId !== undefined && event.branchId !== request.branchId) return false;
-  if (request.warehouseId !== undefined && event.warehouseId !== request.warehouseId) return false;
-  return true;
 }
 
 function createNextPartition(

@@ -344,7 +344,7 @@ describe('createLocalFakeBackendClient', () => {
     });
   });
 
-  it('hỗ trợ Operations import, attachment, audit, backup, restore, health ở local fake backend', async () => {
+  it('hỗ trợ Operations import, attachment, backup, restore, health ở local fake backend', async () => {
     const client = createLocalFakeBackendClient({ now: () => new Date('2026-07-27T09:00:00.000Z') });
     const login = await client.invoke({
       operation: 'platform.auth.login',
@@ -508,15 +508,12 @@ describe('createLocalFakeBackendClient', () => {
 
     await expect(
       client.invoke({
-        operation: 'operations.audit.search',
-        requestId: 'req-local-audit',
+        operation: 'operations.audit.search' as never,
+        requestId: 'req-local-audit-disabled',
         sessionToken: login.data.sessionToken,
-        payload: {
-          dateRange: { from: '2026-07-27', to: '2026-07-27' },
-          pageSize: 50,
-        },
+        payload: {},
       }),
-    ).resolves.toMatchObject({ ok: true, data: { events: expect.any(Array) } });
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
   });
 
   it('hỗ trợ Purchasing supplier, PO, receipt và supplier return ở local fake backend', async () => {

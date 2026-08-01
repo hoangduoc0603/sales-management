@@ -14,13 +14,13 @@ PO: Draft → PendingApproval → Approved → PartiallyReceived → Completed
 Receipt/Return: Draft → PendingApproval → Approved | Rejected | Cancelled
 ```
 
-PO không tạo tồn, cost hay payable. Receipt Approved revalidates supplier/Warehouse/PO remaining quantity/lot/serial/cost allocation, then atomically creates PurchaseReceipt movement, balance/cost update, Payable and AuditOutbox. Approved receipt is corrected only by Return/adjustment.
+PO không tạo tồn, cost hay payable. Receipt Approved revalidates supplier/Warehouse/PO remaining quantity/lot/serial/cost allocation, then atomically creates PurchaseReceipt movement, balance/cost update and Payable, while receipt record stores `approvedBy/approvedAt`. Approved receipt is corrected only by Return/adjustment.
 
 ## 2. Commands và chi phí mua
 
 `po.create/approve/cancel`, `receipt.create/approve`, `landedCost.adjust`, `supplierReturn.create/approve` và `supplierInvoice.adjust` là idempotent commands. Receipt line snapshots unit/factor, price, discount, VAT, actual cost, allocation method/value and supplier terms.
 
-Landed cost allocation must equal the cost amount before approval. Methods: value, base quantity or explicit manual amount. Late invoice/cost never edits receipt or historical sale COGS: it creates an approved adjustment; allocation increases remaining on-hand value for referenced receipt/variant/Warehouse, while the unallocatable sold portion creates `PurchaseCostVariance` evidence. Both are auditable movements/ledger entries.
+Landed cost allocation must equal the cost amount before approval. Methods: value, base quantity or explicit manual amount. Late invoice/cost never edits receipt or historical sale COGS: it creates an approved adjustment with actor metadata; allocation increases remaining on-hand value for referenced receipt/variant/Warehouse, while the unallocatable sold portion creates `PurchaseCostVariance` evidence.
 
 Return NCC cannot exceed received less returned quantity and validates current Warehouse/lot/serial. Approved return creates PurchaseReturn, reduces Payable or creates supplier credit/refund according to selected treatment.
 

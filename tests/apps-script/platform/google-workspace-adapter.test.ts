@@ -204,7 +204,6 @@ describe('Google Workspace adapter seams', () => {
       'Core Data',
       'Runtime Data',
       'Transaction Data',
-      'Audit Data',
     ]);
     expect(manifest.attachments.name).toBe('Attachments');
     expect(JSON.stringify(manifest)).not.toContain('https://drive.google.com');
@@ -224,7 +223,6 @@ describe('Google Workspace adapter seams', () => {
         core: { spreadsheetId: 'spreadsheet-core' },
         runtime: { spreadsheetId: 'spreadsheet-runtime' },
         transaction: { activePartitionKey: 'FY2026-P01', spreadsheetId: 'spreadsheet-transaction' },
-        audit: { activePartitionKey: 'FY2026-P01', spreadsheetId: 'spreadsheet-audit' },
       },
       maintenanceMode: false,
     });

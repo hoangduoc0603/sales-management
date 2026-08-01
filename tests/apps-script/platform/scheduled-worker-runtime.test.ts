@@ -13,11 +13,11 @@ describe('Scheduled worker runtime', () => {
       maxAttempts: 2,
       jobs: [
         {
-          runId: 'worker-audit-delivery',
-          jobType: 'AuditDelivery',
+          runId: 'worker-import-commit',
+          jobType: 'Import',
           execute(checkpoint) {
-            checkpoint('audit:10');
-            executed.push('audit');
+            checkpoint('import:10');
+            executed.push('import');
           },
         },
         {
@@ -31,9 +31,9 @@ describe('Scheduled worker runtime', () => {
       ],
     });
 
-    expect(executed).toEqual(['audit', 'backup']);
+    expect(executed).toEqual(['import', 'backup']);
     expect(result.runs).toEqual([
-      expect.objectContaining({ runId: 'worker-audit-delivery', status: 'Completed', checkpointKey: 'audit:10' }),
+      expect.objectContaining({ runId: 'worker-import-commit', status: 'Completed', checkpointKey: 'import:10' }),
       expect.objectContaining({ runId: 'worker-backup-daily', status: 'Completed', checkpointKey: 'backup:done' }),
     ]);
   });

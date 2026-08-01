@@ -17,7 +17,7 @@
 - UI chỉ được implement từ màn hình có cả registry và handoff `Approved`; artifact `Review` chỉ được dùng để tham khảo kế hoạch, chưa dùng để code production UI.
 - POS là luồng hiệu năng trọng yếu: scan/search/cart chạy từ browser cache; checkout là một command backend có idempotency, fresh-read và commit ngắn.
 - Không hard-code Spreadsheet ID, Sheet name, header index, Drive folder ID, row number hoặc secret.
-- Mọi mutation nghiệp vụ phải đi qua `CommandTransaction`, idempotency key, permission/scope backend, ledger/projection cần thiết và `AuditOutbox`.
+- Mọi mutation nghiệp vụ phải đi qua `CommandTransaction`, idempotency key, permission/scope backend, ledger/projection cần thiết và actor metadata trên record; baseline không ghi `AuditOutbox` theo ADR 0017.
 - Mọi release ảnh hưởng POS phải có benchmark theo `SRS-OVR-024`; report/export/import/backup/archive không được cạnh tranh POS fast path.
 
 ---
@@ -39,7 +39,7 @@ Mỗi phase dưới đây phải được tách thành implementation plan chi t
 | Phase 4 — Catalog, CRM & Commercial Core | Hoàn thành core contracts/service/projection/cache/UI shell; checkout stale conflict chờ Sales checkout phase | [`2026-07-27-catalog-crm-commercial-core-phase-4.md`](2026-07-27-catalog-crm-commercial-core-phase-4.md) đã tick; `npm run verify` và local browser smoke pass. |
 | Phase 5 — Inventory Ledger & Balance Core | Hoàn thành core movement/balance/reservation/return baseline; opening/lot/serial/transfer/stocktake còn là release scope gap | [`2026-07-27-inventory-ledger-balance-core-phase-5.md`](2026-07-27-inventory-ledger-balance-core-phase-5.md) đã tick; verify pass. |
 | Phase 6 — Finance, Payment & Shift Core | Hoàn thành shift/payment/reversal/expense baseline; CashDrawer/PaymentMethod master và aging projection còn là release scope gap | [`2026-07-27-finance-payment-shift-core-phase-6.md`](2026-07-27-finance-payment-shift-core-phase-6.md) đã tick; verify pass. |
-| Phase 7 — POS Checkout End-to-End | Hoàn thành POS local/UI/service baseline; orchestration/receipt/performance cần acceptance audit Phase 12 | [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md) đã tick; verify pass. |
+| Phase 7 — POS Checkout End-to-End | Hoàn thành POS local/UI/service baseline; orchestration/receipt/performance cần acceptance review Phase 12 | [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md) đã tick; verify pass. |
 | Phase 8 — Sales Orders, Returns & Warranty | Hoàn thành sales/return/exchange/warranty baseline; deposit cancellation/attachment Drive/policy reversal còn là release scope gap | [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md) và [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md) đã tick; verify pass. |
 | Phase 9 — Purchasing & Supplier Operations | Hoàn thành purchasing backend baseline; purchasing UI/full production adapter thuộc release hardening | [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md) đã tick; verify pass. |
 | Phase 10 — Dashboard, Reporting & Export | Hoàn thành dashboard/report/export baseline; worker-backed export, drill-down resolver và archive coverage đã có local hardening; production export/archive drill còn là release gap | [`2026-07-27-dashboard-reporting-export-phase-10.md`](2026-07-27-dashboard-reporting-export-phase-10.md) đã tick; verify pass. |
@@ -86,7 +86,7 @@ Triển khai theo ranh giới hiện có:
 - `shared/types/`: domain primitive/value object thuần TypeScript.
 - `shared/constants/`: permission action, storage role, operation constants.
 - `apps-script/src/api/`: `invoke`, operation registry, API context, error mapping.
-- `apps-script/src/services/platform/`: auth/session, permission/scope, command coordinator, registry/migration, worker, audit/outbox.
+- `apps-script/src/services/platform/`: auth/session, permission/scope, command coordinator, registry/migration, worker và actor metadata policy.
 - `apps-script/src/services/<domain>/`: use case/state transition/orchestration domain.
 - `apps-script/src/repositories/`: table-aware repository, partition-aware query/write.
 - `apps-script/src/infrastructure/`: Sheets, Drive, Properties, Lock, Cache, Clock, ID, telemetry adapter.
@@ -149,7 +149,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement command journal: `Preparing`, `Committed`, `Failed`, retry cùng idempotency key trả outcome cũ.
 - [x] Implement TableRegistry/header mapping/migration append-only; không hard-code header index.
 - [x] Implement storage role + active partition locator cho Core/Runtime/Transaction/Audit ở mức registry/seam in-memory của Phase 1.
-- [x] Implement `AuditOutbox` write contract cho command bắt buộc audit.
+- [x] Superseded by ADR 0017: bỏ `AuditOutbox` write contract khỏi baseline, dùng actor metadata trên record.
 - [x] Add sanitized telemetry meta: requestId, durationMs, stage timing, I/O summary.
 - [x] Test permission/scope denial trước repository, session expiry/revoke, idempotency duplicate, migration idempotent, missing header, partition routing.
 
@@ -316,7 +316,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [ ] Test full payment, partial payment, insufficient stock, missing serial, quote conflict, timeout retry, duplicate prevention, print no-ledger.
 - [x] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
 
-**Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + AuditOutbox một lần, receipt in được và retry không duplicate.
+**Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + actor metadata + CommandTransaction một lần, receipt in được và retry không duplicate.
 
 **Tracking hiện tại:** Phase 7 baseline đã triển khai trong [`2026-07-27-pos-checkout-end-to-end-phase-7.md`](2026-07-27-pos-checkout-end-to-end-phase-7.md): Sales contracts/schema, in-memory repository/service, API operations, TableRegistry Sales, local cart state, local fake backend Sales, POS UI interactive, full payment, partial receivable, insufficient stock, missing shift, price stale conflict và idempotency duplicate prevention. CRM policy ledger, lot/serial backend guard đầy đủ, credit policy, đủ toàn bộ conflict code runtime, print/reprint UI action không tạo ledger, timeout recovery và benchmark p95/p99 vẫn để mở.
 
@@ -361,12 +361,12 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement late cost split: on-hand allocated value và `PurchaseCostVariance` cho phần đã bán.
 - [x] Implement SupplierReturn limit by receipt less returned quantity.
 - [x] Implement SupplierReturn `ReducePayable`, `Refund`, `Replacement` và SupplierPrepayment behavior.
-- [x] Implement Purchasing AuditOutbox cho GoodsReceipt/SupplierReturn approval.
+- [x] Superseded by ADR 0017: GoodsReceipt/SupplierReturn approval lưu `approvedBy/approvedAt`, không ghi AuditOutbox.
 - [x] Test partial receipt, lot/serial receipt rejection, late cost split, supplier return ReducePayable settlement, payment allocation multi-receipt.
 
 **Exit gate:** Nhập hàng và chi phí mua thay đổi tồn/cost/payable bằng chứng từ duyệt, không sửa receipt hoặc COGS lịch sử.
 
-**Tracking hiện tại:** Phase 9 backend đã triển khai trong [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md): Supplier master/status, PO lifecycle no-ledger, GoodsReceipt approval tạo Inventory `PurchaseReceipt` + Finance Payable + AuditOutbox, landed cost snapshot, late cost split theo ADR 0015, SupplierReturn `ReducePayable` tạo Inventory `PurchaseReturn` + giảm payable, SupplierReturn `Refund` tạo SupplierPrepayment, SupplierReturn `Replacement` không chỉnh payable/prepayment, SupplierReturn approval tạo AuditOutbox, lot/serial receipt rejection, supplier payment allocation nhiều receipt, API composition và local fake backend đã có contract/service/test. Purchasing UI chưa triển khai do còn chờ UI gate theo design/handoff Approved.
+**Tracking hiện tại:** Phase 9 backend đã triển khai trong [`2026-07-27-purchasing-supplier-operations-phase-9.md`](2026-07-27-purchasing-supplier-operations-phase-9.md): Supplier master/status, PO lifecycle no-ledger, GoodsReceipt approval tạo Inventory `PurchaseReceipt` + Finance Payable + `approvedBy/approvedAt`, landed cost snapshot, late cost split theo ADR 0015, SupplierReturn `ReducePayable` tạo Inventory `PurchaseReturn` + giảm payable, SupplierReturn `Refund` tạo SupplierPrepayment, SupplierReturn `Replacement` không chỉnh payable/prepayment, SupplierReturn approval lưu `approvedBy/approvedAt`, lot/serial receipt rejection, supplier payment allocation nhiều receipt, API composition và local fake backend đã có contract/service/test. Purchasing UI chưa triển khai do còn chờ UI gate theo design/handoff Approved.
 
 ## Phase 10: Dashboard, Reporting & Export
 
@@ -407,16 +407,16 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 - [x] Implement ImportBatch/ImportStagingRow canonical flow: template, upload, validate, confirm, commit by worker/chunk.
 - [ ] Implement attachment metadata and private Drive access; không trả public URL.
-- [x] Implement AuditOutbox delivery worker to AuditLog with idempotency.
+- [x] Superseded by ADR 0017: AuditOutbox delivery worker không còn là baseline cần release.
 - [x] Implement daily/manual backup manifest with checksums and retention 30 newest daily.
 - [ ] Implement restore prepare -> replacement resources -> Owner switch -> revoke sessions -> health check; không overwrite production.
 - [x] Implement active partition capacity alert, create next partition, archive read-only routing.
-- [x] Implement runtime TTL cleanup only for technical expired data, never business/audit/ledger history.
-- [x] Test import retry no duplicate, attachment permission, audit pending+delivered search, backup manifest checksum, restore switch, archive query routing.
+- [x] Implement runtime TTL cleanup only for technical expired data, never business/ledger history.
+- [x] Test import retry no duplicate, attachment permission, backup manifest checksum, restore switch, archive query routing; audit search superseded by ADR 0017.
 
 **Exit gate:** App có backup/restore/archive/health story đủ để bán một lần và vận hành dài hạn.
 
-**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Audit/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, audit search pending+delivered, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Đã bổ sung `runImportCommitChunk` để commit import theo chunk/idempotent và scheduled worker wiring cho batch `Committing`; đã bổ sung `runAuditDeliveryChunk` để chuyển `AuditOutbox` sang `AuditLog` idempotent, versioned Sheet AuditOutbox state và scheduled worker wiring; đã bổ sung `runArchiveChunk` và scheduled archive job cho closed transaction partition. Các checkbox master còn mở vì cần production Drive adapter cho attachment/backup/restore replacement resources, session revoke thật khi restore switch và Apps Script drill trên tài nguyên Google thật.
+**Tracking hiện tại:** Phase 11 baseline đã triển khai trong [`2026-07-27-operations-backup-archive-health-phase-11.md`](2026-07-27-operations-backup-archive-health-phase-11.md): shared Operations contracts/schema, in-memory operations repository/service, API composition, local fake backend handlers, TableRegistry definitions cho Import/Attachment/Backup/Restore/Health/Capacity/ReportProjection, import validate/commit baseline, attachment internal access token không public URL, backup manifest checksum, restore prepare/switch marker, partition capacity alert + next partition và runtime TTL cleanup. Audit delivery/search đã bị superseded bởi ADR 0017 và không còn là baseline. Đã bổ sung `runImportCommitChunk` để commit import theo chunk/idempotent và scheduled worker wiring cho batch `Committing`; đã bổ sung `runArchiveChunk` và scheduled archive job cho closed transaction partition. Các checkbox master còn mở vì cần production Drive adapter cho attachment/backup/restore replacement resources, session revoke thật khi restore switch và Apps Script drill trên tài nguyên Google thật.
 
 ## Phase 12: Full Release Hardening
 
@@ -458,7 +458,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 - Mỗi operation mới có `OperationName`, input/output schema, permission action, scope resolver, handler và error contract.
 - Mỗi table mới có TableRegistry definition, headers, owner, storage role, lifecycle, primary key, lookup key và migration test.
-- Mỗi mutation có command/idempotency test, permission/scope test, retry/duplicate test, audit test và failure recovery test.
+- Mỗi mutation có command/idempotency test, permission/scope test, retry/duplicate test, actor metadata test và failure recovery test.
 - Mỗi projection có source ledger/document trace, rebuild path và permission/sensitive-field test.
 - Mỗi UI screen đọc registry/handoff/artifact trước code, kiểm light/dark, loading/empty/error/restricted/scope/stale/command states.
 - Mỗi POS-impacting release có performance benchmark và không thêm RPC vào scan/search/cart warm path.

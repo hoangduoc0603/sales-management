@@ -29,7 +29,7 @@ describe('runtime warm-up service', () => {
     expect(administrationRepository.calls).toEqual([]);
   });
 
-  it('làm ấm đúng auth profile và current scope cache nhưng không tạo session/audit', () => {
+  it('làm ấm đúng auth profile và current scope cache nhưng không tạo session', () => {
     const authRepository = new CountingAuthRepository(adminUser);
     const administrationRepository = new CountingAdministrationRepository();
 
@@ -92,7 +92,6 @@ const runtimeConfig: RuntimeConfigDTO = {
     core: { spreadsheetId: 'core-default' },
     runtime: { spreadsheetId: 'runtime-default' },
     transaction: { activePartitionKey: 'FY2026-P07', spreadsheetId: 'txn-default' },
-    audit: { activePartitionKey: 'AUDIT-2026-07', spreadsheetId: 'audit-default' },
   },
   maintenanceMode: false,
 };

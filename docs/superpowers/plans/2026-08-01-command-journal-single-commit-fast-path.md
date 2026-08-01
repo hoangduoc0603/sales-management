@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Giảm I/O đồng bộ của mọi mutation command trên Apps Script bằng single-commit fast path, trong khi vẫn giữ idempotency, ledger source-of-truth và AuditOutbox bền vững trước success.
+**Goal:** Giảm I/O đồng bộ của mọi mutation command trên Apps Script bằng single-commit fast path, trong khi vẫn giữ idempotency và ledger source-of-truth.
 
-**Architecture:** Command Coordinator kiểm tra idempotency trong lock; nếu chưa có `Committed resultJson`, handler ghi document/ledger/projection bắt buộc, append `AuditOutbox`, rồi append một `CommandTransaction Committed` kèm response snapshot. Repository có `appendNew()` để append command version `v1` không preflight version lookup.
+**Architecture:** Command Coordinator kiểm tra idempotency trong lock; nếu chưa có `Committed resultJson`, handler ghi document/ledger/projection bắt buộc, rồi append một `CommandTransaction Committed` kèm response snapshot. Repository có `appendNew()` để append command version `v1` không preflight version lookup. Theo ADR 0017, baseline không ghi `AuditOutbox`; truy vết dùng actor metadata trên record.
 
 **Tech Stack:** TypeScript, Vitest, Google Apps Script, Google Sheets, clasp.
 
 ## Global Constraints
 
-- Không chuyển POS ledger, InventoryMovement, Finance ledger, materialized balance hoặc AuditOutbox sang worker.
+- Không chuyển POS ledger, InventoryMovement, Finance ledger hoặc materialized balance sang worker.
 - Không ghi secret/token/password vào `CommandTransaction`, audit, telemetry hoặc test fixture.
 - Không dùng full-table scan trong fast path nếu gateway đã có lookup/cache hẹp.
 - Tài liệu thay đổi command protocol phải được cập nhật cùng code.
@@ -80,7 +80,7 @@ Expected before implementation: FAIL because `command.appendCommittedMs` is miss
 
 - [x] **Step 3: Implement minimal code**
 
-Remove default `savePreparingMs` path. After handler and AuditOutbox append, call `commandRepository.appendNew({ status: 'Committed', resultJson })`. On thrown handler error, append sanitized `Failed`.
+Remove default `savePreparingMs` path. After handler completes required document/ledger/projection writes, call `commandRepository.appendNew({ status: 'Committed', resultJson })`. On thrown handler error, append sanitized `Failed`.
 
 - [x] **Step 4: Verify green**
 
@@ -101,7 +101,7 @@ Expected: PASS.
 
 - [x] **Step 1: Add ADR 0016**
 
-Document accepted single-commit fast path and explicit non-goals: no async ledger, no async AuditOutbox.
+Document accepted single-commit fast path and explicit non-goals: no async ledger; no standalone audit in baseline per ADR 0017.
 
 - [x] **Step 2: Update SRS/architecture references**
 

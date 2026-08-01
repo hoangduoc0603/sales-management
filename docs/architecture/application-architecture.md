@@ -50,14 +50,14 @@ api -> services -> repositories -> infrastructure
 3. yêu cầu Inventory issue hàng, lot/serial và movement/balance projection;
 4. yêu cầu Finance tạo payment, cash và receivable ledger/allocation;
 5. yêu cầu CRM điều chỉnh point/voucher khi hợp lệ;
-6. ghi Sale Order `Completed`, `AuditOutbox`, rồi append `CommandTransaction` `Committed` theo single-commit fast path;
+6. ghi Sale Order `Completed` với actor metadata, rồi append `CommandTransaction` `Committed` theo single-commit fast path;
 7. trả receipt snapshot bất biến.
 
 Các bước trên cùng thực hiện trong synchronous command vì cùng quyết định kết quả bán. Không dùng HTTP, trigger hoặc background event để hoàn tất tồn/tiền/công nợ. Nếu một điều kiện thất bại, command không được `Committed` và UI nhận lỗi nghiệp vụ có thể xử lý.
 
 ## 5. Event/outbox sau commit
 
-Sau commit, command tạo outbox bất biến cho các side effect không quyết định việc bán: copy audit sang Audit Data, invalidate/warm read model, tạo export/PDF khi được yêu cầu, notification hoặc reconciliation. Worker tiêu thụ outbox idempotent theo event ID.
+Sau commit, command có thể tạo outbox cho các side effect không quyết định việc bán: invalidate/warm read model, tạo export/PDF khi được yêu cầu, notification hoặc reconciliation. Worker tiêu thụ outbox idempotent theo event ID.
 
 Outbox không được dùng để trì hoãn inventory movement, payment/cash ledger, receivable/payable ledger, trạng thái chứng từ hoặc receipt. Những dữ liệu này phải tồn tại trước khi browser nhận success.
 

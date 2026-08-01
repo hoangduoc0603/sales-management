@@ -1,11 +1,6 @@
 import type { ApiCommand } from '@shared/contracts/api';
 import type { CommandStatusDTO } from '@shared/contracts/platform/command';
 import {
-  createInMemoryAuditOutboxRepository,
-  type AuditOutboxRecord,
-  type AuditOutboxRepository,
-} from '../../../repositories/platform/audit-outbox-repository';
-import {
   createInMemoryCommandRepository,
   type CommandRepository,
 } from '../../../repositories/platform/command-repository';
@@ -15,19 +10,18 @@ import {
 } from '../../../infrastructure/platform/runtime';
 import { recordStage } from '../../../api/performance-tracker';
 
-export interface CommandAuditInput {
+export interface CommandActorInput {
   actorId: string;
   action: string;
 }
 
 export interface CommandCoordinator {
-  run<T>(command: ApiCommand, handler: () => T, audit: CommandAuditInput): T;
+  run<T>(command: ApiCommand, handler: () => T, actor?: CommandActorInput): T;
   getStatus(input: { commandId?: string; idempotencyKey?: string }): CommandStatusDTO | undefined;
 }
 
 interface CommandCoordinatorDependencies {
   commandRepository: CommandRepository;
-  auditOutboxRepository: AuditOutboxRepository;
   lockProvider: LockProvider;
   now: () => Date;
   newId: (prefix: string) => string;
@@ -35,7 +29,7 @@ interface CommandCoordinatorDependencies {
 
 export function createCommandCoordinator(deps: CommandCoordinatorDependencies): CommandCoordinator {
   return {
-    run(command, handler, audit) {
+    run(command, handler) {
       const totalStartedAt = Date.now();
       try {
         return deps.lockProvider.withLock(() => {
@@ -60,16 +54,6 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
           try {
             const result = measure('command.handlerMs', handler);
             const resultJson = JSON.stringify(result);
-            measure('command.auditAppendMs', () => {
-              deps.auditOutboxRepository.append({
-                eventId: deps.newId('audit'),
-                commandId: command.commandId,
-                actorId: audit.actorId,
-                action: audit.action,
-                status: 'Pending',
-                createdAt: deps.now().toISOString(),
-              });
-            });
             measure('command.appendCommittedMs', () => {
               deps.commandRepository.appendNew({
                 commandId: command.commandId,
@@ -134,10 +118,8 @@ function toCommandErrorCode(error: unknown): string {
 
 export function createCommandCoordinatorForTest() {
   let sequence = 0;
-  const auditOutboxRepository = createInMemoryAuditOutboxRepository();
   const coordinator = createCommandCoordinator({
     commandRepository: createInMemoryCommandRepository(),
-    auditOutboxRepository,
     lockProvider: createImmediateLockProvider(),
     now: () => new Date('2026-07-26T00:00:00.000Z'),
     newId(prefix) {
@@ -148,8 +130,5 @@ export function createCommandCoordinatorForTest() {
 
   return {
     ...coordinator,
-    getAuditOutbox(): readonly AuditOutboxRecord[] {
-      return auditOutboxRepository.list();
-    },
   };
 }

@@ -31,13 +31,13 @@ export const tableDefinitionSchema = z
       'reporting',
       'operations',
     ]),
-    storageRole: z.enum(['core', 'runtime', 'transaction', 'audit']),
+    storageRole: z.enum(['core', 'runtime', 'transaction']),
     sheetName: z.string().trim().min(1),
-    lifecycle: z.enum(['master', 'runtime', 'document', 'ledger', 'projection', 'audit']),
+    lifecycle: z.enum(['master', 'runtime', 'document', 'ledger', 'projection']),
     schemaVersion: z.number().int().positive(),
     primaryKey: z.string().trim().min(1),
     headers: z.array(columnDefinitionSchema).min(1),
-    partitionPolicy: z.enum(['none', 'transaction-period', 'audit-period']),
+    partitionPolicy: z.enum(['none', 'transaction-period']),
     lookupKeys: z.array(lookupKeyDefinitionSchema),
   })
   .strict();

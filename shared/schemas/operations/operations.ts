@@ -2,8 +2,6 @@ import { z } from 'zod';
 import type {
   AttachmentAccessRequest,
   AttachmentCompleteRequest,
-  AuditDeliveryRequest,
-  AuditSearchRequest,
   BackupRequest,
   HealthCheckRequest,
   ImportCommitRequest,
@@ -17,7 +15,6 @@ import type {
 } from '@shared/contracts/operations/operations';
 
 const nonEmptyTrimmed = z.string().trim().min(1);
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const isoDateTime = z.string().datetime();
 const commandBaseSchema = z
   .object({
@@ -29,17 +26,7 @@ const commandBaseSchema = z
 const importTypeSchema = z.enum(['Catalog', 'Customer', 'Supplier', 'OpeningInventory']);
 const importSelectionModeSchema = z.enum(['ValidRowsOnly', 'AllOrNothing']);
 const backupTypeSchema = z.enum(['Daily', 'Manual']);
-const storageRoleSchema = z.enum(['core', 'runtime', 'transaction', 'audit']);
-const dateRangeSchema = z
-  .object({
-    from: isoDate,
-    to: isoDate,
-  })
-  .strict()
-  .refine((value) => value.from <= value.to, {
-    message: 'Date range from must be before or equal to to.',
-    path: ['to'],
-  });
+const storageRoleSchema = z.enum(['core', 'runtime', 'transaction']);
 
 export const importTemplateRequestSchema = z
   .object({
@@ -119,35 +106,6 @@ export const attachmentAccessRequestSchema = z
 
 export function parseAttachmentAccessRequest(value: unknown): AttachmentAccessRequest {
   return attachmentAccessRequestSchema.parse(value);
-}
-
-export const auditSearchRequestSchema = z
-  .object({
-    dateRange: dateRangeSchema,
-    actorId: nonEmptyTrimmed.optional(),
-    action: nonEmptyTrimmed.optional(),
-    objectType: nonEmptyTrimmed.optional(),
-    objectId: nonEmptyTrimmed.optional(),
-    branchId: nonEmptyTrimmed.optional(),
-    warehouseId: nonEmptyTrimmed.optional(),
-    pageSize: z.number().int().min(1).max(500),
-    cursor: nonEmptyTrimmed.optional(),
-  })
-  .strict();
-
-export function parseAuditSearchRequest(value: unknown): AuditSearchRequest {
-  return auditSearchRequestSchema.parse(value);
-}
-
-export const auditDeliveryRequestSchema = z
-  .object({
-    runId: nonEmptyTrimmed,
-    maxEvents: z.number().int().min(1).max(1000),
-  })
-  .strict();
-
-export function parseAuditDeliveryRequest(value: unknown): AuditDeliveryRequest {
-  return auditDeliveryRequestSchema.parse(value);
 }
 
 export const backupRequestSchema = commandBaseSchema.extend({

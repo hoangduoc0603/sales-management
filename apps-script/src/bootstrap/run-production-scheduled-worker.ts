@@ -5,7 +5,6 @@ import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gat
 import { createActiveRuntimeTableLocator } from '../infrastructure/google-workspace/runtime-table-locator';
 import type { OperationsRepository } from '../repositories/operations/operations-repository';
 import type { AdministrationRepository } from '../repositories/platform/administration-repository';
-import type { AuditOutboxRepository } from '../repositories/platform/audit-outbox-repository';
 import type { ReportingRepository } from '../repositories/reporting/reporting-repository';
 import { ensureCurrentDashboardBaselineProjections } from '../services/reporting/dashboard-baseline-projection';
 import { createProductionRepositories } from './create-production-repositories';
@@ -18,7 +17,6 @@ import {
   type ScheduledWorkerTriggerRemoveResult,
   type ScheduledWorkerTriggerStatusResult,
 } from '../infrastructure/google-workspace/scheduled-worker-trigger-manager';
-import { runAuditDeliveryChunk } from '../services/operations/audit-delivery-worker';
 import { runBackupChunk } from '../services/operations/backup-restore-worker';
 import { runImportCommitChunk } from '../services/operations/import-commit-worker';
 import { runArchiveChunk } from '../services/operations/archive-worker';
@@ -31,7 +29,6 @@ import {
 export interface ProductionScheduledWorkerTickDependencies {
   repository: OperationsRepository;
   administrationRepository?: AdministrationRepository;
-  auditOutboxRepository: AuditOutboxRepository;
   reportingRepository?: ReportingRepository;
   tenantId: string;
   appVersion: string;
@@ -49,22 +46,6 @@ export function runProductionScheduledWorkerTick(
     repository: deps.repository,
     now: deps.now,
     jobs: [
-      {
-        runId: 'scheduled-audit-delivery',
-        jobType: 'AuditDelivery',
-        execute(checkpoint) {
-          const result = runAuditDeliveryChunk({
-            auditOutboxRepository: deps.auditOutboxRepository,
-            operationsRepository: deps.repository,
-            maxEvents: 100,
-          });
-          if (result.checkpointKey !== undefined) {
-            checkpoint(result.checkpointKey);
-            return;
-          }
-          checkpoint('audit:no-pending');
-        },
-      },
       ...(
         deps.reportingRepository === undefined || deps.administrationRepository === undefined
           ? []
@@ -202,7 +183,6 @@ export function runAppsScriptScheduledWorker(): ScheduledWorkerTickResult {
     }),
     tableDefinitions,
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
-    auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
     credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
   });
   let sequence = 0;
@@ -210,7 +190,6 @@ export function runAppsScriptScheduledWorker(): ScheduledWorkerTickResult {
   return runProductionScheduledWorkerTick({
     repository: repositories.operationsRepository,
     administrationRepository: repositories.administrationRepository,
-    auditOutboxRepository: repositories.auditOutboxRepository,
     reportingRepository: repositories.reportingRepository,
     tenantId: runtimeConfig.tenantId,
     appVersion: runtimeConfig.appVersion,

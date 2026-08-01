@@ -24,9 +24,5 @@ function resolveSpreadsheetId(
     return config.storage.transaction.spreadsheetId;
   }
 
-  const activeAuditPartitionKey = config.storage.audit.activePartitionKey;
-  if (partitionKey !== undefined && partitionKey !== activeAuditPartitionKey) {
-    throw new Error(`Unsupported non-active audit partition: ${partitionKey}`);
-  }
-  return config.storage.audit.spreadsheetId;
+  throw new Error(`Unsupported storage role: ${table.storageRole}`);
 }

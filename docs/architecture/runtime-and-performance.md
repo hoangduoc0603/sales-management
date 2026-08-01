@@ -22,7 +22,7 @@ Browser dùng memory cache cho tab hiện tại và IndexedDB cho catalog/read m
 
 Cache client có key gồm installation, user, permission/auth version, app/schema version, scope và resource version. Cache cũ chỉ là stale read-only fallback; logout, auth/permission error hoặc deployment mới phải xóa namespace tương ứng.
 
-Apps Script `CacheService` dùng cache-aside cho config, permission summary ngắn hạn và master data ít đổi. Cache miss là trạng thái bình thường; cache không được làm một operation sai hoặc không dùng được. Ledger, audit, command state và số dư quyết định checkout không được cache persistent.
+Apps Script `CacheService` dùng cache-aside cho config, permission summary ngắn hạn và master data ít đổi. Cache miss là trạng thái bình thường; cache không được làm một operation sai hoặc không dùng được. Ledger, command state và số dư quyết định checkout không được cache persistent.
 
 Khi Catalog/price/promotion thay đổi, mutation tăng resource version hoặc invalidate tag. Browser tải delta; không tải lại toàn bộ catalog nếu không cần. Server luôn revalidate ở `completeSale`; kết quả khác cached cart trả conflict chi tiết, không tự đổi giá.
 
@@ -32,18 +32,18 @@ Khi Catalog/price/promotion thay đổi, mutation tăng resource version hoặc 
 
 1. kiểm tra lại idempotency và dữ liệu có thể cạnh tranh;
 2. cấp sequence cần thiết;
-3. batch append/update document, ledger, materialized balance, command transaction và audit outbox ở active transaction partition;
+3. batch append/update document, ledger, materialized balance và command transaction ở active transaction partition;
 4. `SpreadsheetApp.flush()` trước khi release lock.
 
 Không mở Drive, sinh PDF, export, gửi notification, load catalog, refresh báo cáo hoặc gọi dịch vụ ngoài trong lock. Với baseline một thu ngân, lock hầu như không có contention. Không xây logical lock phức tạp trước khi telemetry chứng minh `lockWaitMs` là bottleneck.
 
-`CommandTransaction` hỗ trợ `Preparing`, `Committed`, `Failed`, nhưng command mới trên fast path dùng single-commit append theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md): kiểm tra idempotency, ghi document/ledger/projection và `AuditOutbox`, rồi append `Committed` kèm response snapshot. Chỉ record thuộc command `Committed` được tính vào report/read model. Retry cùng idempotency key trả result cũ hoặc tiếp tục recovery an toàn; không tạo order/ledger lần hai.
+`CommandTransaction` hỗ trợ `Preparing`, `Committed`, `Failed`, nhưng command mới trên fast path dùng single-commit append theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md): kiểm tra idempotency, ghi document/ledger/projection bắt buộc, rồi append `Committed` kèm response snapshot. Theo [ADR 0017](../decisions/0017-record-actor-metadata-no-standalone-audit.md), không ghi `AuditOutbox` trong baseline; record nghiệp vụ tự lưu actor metadata. Chỉ record thuộc command `Committed` được tính vào report/read model. Retry cùng idempotency key trả result cũ hoặc tiếp tục recovery an toàn; không tạo order/ledger lần hai.
 
 ## 4. I/O, quota và worker
 
 Gateway batch read/write theo header mapping, chỉ đọc cột/row cần thiết và reuse spreadsheet/sheet handle trong một execution. Không xen kẽ read/write trong vòng lặp; không dùng Sheet formula, `IMPORTRANGE`, format hoặc pivot nặng để xử lý nghiệp vụ.
 
-Worker có một scheduled trigger chung, `runId`, checkpoint, execution budget và retry có backoff/jitter. Worker chỉ làm audit projection, backup, export lớn, archive, import batch, reconciliation, cleanup runtime và cảnh báo quota/capacity. Worker không complete POS hoặc tạo ledger cốt lõi thay command đồng bộ.
+Worker có một scheduled trigger chung, `runId`, checkpoint, execution budget và retry có backoff/jitter. Worker chỉ làm backup, export lớn, archive, import batch, reconciliation, cleanup runtime và cảnh báo quota/capacity. Worker không complete POS hoặc tạo ledger cốt lõi thay command đồng bộ.
 
 ## 5. Telemetry và regression gate
 

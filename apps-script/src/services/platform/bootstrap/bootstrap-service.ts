@@ -93,8 +93,6 @@ export function createBootstrapService(deps: BootstrapServiceDependencies): Boot
           'operations.import.manage',
           'operations.attachment.manage',
           'operations.attachment.view',
-          'operations.audit.view',
-          'operations.audit.deliver',
           'operations.backup.manage',
           'operations.restore.manage',
           'operations.health.view',

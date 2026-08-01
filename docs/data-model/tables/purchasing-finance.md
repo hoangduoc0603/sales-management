@@ -12,7 +12,7 @@
 | `SupplierReturn` / `SupplierReturnLine` | document | source receipt, Warehouse, status, line quantity/value/lot/serial, treatment | reason/approval snapshot |
 | `PurchaseCostVariance` | append-only ledger | ID, adjustment/receipt/variant/Warehouse, amount VND, effective time | reason/cost source |
 
-All approved mutations have partition key, command correlation and audit outbox. Receipt/return query uses supplier/Warehouse/status/date indexes; no full ledger scan in receipt approval.
+All approved mutations have partition key, command correlation and actor metadata on the source record. Receipt/return query uses supplier/Warehouse/status/date indexes; no full ledger scan in receipt approval.
 
 ## Finance
 
@@ -27,4 +27,4 @@ All approved mutations have partition key, command correlation and audit outbox.
 | `Shift` | document/state | `shiftId`, partition, Branch, CashDrawer, Warehouse, cashier, status, openedAt, submitted/closed/locked times, opening/expected/actual/variance VND, approver | tender breakdown/reason/close evidence. |
 | `Expense` | document/state | `expenseId`, partition, Branch, category, drawer/account, payee, amount VND, effectiveAt, status, cash transaction/source attachment ID, actor/approver | reason/attachment snapshot. |
 
-All approved mutations carry partition, command correlation and audit outbox. Payment/ledger/allocation and balance/aging/shift expected projections are committed atomically; projections read only Approved/Committed evidence and never accept user-editable balance.
+All approved mutations carry partition, command correlation and actor metadata. Payment/ledger/allocation and balance/aging/shift expected projections are committed atomically; projections read only Approved/Committed evidence and never accept user-editable balance.

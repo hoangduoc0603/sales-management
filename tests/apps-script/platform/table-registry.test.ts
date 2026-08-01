@@ -204,7 +204,7 @@ describe('TableRegistryService', () => {
     );
   });
 
-  it('đăng ký table Operations/Reporting runtime, evidence và audit theo data dictionary Phase 11', () => {
+  it('đăng ký table Operations/Reporting runtime và evidence theo data dictionary Phase 11', () => {
     const service = createTableRegistryServiceForTest();
     const definitions = service.getDefinitions();
     const tableNames = definitions.map((table) => table.tableName);
@@ -218,19 +218,14 @@ describe('TableRegistryService', () => {
         'HealthCheck',
         'CapacityAlert',
         'AttachmentMetadata',
-        'AuditLog',
         'BackupRun',
         'RestoreRun',
         'ReportProjectionState',
         'RuntimeRecord',
       ]),
     );
-    expect(definitions.find((table) => table.tableName === 'AuditLog')).toMatchObject({
-      owner: 'operations',
-      storageRole: 'audit',
-      lifecycle: 'audit',
-      partitionPolicy: 'audit-period',
-    });
+    expect(definitions.find((table) => table.tableName === 'AuditLog')).toBeUndefined();
+    expect(definitions.find((table) => table.tableName === 'AuditOutbox')).toBeUndefined();
     expect(definitions.find((table) => table.tableName === 'AttachmentMetadata')).toMatchObject({
       owner: 'operations',
       storageRole: 'transaction',
@@ -267,9 +262,6 @@ describe('TableRegistryService', () => {
     );
     expect(definitions.find((table) => table.tableName === 'RestoreRun')?.headers.map((header) => header.name)).toEqual(
       expect.arrayContaining(['id', 'schemaVersion', 'recordVersion', 'writeFrozen']),
-    );
-    expect(definitions.find((table) => table.tableName === 'AuditLog')?.headers.map((header) => header.name)).toEqual(
-      expect.arrayContaining(['id', 'schemaVersion', 'eventId', 'summaryJson']),
     );
   });
 });

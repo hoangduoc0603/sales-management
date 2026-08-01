@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryOperationsRepository } from '../../../apps-script/src/repositories/operations/operations-repository';
-import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { createOperationsService } from '../../../apps-script/src/services/operations/operations-service';
 import type { ActorContextDTO } from '../../../shared/contracts/platform/authorization';
 
@@ -118,55 +117,6 @@ describe('OperationsService', () => {
     expect(denied).toMatchObject({ ok: false, error: { code: 'SCOPE_DENIED' } });
   });
 
-  it('searches delivered audit log and pending outbox events without duplicates', () => {
-    const { auditOutboxRepository, repository, service } = createFixture();
-    repository.saveAuditLog({
-      eventId: 'audit-1',
-      action: 'backup.request',
-      objectType: 'BackupRun',
-      objectId: 'backup-1',
-      actorId: 'user-admin',
-      branchId: 'branch-default',
-      occurredAt: '2026-07-27T09:00:00.000Z',
-      result: 'Delivered',
-      summary: { status: 'Completed' },
-    });
-    auditOutboxRepository.append({
-      eventId: 'audit-1',
-      commandId: 'cmd-duplicate',
-      actorId: 'user-admin',
-      action: 'backup.request',
-      status: 'Pending',
-      createdAt: '2026-07-27T09:01:00.000Z',
-    });
-    auditOutboxRepository.append({
-      eventId: 'audit-2',
-      commandId: 'cmd-pending',
-      actorId: 'user-admin',
-      action: 'restore.prepare',
-      status: 'Pending',
-      createdAt: '2026-07-27T09:02:00.000Z',
-    });
-
-    const result = service.searchAudit({
-      actor: actor({ actions: ['operations.audit.view'] }),
-      request: {
-        dateRange: { from: '2026-07-27', to: '2026-07-27' },
-        pageSize: 50,
-      },
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      data: {
-        events: [
-          { eventId: 'audit-1', result: 'Delivered' },
-          { eventId: 'audit-2', result: 'PendingDelivery', action: 'restore.prepare' },
-        ],
-      },
-    });
-  });
-
   it('creates backup manifest with partitions, row counts and stable checksum', () => {
     const { service } = createFixture();
 
@@ -250,7 +200,7 @@ describe('OperationsService', () => {
     });
   });
 
-  it('cleans expired technical runtime records without deleting business or audit evidence', () => {
+  it('cleans expired technical runtime records without deleting retained business evidence', () => {
     const { repository, service } = createFixture();
     repository.saveRuntimeRecord({
       recordId: 'session-expired',
@@ -283,10 +233,8 @@ describe('OperationsService', () => {
 
 function createFixture() {
   const repository = createInMemoryOperationsRepository();
-  const auditOutboxRepository = createInMemoryAuditOutboxRepository();
   const service = createOperationsService({
     repository,
-    auditOutboxRepository,
     tenantId: 'tenant-default',
     appVersion: '0.1.0',
     schemaVersion: 1,
@@ -305,7 +253,7 @@ function createFixture() {
     rowCount: 42,
   });
 
-  return { auditOutboxRepository, repository, service };
+  return { repository, service };
 }
 
 function actor(input: {

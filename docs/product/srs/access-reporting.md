@@ -15,17 +15,17 @@ Permission phải cấp theo resource và action tối thiểu `view`, `create`,
 
 ### SRS-ACC-003 — Quyền nhạy cảm tách biệt
 
-Các quyền sau phải tách khỏi quyền xem/sửa đơn thông thường: xem giá vốn, xem lợi nhuận, xem/sửa công nợ, xem/sửa quỹ/két, export, quản lý user/role, backup/restore, thay đổi chính sách/approval threshold và xem audit. Cấp quyền cao hơn không được tự động làm lộ giá vốn/lợi nhuận khi tenant không gán quyền đó.
+Các quyền sau phải tách khỏi quyền xem/sửa đơn thông thường: xem giá vốn, xem lợi nhuận, xem/sửa công nợ, xem/sửa quỹ/két, export, quản lý user/role, backup/restore và thay đổi chính sách/approval threshold. Cấp quyền cao hơn không được tự động làm lộ giá vốn/lợi nhuận khi tenant không gán quyền đó.
 
 ### SRS-ACC-004 — Thay đổi quyền và user
 
-Tạo/disable/reset password/gán role/đổi scope user phải được audit với actor, before/after đã che dữ liệu nhạy cảm và lý do nếu cấu hình. Disable user hoặc giảm scope phải vô hiệu hóa phiên đang hoạt động ngay. User bị disable không đăng nhập/tạo giao dịch mới nhưng lịch sử actor vẫn phải hiển thị.
+Tạo/disable/reset password/gán role/đổi scope user phải lưu actor metadata trên record user/role/scope và lý do nếu cấu hình. Disable user hoặc giảm scope phải vô hiệu hóa phiên đang hoạt động ngay. User bị disable không đăng nhập/tạo giao dịch mới nhưng lịch sử actor vẫn phải hiển thị.
 
 ## 2. Audit, import, export và tệp đính kèm
 
 ### SRS-ACC-005 — Audit truy vấn được
 
-Audit tại `SRS-OVR-009` phải lọc theo thời gian, actor, action, loại đối tượng, object ID, Branch/Warehouse và kết quả. User chỉ xem audit trong scope và theo permission; Owner xem toàn tenant. Audit không cho sửa/xóa qua UI hoặc import; export audit cần permission export riêng. Audit query phải bao gồm event đã delivered và event `Committed` đang retry delivery, hoặc phân biệt delivery state nếu cần cho Owner; event nghiệp vụ không được biến mất vì worker delivery chậm/lỗi.
+Baseline không có màn hình hoặc API audit riêng. Truy vết thao tác dùng lịch sử chứng từ/ledger/source record và actor metadata tại `SRS-OVR-009`. Khi cần xem ai tạo/sửa/duyệt/hủy, UI phải lấy từ field `createdBy`, `updatedBy`, `approvedBy`, `cancelledBy` hoặc field `...By` tương ứng trên record nguồn.
 
 ### SRS-ACC-006 — Import nghiệp vụ
 
@@ -33,11 +33,11 @@ Import hỗ trợ tối thiểu danh mục, khách hàng, NCC và tồn đầu k
 
 ### SRS-ACC-007 — Export dữ liệu
 
-User có quyền export có thể xuất dữ liệu màn hình/báo cáo ở CSV hoặc XLSX, theo bộ lọc và scope quyền hiện tại. File export phải ghi thời điểm, người tạo, phạm vi/bộ lọc và không chứa cột nhạy cảm khi user thiếu quyền tương ứng. Export lớn phải chạy tác vụ nền có `runId`, trạng thái, lỗi có thể hiểu và retry an toàn; export phải audit và không giữ lock hoặc cạnh tranh với POS fast path.
+User có quyền export có thể xuất dữ liệu màn hình/báo cáo ở CSV hoặc XLSX, theo bộ lọc và scope quyền hiện tại. File export phải ghi thời điểm, người tạo, phạm vi/bộ lọc và không chứa cột nhạy cảm khi user thiếu quyền tương ứng. Export lớn phải chạy tác vụ nền có `runId`, trạng thái, lỗi có thể hiểu, retry an toàn và lưu `requestedBy`; export không giữ lock hoặc cạnh tranh với POS fast path.
 
 ### SRS-ACC-008 — Tệp đính kèm
 
-File đính kèm của chứng từ, return, kiểm kho, chi phí và bảo hành được lưu ở Google Drive của tenant, với object ID, loại file, Drive file ID, người tải, thời điểm và trạng thái. User chỉ mở/tải file khi có quyền xem chứng từ và scope tương ứng; không cấp URL Drive công khai hoặc share quyền edit trực tiếp cho user nội bộ. Xóa file phải theo quyền, audit và không làm mất liên kết lịch sử; nếu file bị xóa vật lý, chứng từ phải hiển thị trạng thái file không khả dụng.
+File đính kèm của chứng từ, return, kiểm kho, chi phí và bảo hành được lưu ở Google Drive của tenant, với object ID, loại file, Drive file ID, người tải, thời điểm và trạng thái. User chỉ mở/tải file khi có quyền xem chứng từ và scope tương ứng; không cấp URL Drive công khai hoặc share quyền edit trực tiếp cho user nội bộ. Xóa file phải theo quyền, lưu `deletedBy/deletedAt` trên metadata và không làm mất liên kết lịch sử; nếu file bị xóa vật lý, chứng từ phải hiển thị trạng thái file không khả dụng.
 
 ## 3. Dashboard và báo cáo
 
@@ -69,7 +69,7 @@ Hệ thống phải báo cáo theo nhân viên: doanh thu gộp/thuần, số đ
 
 ### SRS-ACC-015 — Vận hành backup/restore
 
-Giao diện Owner phải hiển thị danh sách backup hằng ngày/thủ công, thời điểm, kích thước/trạng thái, actor, manifest app/schema version, danh sách partition và kết quả kiểm tra. Restore phải chạy theo `SRS-OVR-010`: freeze ghi, xác nhận backup cụ thể, tạo bộ tài nguyên phục hồi riêng, ghi audit, kiểm tra tham chiếu trước/sau khi switch runtime config và thông báo trạng thái. Hệ thống không tự khôi phục khi chưa có Owner xác nhận.
+Giao diện Owner phải hiển thị danh sách backup hằng ngày/thủ công, thời điểm, kích thước/trạng thái, actor, manifest app/schema version, danh sách partition và kết quả kiểm tra. Restore phải chạy theo `SRS-OVR-010`: freeze ghi, xác nhận backup cụ thể, tạo bộ tài nguyên phục hồi riêng, lưu `requestedBy/switchedBy`, kiểm tra tham chiếu trước/sau khi switch runtime config và thông báo trạng thái. Hệ thống không tự khôi phục khi chưa có Owner xác nhận.
 
 ### SRS-ACC-016 — Theo dõi quota và archive
 
@@ -77,7 +77,7 @@ Hệ thống phải ghi các lỗi/quota Apps Script, Google Sheets và Drive th
 
 ### SRS-ACC-017 — Cấu hình tenant
 
-Owner/Admin trong quyền được cấu hình thông tin doanh nghiệp, logo, địa chỉ, mã số thuế, mẫu đánh số, VAT, Branch/Warehouse, quỹ/tài khoản, phương thức thanh toán, thời hạn trả hàng, ngưỡng duyệt, chính sách nợ, policy reservation, bảng giá/promotion và mẫu in. Mọi thay đổi cấu hình phải có effective date khi tác động giá/thuế/policy giao dịch, audit và không tính lại chứng từ lịch sử.
+Owner/Admin trong quyền được cấu hình thông tin doanh nghiệp, logo, địa chỉ, mã số thuế, mẫu đánh số, VAT, Branch/Warehouse, quỹ/tài khoản, phương thức thanh toán, thời hạn trả hàng, ngưỡng duyệt, chính sách nợ, policy reservation, bảng giá/promotion và mẫu in. Mọi thay đổi cấu hình phải có effective date khi tác động giá/thuế/policy giao dịch, lưu `createdBy/updatedBy` và không tính lại chứng từ lịch sử.
 
 ### SRS-ACC-018 — Khu vực Owner vận hành
 
@@ -88,8 +88,8 @@ Owner phải xem được app/schema/deployment version, trạng thái runtime c
 | Mã | Kịch bản kiểm thử | Kết quả bắt buộc |
 | --- | --- | --- |
 | ACC-AT-01 | User chỉ có Warehouse A gọi API xem tồn Warehouse B. | Backend từ chối, không trả số lượng/tên hàng ngoài scope. |
-| ACC-AT-02 | Admin reset mật khẩu hoặc disable user đang đăng nhập. | Tất cả phiên của user bị thu hồi; audit có actor/thời điểm nhưng không có mật khẩu. |
-| ACC-AT-03 | Cashier export báo cáo bán. | File chỉ có Branch/số liệu được phép, không có COGS/lợi nhuận nếu thiếu permission; export audit. |
+| ACC-AT-02 | Admin reset mật khẩu hoặc disable user đang đăng nhập. | Tất cả phiên của user bị thu hồi; record user/session có actor metadata nhưng không có mật khẩu. |
+| ACC-AT-03 | Cashier export báo cáo bán. | File chỉ có Branch/số liệu được phép, không có COGS/lợi nhuận nếu thiếu permission; ExportRun lưu người yêu cầu. |
 | ACC-AT-04 | Import danh mục có ba dòng sai và hai dòng đúng. | Hiển thị lỗi từng dòng; user chọn import dòng hợp lệ hoặc hủy batch; không có bản ghi trùng khi gửi lại batch. |
-| ACC-AT-05 | Owner khôi phục backup. | Ghi bị freeze, yêu cầu xác nhận bản backup, có audit trước/sau và kết quả kiểm tra tham chiếu. |
+| ACC-AT-05 | Owner khôi phục backup. | Ghi bị freeze, yêu cầu xác nhận bản backup, RestoreRun lưu người yêu cầu/người switch và kết quả kiểm tra tham chiếu. |
 | ACC-AT-06 | Viewer mở dashboard lợi nhuận qua URL/báo cáo. | KPI/cột lợi nhuận bị từ chối ở backend, không chỉ bị ẩn UI. |

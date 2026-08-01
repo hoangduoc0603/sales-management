@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AttachmentMetadataDTO,
-  AuditEventDTO,
   BackgroundRunDTO,
   BackupRunDTO,
   CapacityAlertDTO,
@@ -19,19 +18,17 @@ import {
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 
 describe('Sheet-backed OperationsRepository', () => {
-  it('persists import, attachment, audit, worker and telemetry records through SheetGateway', () => {
+  it('persists import, attachment, worker and telemetry records through SheetGateway', () => {
     const gateway = new FakeSheetGateway();
     const repository = createSheetOperationsRepository({
       gateway,
       tableDefinitions: createPlatformTableDefinitions(),
       transactionPartitionKey: 'FY2026-P01',
-      auditPartitionKey: 'AUDIT-2026-07',
     });
 
     repository.saveImportBatch(importBatchFixture);
     repository.saveImportRows('batch-1', [importRowFixture]);
     repository.saveAttachment(attachmentFixture);
-    repository.saveAuditLog(auditEventFixture);
     repository.saveBackgroundRun(backgroundRunFixture);
     repository.saveHealthCheck(healthCheckFixture);
     repository.saveCapacityAlert(capacityAlertFixture);
@@ -39,7 +36,6 @@ describe('Sheet-backed OperationsRepository', () => {
     expect(repository.getImportBatch('batch-1')).toEqual(importBatchFixture);
     expect(repository.listImportRows('batch-1')).toEqual([importRowFixture]);
     expect(repository.getAttachment('attachment-1')).toEqual(attachmentFixture);
-    expect(repository.listAuditLogs()).toEqual([auditEventFixture]);
     expect(repository.getBackgroundRun('run-1')).toEqual(backgroundRunFixture);
     expect(repository.listHealthChecks()).toEqual([healthCheckFixture]);
     expect(repository.listCapacityAlerts()).toEqual([capacityAlertFixture]);
@@ -47,7 +43,6 @@ describe('Sheet-backed OperationsRepository', () => {
       ['ImportBatch', undefined, 1],
       ['ImportStagingRow', undefined, 1],
       ['AttachmentMetadata', 'FY2026-P01', 1],
-      ['AuditLog', 'AUDIT-2026-07', 1],
       ['BackgroundRun', undefined, 1],
       ['HealthCheck', undefined, 1],
       ['CapacityAlert', undefined, 1],
@@ -58,12 +53,6 @@ describe('Sheet-backed OperationsRepository', () => {
       recordVersion: 1,
       batchId: 'batch-1',
       checksum: 'checksum-1',
-    });
-    expect(gateway.appendRequests.find((request) => request.tableName === 'AuditLog')?.rows[0]).toMatchObject({
-      id: 'audit-1',
-      schemaVersion: 1,
-      eventId: 'audit-1',
-      summaryJson: { amountVnd: 100000 },
     });
   });
 
@@ -81,7 +70,6 @@ describe('Sheet-backed OperationsRepository', () => {
       gateway,
       tableDefinitions: createPlatformTableDefinitions(),
       transactionPartitionKey: 'FY2026-P01',
-      auditPartitionKey: 'AUDIT-2026-07',
     });
 
     repository.saveRestore(restoreFixture);
@@ -163,19 +151,6 @@ const attachmentFixture: AttachmentMetadataDTO = {
   status: 'Available',
   uploadedBy: 'user-admin',
   uploadedAt: '2026-07-27T08:00:00.000Z',
-};
-
-const auditEventFixture: AuditEventDTO = {
-  eventId: 'audit-1',
-  action: 'sales.pos.complete',
-  objectType: 'SaleOrder',
-  objectId: 'sale-1',
-  actorId: 'cashier-1',
-  branchId: 'branch-default',
-  warehouseId: 'warehouse-default',
-  occurredAt: '2026-07-27T08:00:00.000Z',
-  result: 'Committed',
-  summary: { amountVnd: 100000 },
 };
 
 const backgroundRunFixture: BackgroundRunDTO = {

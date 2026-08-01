@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryFinanceRepository } from '../../../apps-script/src/repositories/finance/finance-repository';
 import { createInMemoryInventoryRepository } from '../../../apps-script/src/repositories/inventory/inventory-repository';
-import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { createInMemoryPurchasingRepository } from '../../../apps-script/src/repositories/purchasing/purchasing-repository';
 import { createFinanceService } from '../../../apps-script/src/services/finance/finance-service';
 import { createInventoryService } from '../../../apps-script/src/services/inventory/inventory-service';
@@ -71,7 +70,7 @@ describe('PurchasingService supplier and PO lifecycle', () => {
   });
 
   it('approves partial goods receipt from PO with inventory receive, moving cost and payable', () => {
-    const { auditOutboxRepository, financeRepository, inventoryRepository, repository, service } = createFixture();
+    const { financeRepository, inventoryRepository, repository, service } = createFixture();
     const supplier = service.createSupplier(supplierInput());
     if (!supplier.ok) throw new Error('Expected supplier create success.');
     const po = service.createPurchaseOrder(poInput(supplier.data.supplier.supplierId));
@@ -147,14 +146,6 @@ describe('PurchasingService supplier and PO lifecycle', () => {
     expect(financeRepository.listObligations()).toHaveLength(1);
     expect(repository.getPurchaseOrder(po.data.purchaseOrder.purchaseOrderId)).toMatchObject({ status: 'PartiallyReceived' });
     expect(repository.getPurchaseOrderLines(po.data.purchaseOrder.purchaseOrderId)[0]).toMatchObject({ receivedQuantityMilli: 5_000 });
-    expect(auditOutboxRepository.list()).toMatchObject([
-      {
-        commandId: 'cmd-receipt-approve',
-        actorId: 'manager-1',
-        action: 'purchasing.goodsReceipt.approve',
-        status: 'Pending',
-      },
-    ]);
   });
 
   it('blocks receipt approval when serial count does not match received quantity', () => {
@@ -290,7 +281,7 @@ describe('PurchasingService supplier and PO lifecycle', () => {
   });
 
   it('approves supplier return within received quantity and reduces inventory plus payable', () => {
-    const { auditOutboxRepository, financeRepository, inventoryRepository, service } = createFixture();
+    const { financeRepository, inventoryRepository, service } = createFixture();
     const supplier = service.createSupplier(supplierInput());
     if (!supplier.ok) throw new Error('Expected supplier create success.');
     const po = service.createPurchaseOrder(poInput(supplier.data.supplier.supplierId));
@@ -403,13 +394,6 @@ describe('PurchasingService supplier and PO lifecycle', () => {
       inventoryValueVnd: 88_000,
     });
     expect(financeRepository.listObligations()[0]).toMatchObject({ remainingAmountVnd: 88_000 });
-    expect(auditOutboxRepository.list().filter((record) => record.action === 'purchasing.supplierReturn.approve')).toMatchObject([
-      {
-        commandId: 'cmd-return-approve',
-        actorId: 'manager-1',
-        status: 'Pending',
-      },
-    ]);
   });
 
   it('approves supplier return refund as supplier prepayment without reducing payable', () => {
@@ -514,7 +498,6 @@ function createFixture() {
   const repository = createInMemoryPurchasingRepository();
   const inventoryRepository = createInMemoryInventoryRepository();
   const financeRepository = createInMemoryFinanceRepository();
-  const auditOutboxRepository = createInMemoryAuditOutboxRepository();
   const newId = createSequentialId();
   const now = () => new Date('2026-07-27T09:00:00.000Z');
   const inventoryService = createInventoryService({ repository: inventoryRepository, tenantId, now, newId });
@@ -523,13 +506,12 @@ function createFixture() {
     financeService,
     inventoryService,
     repository,
-    auditOutboxRepository,
     tenantId,
     now,
     newId,
   });
 
-  return { auditOutboxRepository, financeRepository, inventoryRepository, inventoryService, repository, service };
+  return { financeRepository, inventoryRepository, inventoryService, repository, service };
 }
 
 function approveReceiptForSupplierReturn(service: ReturnType<typeof createFixture>['service']) {

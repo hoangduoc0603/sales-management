@@ -115,7 +115,7 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `web/src/features/<feature>/` | Page, component, hook, state, gọi API và type chỉ phục vụ `<feature>` | Component hoặc tiện ích dùng cho nhiều tính năng |
 | `web/src/features/dashboard/` | Dashboard vận hành, route tổng quan và state riêng màn dashboard | AppShell dùng chung hoặc report service backend |
 | `web/src/features/sales/` | UI shell Đơn bán, đơn nhập tay, trả/đổi hàng, bảo hành và state riêng màn chứng từ bán theo handoff Approved | POS cart local, checkout command backend, ledger Inventory/Finance hoặc AppShell dùng chung |
-| `web/src/features/reporting/` | UI shell Báo cáo, quản trị và vận hành: report/export, audit, user/role/scope, import, attachment, backup/restore, health/capacity theo handoff Approved | Dashboard vận hành riêng, reporting service backend, repository hoặc worker hạ tầng |
+| `web/src/features/reporting/` | UI shell Báo cáo, quản trị và vận hành: report/export, user/role/scope, import, attachment, backup/restore, health/capacity theo handoff Approved | Dashboard vận hành riêng, reporting service backend, repository hoặc worker hạ tầng |
 | `web/src/features/catalog/` | UI shell Catalog/CRM/Commercial, state và component chỉ phục vụ danh mục/khách hàng/chính sách thương mại | Pricing service backend, POS checkout state hoặc component dùng chung |
 | `web/src/features/finance/` | UI shell Finance/Shifts, sổ quỹ, công nợ, ca thu ngân và chi phí theo handoff Approved | Finance service backend, ledger mutation hoặc repository |
 | `web/src/features/inventory/` | UI shell Inventory/Purchasing, stock card, movement summary, transfer/stocktake/purchasing placeholder theo handoff Approved | Inventory service backend, ledger mutation hoặc repository |
@@ -129,7 +129,7 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `apps-script/src/api/` | Hàm public, endpoint và trigger nhận input rồi gọi service | Nghiệp vụ, truy cập Sheet/Drive trực tiếp |
 | `apps-script/src/services/` | Use case, validation nghiệp vụ và điều phối repository | Chi tiết `SpreadsheetApp`, `DriveApp` hoặc giao thức frontend |
 | `apps-script/src/services/platform/` | Use case nền tảng: auth/session, authorization, bootstrap tenant, command, registry và runtime policy | Luồng nghiệp vụ bán hàng, kho, mua hàng hoặc báo cáo theo domain |
-| `apps-script/src/services/platform/runtime/` | Runtime warm-up/service nhẹ để giữ cache và Apps Script execution path sẵn sàng; không tạo session, audit, ledger hoặc chạy worker nặng | Scheduled worker nghiệp vụ, backup/export/archive, login thật hoặc mutation domain |
+| `apps-script/src/services/platform/runtime/` | Runtime warm-up/service nhẹ để giữ cache và Apps Script execution path sẵn sàng; không tạo session, ledger hoặc chạy worker nặng | Scheduled worker nghiệp vụ, backup/export/archive, login thật hoặc mutation domain |
 | `apps-script/src/services/platform/worker/` | Background runner dùng chung cho scheduled job có lease, checkpoint, retry budget và sanitized error | Job nghiệp vụ cụ thể như backup/archive hoặc logic domain |
 | `apps-script/src/services/administration/` | Use case quản trị tenant, chi nhánh, kho, scope và cấu hình vận hành | Auth/session core hoặc adapter Google Workspace |
 | `apps-script/src/services/catalog/` | Use case Product/Variant/Barcode/Unit, POS projection và quote giá/khuyến mại | Repository mapping, frontend cache hoặc ledger tồn/tiền |

@@ -28,7 +28,7 @@ Owner có thể cấu hình PO dưới ngưỡng bỏ qua `PendingApproval`, nh�
 
 ### SRS-PUR-004 — Phiếu nhận hàng
 
-Receipt có thể tham chiếu một hoặc nhiều dòng PO hoặc được tạo trực tiếp nếu user có quyền. Receipt phải chọn NCC và Warehouse nhận, ngày nhận, dòng hàng, quantity nhận, đơn vị, giá nhập thực tế, giảm giá/thuế, lô/serial nếu bắt buộc, chi phí mua và chứng từ NCC. Receipt hỗ trợ nhận một phần; không được nhận vượt quantity PO còn mở nếu Manager không duyệt ngoại lệ có lý do/audit.
+Receipt có thể tham chiếu một hoặc nhiều dòng PO hoặc được tạo trực tiếp nếu user có quyền. Receipt phải chọn NCC và Warehouse nhận, ngày nhận, dòng hàng, quantity nhận, đơn vị, giá nhập thực tế, giảm giá/thuế, lô/serial nếu bắt buộc, chi phí mua và chứng từ NCC. Receipt hỗ trợ nhận một phần; không được nhận vượt quantity PO còn mở nếu Manager không duyệt ngoại lệ có lý do và `approvedBy/approvedAt`.
 
 Trạng thái receipt là `Draft → PendingApproval → Approved | Rejected | Cancelled`. Chỉ Approved tạo `PurchaseReceipt` theo `SRS-INV-005`, cập nhật giá vốn bình quân và phải trả. Receipt không được hủy trực tiếp sau Approved; sai sót dùng return NCC hoặc điều chỉnh được duyệt.
 
@@ -48,7 +48,7 @@ Hệ thống hỗ trợ chi phí mua như vận chuyển, bốc xếp, bảo hi�
 
 ### SRS-PUR-008 — Hóa đơn/NCC phát sinh sau receipt
 
-Nếu hóa đơn NCC hoặc chi phí mua đến sau khi receipt đã Approved, user không được sửa receipt. Hệ thống phải tạo chứng từ chi phí/điều chỉnh giá vốn có tham chiếu receipt, quyền duyệt và audit. Điều chỉnh chỉ tác động tồn còn lại/chi phí theo quy tắc dữ liệu được thiết kế sau SRS; không được âm thầm sửa giá vốn đã snapshot trên đơn bán cũ.
+Nếu hóa đơn NCC hoặc chi phí mua đến sau khi receipt đã Approved, user không được sửa receipt. Hệ thống phải tạo chứng từ chi phí/điều chỉnh giá vốn có tham chiếu receipt, quyền duyệt và actor metadata. Điều chỉnh chỉ tác động tồn còn lại/chi phí theo quy tắc dữ liệu được thiết kế sau SRS; không được âm thầm sửa giá vốn đã snapshot trên đơn bán cũ.
 
 ## 4. Trả hàng nhà cung cấp và phải trả
 

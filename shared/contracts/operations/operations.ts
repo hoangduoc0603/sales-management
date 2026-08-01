@@ -16,10 +16,9 @@ export type BackupType = 'Daily' | 'Manual';
 export type BackupStatus = 'Requested' | 'Running' | 'Completed' | 'Failed';
 export type RestoreStatus = 'Prepared' | 'Switched' | 'Failed';
 export type HealthStatus = 'Ok' | 'Warning' | 'Error';
-export type StorageRole = 'core' | 'runtime' | 'transaction' | 'audit';
+export type StorageRole = 'core' | 'runtime' | 'transaction';
 export type PartitionStatus = 'Active' | 'Closed' | 'Archived';
 export type BackgroundJobType =
-  | 'AuditDelivery'
   | 'Import'
   | 'Export'
   | 'ReportProjection'
@@ -160,47 +159,6 @@ export interface AttachmentAccessResponse {
 export interface OperationsDateRangeDTO {
   from: string;
   to: string;
-}
-
-export interface AuditSearchRequest {
-  dateRange: OperationsDateRangeDTO;
-  actorId?: string;
-  action?: string;
-  objectType?: string;
-  objectId?: string;
-  branchId?: string;
-  warehouseId?: string;
-  pageSize: number;
-  cursor?: string;
-}
-
-export interface AuditEventDTO {
-  eventId: string;
-  action: string;
-  objectType: string;
-  objectId: string;
-  actorId: string;
-  branchId?: string;
-  warehouseId?: string;
-  occurredAt: string;
-  result: 'Committed' | 'PendingDelivery' | 'Delivered' | 'Failed';
-  summary: Record<string, unknown>;
-}
-
-export interface AuditSearchResponse {
-  events: readonly AuditEventDTO[];
-  nextCursor?: string;
-}
-
-export interface AuditDeliveryRequest {
-  runId: string;
-  maxEvents: number;
-}
-
-export interface AuditDeliveryResponse {
-  runId: string;
-  deliveredCount: number;
-  failedCount: number;
 }
 
 export interface BackupRequest extends OperationsCommandBase {

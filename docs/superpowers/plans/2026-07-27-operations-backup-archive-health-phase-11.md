@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Triển khai baseline vận hành dài hạn cho import, attachment, audit delivery/search, backup/restore, partition/archive, runtime TTL cleanup và health/capacity để ứng dụng có câu chuyện dữ liệu đủ an toàn cho khách mua một lần.
+**Goal:** Triển khai baseline vận hành dài hạn cho import, attachment, backup/restore, partition/archive, runtime TTL cleanup và health/capacity để ứng dụng có câu chuyện dữ liệu đủ an toàn cho khách mua một lần. Audit delivery/search trong bản kế hoạch gốc đã bị superseded bởi ADR 0017; baseline không lưu audit riêng.
 
 **Architecture:** Operations là bounded context riêng trong `apps-script/src/services/operations/`, sở hữu runtime/evidence records và không ghi trực tiếp ledger/domain source-of-truth. Shared contracts/schemas định nghĩa operation API; repository in-memory là seam test/local, sau này thay bằng Sheet/Drive adapter. API composition chỉ expose command/query qua single RPC gateway, mọi quyền/scope vẫn do backend kiểm tra.
 
@@ -12,19 +12,19 @@
 
 - Tuân thủ `SRS-OVR-009`, `SRS-OVR-010`, `SRS-OVR-011`, `SRS-OVR-021`, `SRS-OVR-023`, `SRS-OVR-024`.
 - Tuân thủ `SRS-ACC-005`, `SRS-ACC-006`, `SRS-ACC-008`, `SRS-ACC-015`, `SRS-ACC-016`, `SRS-ACC-018`.
-- Tuân thủ ADR `0006`, `0007`, `0008`: customer-owned deployment, manifest-first backup, replacement-resource restore và mandatory audit outbox.
+- Tuân thủ ADR `0006`, `0007`, `0017`: customer-owned deployment, manifest-first backup, replacement-resource restore và không lưu audit nghiệp vụ riêng.
 - Không public Drive URL; download/export/attachment chỉ trả metadata hoặc token nội bộ đã được backend xác thực.
 - Restore không overwrite production; chỉ `restore.switch` mới đổi active runtime config sau prepare/health check.
 - Worker/import/export/backup/archive không giữ ScriptLock hoặc cạnh tranh POS fast path trong baseline.
-- Runtime TTL cleanup chỉ xóa technical expired data; không xóa business/audit/ledger/document history.
+- Runtime TTL cleanup chỉ xóa technical expired data; không xóa business/ledger/document history.
 
 ---
 
 ## File Structure
 
-- `shared/contracts/operations/operations.ts`: DTO import, attachment, audit, backup/restore, partition/archive, health và worker run.
+- `shared/contracts/operations/operations.ts`: DTO import, attachment, backup/restore, partition/archive, health và worker run.
 - `shared/schemas/operations/operations.ts`: Zod parser cho request Phase 11.
-- `apps-script/src/repositories/operations/operations-repository.ts`: in-memory store cho ImportBatch, ImportStagingRow, AttachmentMetadata, AuditLog, BackupRun, RestoreRun, PartitionRuntime, HealthCheck, CapacityAlert và runtime technical records.
+- `apps-script/src/repositories/operations/operations-repository.ts`: in-memory store cho ImportBatch, ImportStagingRow, AttachmentMetadata, BackupRun, RestoreRun, PartitionRuntime, HealthCheck, CapacityAlert và runtime technical records.
 - `apps-script/src/services/operations/operations-service.ts`: use case, state transition, idempotency baseline, manifest checksum, permission/scope filtering cơ bản.
 - `apps-script/src/bootstrap/create-api-composition.ts`: wire operations service vào single RPC gateway.
 - `web/src/lib/api/local-fake-backend.ts`: local fake operations responses để UI/test chạy local.
@@ -46,14 +46,13 @@
 **Interfaces:**
 - Produces request/response DTOs and parser functions consumed by API composition and local fake backend.
 
-- [x] Add failing tests that assert operation registration and parser behavior for import validate/commit, attachment complete/download, audit search, backup request, restore prepare/switch, health check, partition capacity and runtime cleanup.
+- [x] Add failing tests that assert operation registration and parser behavior for import validate/commit, attachment complete/download, backup request, restore prepare/switch, health check, partition capacity and runtime cleanup. Audit operation checks were removed by ADR 0017.
 - [x] Implement DTOs:
   - `ImportTemplateRequest/Response`
   - `ImportUploadRequest/Response`
   - `ImportValidateRequest/Response`
   - `ImportCommitRequest/Response`
   - `AttachmentCompleteRequest`, `AttachmentAccessRequest`, `AttachmentMetadataDTO`
-  - `AuditSearchRequest/Response`, `AuditDeliveryRequest/Response`
   - `BackupRequest/Response`, `BackupListResponse`
   - `RestorePrepareRequest/Response`, `RestoreSwitchRequest/Response`
   - `HealthCheckRequest/Response`
@@ -66,8 +65,6 @@
   - `operations.import.commit`
   - `operations.attachment.complete`
   - `operations.attachment.download`
-  - `operations.audit.search`
-  - `operations.audit.deliver`
   - `operations.backup.request`
   - `operations.backup.list`
   - `operations.restore.prepare`
@@ -85,17 +82,16 @@
 - Test: `tests/apps-script/operations/operations-service.test.ts`
 
 **Interfaces:**
-- Consumes shared operations DTOs and existing `AuditOutboxRecord`.
+- Consumes shared operations DTOs.
 - Produces `createOperationsService()` used by API composition and local fake backend parity.
 
 - [x] Add failing tests:
   - Import validation returns row-level errors and `ValidRowsOnly` commit is idempotent by `batchId/rowKey`.
   - Attachment download returns no public URL and denies branch/warehouse outside actor scope.
-  - Audit search returns delivered `AuditLog` plus pending `AuditOutbox`, deduped by `eventId`.
   - Backup manifest includes app/schema version, partitions, row counts and deterministic checksum.
   - Restore prepare freezes writes and switch creates replacement config marker and health result.
   - Partition ensure-next creates next partition before capacity threshold breach.
-  - Runtime cleanup removes only expired technical records and keeps business/audit evidence.
+  - Runtime cleanup removes only expired technical records and keeps business evidence.
 - [x] Implement repository clone-safe in-memory maps/lists.
 - [x] Implement baseline service state transitions:
   - Import: `Uploaded -> AwaitingConfirmation|FailedValidation -> Completed`
@@ -133,7 +129,7 @@
 **Interfaces:**
 - Produces registry definitions required by future Sheet adapters.
 
-- [x] Add failing registry expectations for `ImportBatch`, `ImportStagingRow`, `ExportRun`, `BackgroundRun`, `HealthCheck`, `CapacityAlert`, `AttachmentMetadata`, `AuditLog`, `BackupRun`, `RestoreRun`, `ReportProjectionState`.
+- [x] Add failing registry expectations for `ImportBatch`, `ImportStagingRow`, `ExportRun`, `BackgroundRun`, `HealthCheck`, `CapacityAlert`, `AttachmentMetadata`, `BackupRun`, `RestoreRun`, `ReportProjectionState`. `AuditLog` registry expectation was removed by ADR 0017.
 - [x] Implement table definitions matching `docs/data-model/tables/operations-reporting.md`.
 - [x] Run `npm test -- tests/apps-script/platform/table-registry.test.ts`.
 

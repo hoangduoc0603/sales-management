@@ -21,10 +21,6 @@ describe('Active runtime table locator', () => {
       spreadsheetId: 'spreadsheet-transaction',
       sheetName: 'SaleOrder',
     });
-    expect(locator({ table: table('AuditLog', 'audit'), partitionKey: 'AUDIT-2026-07' })).toEqual({
-      spreadsheetId: 'spreadsheet-audit',
-      sheetName: 'AuditLog',
-    });
   });
 
   it('fails fast when asked to route non-active partitions through active runtime config', () => {
@@ -33,9 +29,6 @@ describe('Active runtime table locator', () => {
     expect(() =>
       locator({ table: table('SaleOrder', 'transaction'), partitionKey: 'FY2026-P02' }),
     ).toThrow(/Unsupported non-active transaction partition/);
-    expect(() =>
-      locator({ table: table('AuditLog', 'audit'), partitionKey: 'AUDIT-2026-08' }),
-    ).toThrow(/Unsupported non-active audit partition/);
   });
 });
 
@@ -48,7 +41,6 @@ const runtimeConfig: RuntimeConfigDTO = {
     core: { spreadsheetId: 'spreadsheet-core' },
     runtime: { spreadsheetId: 'spreadsheet-runtime' },
     transaction: { activePartitionKey: 'FY2026-P01', spreadsheetId: 'spreadsheet-transaction' },
-    audit: { activePartitionKey: 'AUDIT-2026-07', spreadsheetId: 'spreadsheet-audit' },
   },
   maintenanceMode: false,
 };
@@ -59,15 +51,11 @@ function table(tableName: string, storageRole: TableDefinitionDTO['storageRole']
     owner: 'platform',
     storageRole,
     sheetName: tableName,
-    lifecycle: storageRole === 'transaction' ? 'document' : storageRole === 'audit' ? 'audit' : 'master',
+    lifecycle: storageRole === 'transaction' ? 'document' : 'master',
     schemaVersion: 1,
     primaryKey: 'id',
     headers: [{ name: 'id', type: 'string', required: true }],
-    partitionPolicy: storageRole === 'transaction'
-      ? 'transaction-period'
-      : storageRole === 'audit'
-        ? 'audit-period'
-        : 'none',
+    partitionPolicy: storageRole === 'transaction' ? 'transaction-period' : 'none',
     lookupKeys: [{ name: `${tableName}.primary`, columns: ['id'], unique: true }],
   };
 }

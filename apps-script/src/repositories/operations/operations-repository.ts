@@ -1,6 +1,5 @@
 import type {
   AttachmentMetadataDTO,
-  AuditEventDTO,
   BackgroundRunDTO,
   BackupRunDTO,
   CapacityAlertDTO,
@@ -32,8 +31,6 @@ export interface OperationsRepository {
   listImportRows(batchId: string): readonly ImportStagingRowDTO[];
   saveAttachment(attachment: AttachmentMetadataDTO): void;
   getAttachment(attachmentId: string): AttachmentMetadataDTO | undefined;
-  saveAuditLog(event: AuditEventDTO): void;
-  listAuditLogs(): readonly AuditEventDTO[];
   saveBackgroundRun(run: BackgroundRunDTO): void;
   getBackgroundRun(runId: string): BackgroundRunDTO | undefined;
   listBackgroundRuns(): readonly BackgroundRunDTO[];
@@ -58,7 +55,6 @@ export function createInMemoryOperationsRepository(): OperationsRepository {
   const importBatches = new Map<string, ImportBatchDTO>();
   const importRows = new Map<string, ImportStagingRowDTO[]>();
   const attachments = new Map<string, AttachmentMetadataDTO>();
-  const auditLogs = new Map<string, AuditEventDTO>();
   const backgroundRuns = new Map<string, BackgroundRunDTO>();
   const backups = new Map<string, BackupRunDTO>();
   const restores = new Map<string, RestoreRunDTO>();
@@ -88,12 +84,6 @@ export function createInMemoryOperationsRepository(): OperationsRepository {
     },
     getAttachment(attachmentId) {
       return cloneOptional(attachments.get(attachmentId));
-    },
-    saveAuditLog(event) {
-      auditLogs.set(event.eventId, clone(event));
-    },
-    listAuditLogs() {
-      return clone([...auditLogs.values()]);
     },
     saveBackgroundRun(run) {
       backgroundRuns.set(run.runId, clone(run));
@@ -165,7 +155,6 @@ export interface SheetOperationsRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
   transactionPartitionKey: string;
-  auditPartitionKey: string;
 }
 
 export function createSheetOperationsRepository(deps: SheetOperationsRepositoryDependencies): OperationsRepository {
@@ -189,14 +178,6 @@ export function createSheetOperationsRepository(deps: SheetOperationsRepositoryD
     table: findTable(deps.tableDefinitions, 'AttachmentMetadata'),
     idField: 'attachmentId',
     partitionKey: deps.transactionPartitionKey,
-  });
-  const auditLogs = createAppendOnlyTable<AuditEventDTO>({
-    gateway: deps.gateway,
-    table: findTable(deps.tableDefinitions, 'AuditLog'),
-    idField: 'eventId',
-    partitionKey: deps.auditPartitionKey,
-    toRow: auditEventToRow,
-    fromRow: auditEventFromRow,
   });
   const backgroundRuns = createVersionedTable<BackgroundRunDTO>({
     gateway: deps.gateway,
@@ -265,12 +246,6 @@ export function createSheetOperationsRepository(deps: SheetOperationsRepositoryD
     },
     getAttachment(attachmentId) {
       return attachments.list().find((attachment) => attachment.attachmentId === attachmentId);
-    },
-    saveAuditLog(event) {
-      auditLogs.append(event);
-    },
-    listAuditLogs() {
-      return auditLogs.list();
     },
     saveBackgroundRun(run) {
       backgroundRuns.save(run);
@@ -380,45 +355,6 @@ function createVersionedTable<TRecord extends object>(
             recordVersion: nextVersion,
           },
         ],
-      });
-    },
-  };
-}
-
-type AppendOnlyTableDependencies<TRecord extends object> = VersionedTableDependencies<TRecord>;
-
-interface AppendOnlyTable<TRecord extends object> {
-  list(): TRecord[];
-  append(record: TRecord): void;
-}
-
-function createAppendOnlyTable<TRecord extends object>(
-  deps: AppendOnlyTableDependencies<TRecord>,
-): AppendOnlyTable<TRecord> {
-  const toRow = deps.toRow ?? ((record: TRecord) => clone(record) as OperationsRow);
-  const fromRow = deps.fromRow ?? ((row: OperationsRow) => stripTechnicalFields(row) as TRecord);
-
-  function readRows(): OperationsRow[] {
-    return deps.gateway
-      .readTable({ table: deps.table, partitionKey: deps.partitionKey })
-      .map((row) => clone(row) as OperationsRow);
-  }
-
-  return {
-    list() {
-      return readRows().map((row) => clone(fromRow(row)));
-    },
-    append(record) {
-      const row = toRow(record);
-      const recordId = String(row[deps.idField] ?? '');
-      if (recordId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
-      if (readRows().some((current) => String(current[deps.idField] ?? '') === recordId || String(current.id ?? '') === recordId)) {
-        throw new Error(`DuplicatePrimaryKey:${deps.table.tableName}.id:${recordId}`);
-      }
-      deps.gateway.appendRows({
-        table: deps.table,
-        partitionKey: deps.partitionKey,
-        rows: [{ ...row, id: recordId, schemaVersion: deps.table.schemaVersion }],
       });
     },
   };
@@ -538,26 +474,6 @@ function importRowFromRow(row: OperationsRow): ImportStagingRowDTO {
     commitStatus: row.commitStatus as ImportStagingRowDTO['commitStatus'],
     sourceObjectId: optionalString(row.sourceObjectId),
     payload: clone((row.payloadJson ?? {}) as Record<string, unknown>),
-  };
-}
-
-function auditEventToRow(event: AuditEventDTO): OperationsRow {
-  const { summary, ...row } = clone(event);
-  return { ...row, summaryJson: summary };
-}
-
-function auditEventFromRow(row: OperationsRow): AuditEventDTO {
-  return {
-    eventId: String(row.eventId),
-    action: String(row.action),
-    objectType: String(row.objectType),
-    objectId: String(row.objectId),
-    actorId: String(row.actorId),
-    branchId: optionalString(row.branchId),
-    warehouseId: optionalString(row.warehouseId),
-    occurredAt: String(row.occurredAt),
-    result: row.result as AuditEventDTO['result'],
-    summary: clone((row.summaryJson ?? {}) as Record<string, unknown>),
   };
 }
 

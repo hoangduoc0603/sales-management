@@ -36,7 +36,7 @@ Transfer state: `Draft → PendingApproval → Approved → Shipped → Received
 
 ## 4. Lot/serial và query
 
-Lot allocation bắt buộc đủ quantity, mặc định FEFO khi bật; lot hết hạn/serial không Saleable bị chặn trừ exception audited. Serial state/warehouse thay đổi trong cùng command movement; serial return không Saleable cho đến Restock. Inventory query luôn scope Branch/Warehouse và route active/historical partition theo date/reference; không lộ balance ngoài scope.
+Lot allocation bắt buộc đủ quantity, mặc định FEFO khi bật; lot hết hạn/serial không Saleable bị chặn trừ exception được phê duyệt kèm actor metadata. Serial state/warehouse thay đổi trong cùng command movement; serial return không Saleable cho đến Restock. Inventory query luôn scope Branch/Warehouse và route active/historical partition theo date/reference; không lộ balance ngoài scope.
 
 ## 5. Test matrix
 

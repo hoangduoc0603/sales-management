@@ -134,7 +134,6 @@ describe('Apps Script Web App entrypoint', () => {
       'Core Data',
       'Runtime Data',
       'Transaction Data FY2026-P07',
-      'Audit Data AUDIT-2026-07',
     ]);
     expect(lockService.scriptLock.calls).toEqual(['waitLock:30000', 'releaseLock']);
 
@@ -150,7 +149,7 @@ describe('Apps Script Web App entrypoint', () => {
     });
 
     expect(secondRun).toMatchObject({ ok: true, data: { installed: true, status: 'Installed' } });
-    expect(spreadsheetApp.createdNames).toHaveLength(4);
+    expect(spreadsheetApp.createdNames).toHaveLength(3);
 
     expect(spreadsheetApp.getSheetValues('spreadsheet-3', 'DashboardProjection')).toEqual(
       expect.arrayContaining([

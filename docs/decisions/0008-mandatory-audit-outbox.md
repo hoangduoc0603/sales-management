@@ -1,6 +1,6 @@
 # ADR 0008 — Mandatory audit outbox
 
-**Trạng thái:** Accepted  
+**Trạng thái:** Superseded by [ADR 0017](0017-record-actor-metadata-no-standalone-audit.md)  
 **Liên quan:** [logical data model](../data-model/logical-data-model.md)
 
 ## Bối cảnh

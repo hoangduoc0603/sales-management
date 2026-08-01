@@ -47,8 +47,6 @@ import type {
 import type {
   AttachmentAccessRequest,
   AttachmentCompleteRequest,
-  AuditDeliveryRequest,
-  AuditSearchRequest,
   BackupRequest,
   HealthCheckRequest,
   ImportCommitRequest,
@@ -133,8 +131,6 @@ import {
 import {
   parseAttachmentAccessRequest,
   parseAttachmentCompleteRequest,
-  parseAuditDeliveryRequest,
-  parseAuditSearchRequest,
   parseBackupRequest,
   parseHealthCheckRequest,
   parseImportCommitRequest,
@@ -173,7 +169,6 @@ import { createInMemoryReportingRepository } from '../repositories/reporting/rep
 import { createInMemorySalesRepository } from '../repositories/sales/sales-repository';
 import { createInMemoryOperationsRepository } from '../repositories/operations/operations-repository';
 import { createInMemoryAdministrationRepository } from '../repositories/platform/administration-repository';
-import { createInMemoryAuditOutboxRepository } from '../repositories/platform/audit-outbox-repository';
 import { createInMemoryAuthRepository } from '../repositories/platform/auth-repository';
 import { createInMemoryCommandRepository } from '../repositories/platform/command-repository';
 import { createStaticTableRegistryRepository } from '../repositories/platform/table-registry-repository';
@@ -287,8 +282,6 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   const reportingRepository = input.repositories?.reportingRepository ?? createInMemoryReportingRepository();
   const salesRepository = input.repositories?.salesRepository ?? createInMemorySalesRepository();
   const operationsRepository = input.repositories?.operationsRepository ?? createInMemoryOperationsRepository();
-  const auditOutboxRepository =
-    input.repositories?.auditOutboxRepository ?? createInMemoryAuditOutboxRepository();
   const catalogService = createCatalogService({
     repository: catalogRepository,
     tenantId,
@@ -316,7 +309,6 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
     repository: purchasingRepository,
     inventoryService,
     financeService,
-    auditOutboxRepository,
     tenantId,
     now: () => clock.now(),
     newId,
@@ -336,7 +328,6 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   });
   const operationsService = createOperationsService({
     repository: operationsRepository,
-    auditOutboxRepository,
     tenantId,
     appVersion: '0.1.0',
     schemaVersion: 1,
@@ -345,7 +336,6 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   });
   const commandCoordinator = createCommandCoordinator({
     commandRepository: input.repositories?.commandRepository ?? createInMemoryCommandRepository(),
-    auditOutboxRepository,
     lockProvider: input.lockProvider ?? createImmediateLockProvider(),
     now: () => clock.now(),
     newId,
@@ -936,28 +926,6 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
         operationsService.downloadAttachment({
           actor: requireActor(context.actor),
           request: input as AttachmentAccessRequest,
-        }),
-    },
-    {
-      name: 'operations.audit.search',
-      kind: 'query',
-      requiredAction: 'operations.audit.view',
-      parsePayload: parseAuditSearchRequest,
-      handler: (input, context) =>
-        operationsService.searchAudit({
-          actor: requireActor(context.actor),
-          request: input as AuditSearchRequest,
-        }),
-    },
-    {
-      name: 'operations.audit.deliver',
-      kind: 'mutation',
-      requiredAction: 'operations.audit.deliver',
-      parsePayload: parseAuditDeliveryRequest,
-      handler: (input, context) =>
-        operationsService.deliverAudit({
-          actor: requireActor(context.actor),
-          request: input as AuditDeliveryRequest,
         }),
     },
     {

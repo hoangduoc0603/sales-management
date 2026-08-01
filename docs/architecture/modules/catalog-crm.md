@@ -29,7 +29,7 @@
 | Voucher | `issue`, `reserve-none`, `redeem`, `void` | redeem chỉ trong checkout commit; usage limit/validity còn hiệu lực. |
 | WarrantyCase | `Received → InProgress → Completed | Rejected` | có sale/serial/policy snapshot hợp lệ. |
 
-`catalog.import.prepare` tạo `ImportBatch` staging; `catalog.import.commit` chỉ chạy sau user chọn `validRowsOnly` hoặc `cancelAll`. Commit cùng `batchId` idempotent, audit kết quả và không tạo row trùng.
+`catalog.import.prepare` tạo `ImportBatch` staging; `catalog.import.commit` chỉ chạy sau user chọn `validRowsOnly` hoặc `cancelAll`. Commit cùng `batchId` idempotent, lưu `createdBy/updatedBy` trên record liên quan và không tạo row trùng.
 
 ## 3. POS read model và quote
 
@@ -69,7 +69,7 @@ Khi checkout `Committed`, Promotion tạo `PromotionApplication`/`VoucherUsage`;
 | Point adjustment/voucher issue | sensitive loyalty/configure | `POINT_BALANCE_INVALID`, `VOUCHER_UNAVAILABLE` |
 | Warranty/commission | domain create/update/approve scope | `WARRANTY_TRANSITION_INVALID` |
 
-Mọi create/update/deactivate/merge/publish/redeem/adjust đều tạo AuditOutbox. Credential, payment data, internal notes hạn chế và cost không được đưa vào catalog cache hoặc quote nếu actor không có quyền.
+Mọi create/update/deactivate/merge/publish/redeem/adjust phải lưu actor metadata trực tiếp trên record phát sinh hoặc record chuyển trạng thái. Credential, payment data, internal notes hạn chế và cost không được đưa vào catalog cache hoặc quote nếu actor không có quyền.
 
 ## 6. Test matrix
 
@@ -79,7 +79,7 @@ Mọi create/update/deactivate/merge/publish/redeem/adjust đều tạo AuditOut
 | Bundle | Completed snapshot BOM và issue component; thiếu component chặn hoặc đi qua ngoại lệ âm kho đã duyệt. |
 | Quote | Branch → group → best promotion → voucher/point; tie-break xác định; price cache stale trả conflict. |
 | Concurrency | Hai checkout cùng voucher/point cuối cùng chỉ một command commit usage; retry cùng key không cấp/trừ lần hai. |
-| Customer | Duplicate theo policy; merge không mất order/ledger/point và source–target audit được. |
+| Customer | Duplicate theo policy; merge không mất order/ledger/point và source–target lưu được người thực hiện. |
 | Import | lỗi theo dòng, commit valid-only/cancel-all, retry batch không tạo trùng. |
 | Warranty/commission | state guard; return/cancel sinh reversal commission/point theo source. |
 

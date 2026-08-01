@@ -48,4 +48,4 @@ Restore thực hiện theo replacement-resource strategy:
 
 Readiness/health kiểm tra deployment version, config, schema, storage/folder access, trigger, backup freshness, worker failures, partition capacity, quota warning và integrity. Cảnh báo không tự xóa dữ liệu hoặc tự restore.
 
-Hỗ trợ từ bên triển khai chỉ được cấp theo thời hạn/quyền tối thiểu và phải ghi audit. Khách có thể thu hồi quyền, xuất dữ liệu và vận hành độc lập mà không ảnh hưởng tới khả năng dùng lõi ứng dụng.
+Hỗ trợ từ bên triển khai chỉ được cấp theo thời hạn/quyền tối thiểu; mọi thay đổi cấu hình/hỗ trợ phải lưu actor metadata trên record liên quan. Khách có thể thu hồi quyền, xuất dữ liệu và vận hành độc lập mà không ảnh hưởng tới khả năng dùng lõi ứng dụng.

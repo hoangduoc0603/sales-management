@@ -14,7 +14,7 @@ Google identity không được dùng để suy ra actor ứng dụng. `loginId`
 - Mật khẩu tạm admin được sinh/cấp một lần trong bootstrap, buộc đổi khi login thành công đầu tiên và không persisted ở dạng plaintext.
 - Session token là opaque random secret; browser chỉ giữ trong `sessionStorage`/memory, server chỉ lưu HMAC fingerprint theo tenant session pepper, user ID, issued time, idle expiry, absolute expiry, auth version và revoke status. Production Apps Script phải sinh token/record ID bằng UUID/random generator; ID deterministic chỉ được dùng trong test/dev composition để có fixture ổn định.
 - Session idle tối đa 1 giờ và absolute lifetime 8 giờ. Bất cứ reset password, disable user hoặc thay đổi role/scope nào đều tăng auth version và revoke session hiện có.
-- Login sai năm lần liên tiếp khóa account 15 phút. Login, lock, reset, revoke và bất thường auth đều audit; log không chứa password/token.
+- Login sai năm lần liên tiếp khóa account 15 phút. Lock, reset, revoke và bất thường auth chỉ ghi telemetry/metadata kỹ thuật khi cần; không lưu password/token.
 
 Session/permission summary có thể cache server TTL ngắn để không tạo Sheet I/O trên POS. Auth mutation phải invalidate cache ngay; protected operation có thể fresh-read khi rủi ro cao.
 
@@ -22,7 +22,7 @@ Session/permission summary có thể cache server TTL ngắn để không tạo 
 
 Permission là action (`view`, `create`, `update`, `cancel`, `approve`, `print`, `export` và quyền nhạy cảm), áp dụng trong `tenant`, `branch` hoặc `warehouse` scope. API handler tạo `ActorContext`; service kiểm tra action; repository nhận scope đã được kiểm chứng và query có scope ngay từ đầu.
 
-Không được lấy dữ liệu toàn tenant rồi lọc frontend. Giá vốn/lợi nhuận, quỹ, export, backup/restore, credential/user management và audit cần permission riêng. Disable user hoặc giảm scope phải chặn API mới và revoke session đang hoạt động.
+Không được lấy dữ liệu toàn tenant rồi lọc frontend. Giá vốn/lợi nhuận, quỹ, export, backup/restore và credential/user management cần permission riêng. Disable user hoặc giảm scope phải chặn API mới và revoke session đang hoạt động.
 
 ## 4. Bảo vệ Google Workspace và client
 

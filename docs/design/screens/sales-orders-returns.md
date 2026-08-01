@@ -11,7 +11,7 @@
 ## Phạm vi artifact
 
 - Workspace danh sách đơn với filter/search theo scope, nguồn `POS`/`ManualOnline`, trạng thái đơn/thanh toán và bulk action chỉ cho chứng từ Draft.
-- Detail chứng từ bất biến: header, dòng snapshot, payment/allocation, tham chiếu ledger, audit summary, preview/in/in lại/export. COGS/lợi nhuận dùng restricted state từ backend permission.
+- Detail chứng từ bất biến: header, dòng snapshot, payment/allocation, tham chiếu ledger, actor metadata, preview/in/in lại/export. COGS/lợi nhuận dùng restricted state từ backend permission.
 - Đơn nhập tay theo lifecycle `Draft → Confirmed → Packing → Shipped → Delivered`; chỉ hủy trước `Shipped`, hiển thị reservation, recipient/fulfillment snapshot và COD/deposit phù hợp.
 - Return theo đơn gốc, fast return có permission/approval riêng, inspection `Quarantine`/`Restock`/`Scrap`, refund/credit đối ứng và exchange liên kết Return với Sale Order mới.
 - Warranty list/case theo serial, đơn gốc, attachment và lifecycle xử lý.

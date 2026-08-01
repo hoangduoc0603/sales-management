@@ -46,7 +46,7 @@ Nghiên cứu được thực hiện từ các trang sản phẩm/tài liệu c�
 
 | Tham chiếu | Tín hiệu/khả năng công khai đáng chú ý | Hàm ý cho sản phẩm |
 | --- | --- | --- |
-| [SheetStore — Google Sheets](https://sheet.com.vn/software/phan-mem-quan-ly-ban-hang) | Định vị trả một lần, dữ liệu trên Google Sheets; công bố POS, tồn kho, công nợ, VAT, CRM, báo cáo, role và log. | Xác nhận mô hình Google Workspace có thể bán được; cần làm rõ hơn data ownership, đa kho, audit và giới hạn vận hành. |
+| [SheetStore — Google Sheets](https://sheet.com.vn/software/phan-mem-quan-ly-ban-hang) | Định vị trả một lần, dữ liệu trên Google Sheets; công bố POS, tồn kho, công nợ, VAT, CRM, báo cáo, role và log. | Xác nhận mô hình Google Workspace có thể bán được; cần làm rõ hơn data ownership, đa kho, actor metadata và giới hạn vận hành. |
 | [gsheets.vn Webapp v1.1](https://gsheets.vn/template/webapp-quan-ly-ban-hang-v1-1/) | Đơn hàng, chiết khấu/thuế, công nợ nhiều đợt, nhập–xuất–tồn, NCC, phân quyền thao tác, tích điểm, scanner, in K80. | Scanner, in phiếu và thanh toán nhiều đợt là yêu cầu nền tảng POS, không phải phần phụ. |
 | [KiotViet — quản lý kho](https://www.kiotviet.vn/huong-dan-su-dung-kiotviet/retail-thiet-lap/quan-ly-kho-hang/) | Nhiều kho trong chi nhánh, chọn kho khi bán, chuyển/kiểm/nhập/xuất theo kho, tồn theo kho. | Data model bắt buộc có `branch` và `warehouse` từ đầu; mọi biến động tồn phải có kho nguồn/đích. |
 | [KiotViet — khách hàng](https://www.kiotviet.vn/huong-dan-su-dung-kiotviet/retail-khach-hang/khach-hang/) | Hồ sơ, lịch sử, công nợ, nhóm khách, tích điểm và quản lý theo chi nhánh. | CRM không chỉ là danh bạ; công nợ, chính sách giá/ưu đãi và quyền xem dữ liệu phải nhất quán. |
@@ -92,7 +92,7 @@ Các kết nối sàn, website, vận chuyển, hóa đơn điện tử và kế
 
 ### 6.2 Thực thể lõi
 
-`Organization → Branch → Warehouse`; `User → Role → Permission`; `Product → Variant/Unit/Barcode`; `Supplier → PurchaseOrder → GoodsReceipt`; `Customer → SaleOrder → Payment/Return`; `InventoryMovement` là sổ cái tồn kho bất biến; `CashTransaction` và `Receivable/PayableLedger` là sổ cái tiền/công nợ; `AuditLog` ghi thao tác.
+`Organization → Branch → Warehouse`; `User → Role → Permission`; `Product → Variant/Unit/Barcode`; `Supplier → PurchaseOrder → GoodsReceipt`; `Customer → SaleOrder → Payment/Return`; `InventoryMovement` là sổ cái tồn kho bất biến; `CashTransaction` và `Receivable/PayableLedger` là sổ cái tiền/công nợ; actor metadata trên record ghi người tạo/sửa/duyệt/hủy.
 
 Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn hiển thị là kết quả của tồn đầu và các biến động đã duyệt; bản ghi tổng hợp chỉ được dùng để truy vấn nhanh và phải đối soát được với `InventoryMovement`.
 
@@ -202,7 +202,7 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 | FR-SALES-014 | Hiển thị cảnh báo giá bất thường, hết tồn, hạn mức nợ, lô sắp hết hạn, khuyến mại xung đột trước khi hoàn tất. |
 | FR-SALES-015 | Lưu snapshot tên hàng, SKU, giá, thuế, chiết khấu, chính sách khuyến mại, giá vốn tính tại thời điểm giao dịch để báo cáo lịch sử không đổi khi danh mục sửa sau này. |
 | FR-SALES-016 | Đơn online thủ công tách rõ trạng thái đơn, chuẩn bị/xuất kho, giao hàng và thanh toán; ngày tạo, ngày hoàn tất bán, ngày xuất kho/giao và ngày thu tiền được lưu riêng. |
-| FR-SALES-017 | Hỗ trợ giữ hàng/reservation có hạn khi tenant bật tính năng; hàng giữ không được tính là tồn khả dụng nhưng chưa làm biến động tồn thực tế. Hết hạn giữ phải tự giải phóng và audit. |
+| FR-SALES-017 | Hỗ trợ giữ hàng/reservation có hạn khi tenant bật tính năng; hàng giữ không được tính là tồn khả dụng nhưng chưa làm biến động tồn thực tế. Hết hạn giữ phải tự giải phóng và lưu system actor/timestamp trên reservation. |
 
 ### 8.6 Trả hàng, đổi hàng, serial và bảo hành
 
@@ -245,7 +245,7 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 
 | ID | Yêu cầu |
 | --- | --- |
-| FR-STAFF-001 | Mỗi đơn/phiếu có thể ghi nhận thu ngân, nhân viên bán, nhân viên giao/nhập theo quyền và không cho sửa sau khi khóa nếu không có audit. |
+| FR-STAFF-001 | Mỗi đơn/phiếu có thể ghi nhận thu ngân, nhân viên bán, nhân viên giao/nhập theo quyền và không cho sửa sau khi khóa nếu không có chứng từ điều chỉnh hợp lệ kèm actor metadata. |
 | FR-STAFF-002 | Báo cáo hiệu suất theo nhân viên tách rõ doanh thu, doanh thu thuần, số đơn, hàng trả, giảm giá và tiền đã thu. |
 | FR-STAFF-003 | Hỗ trợ cấu hình hoa hồng cơ bản theo nhân viên/nhóm hàng/sản phẩm, tỷ lệ hoặc số tiền, khoảng hiệu lực; hóa đơn trả/hủy phải đảo giá trị hoa hồng liên quan. |
 | FR-STAFF-004 | Phần mềm không tính lương/chấm công đầy đủ ở bản đầu; chỉ xuất dữ liệu hoa hồng đã duyệt để dùng ở hệ thống khác. |
@@ -261,17 +261,17 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 | FR-REP-005 | Báo cáo khách hàng: lịch sử mua, top khách, công nợ, tuổi nợ, điểm, nhóm và hiệu quả khuyến mại. |
 | FR-REP-006 | Báo cáo tài chính vận hành: thu–chi, sổ quỹ, báo cáo ca, doanh thu–giá vốn–lợi nhuận gộp, chi phí và lãi/lỗ quản trị. |
 | FR-REP-007 | Báo cáo VAT là báo cáo quản trị theo dữ liệu ghi nhận, có thể xuất để đối chiếu; không được tuyên bố là tờ khai hoặc thay thế nghiệp vụ thuế. |
-| FR-REP-008 | Báo cáo cho phép drill-down đến chứng từ và export CSV/XLSX/PDF theo quyền; export phải lưu audit log. |
+| FR-REP-008 | Báo cáo cho phép drill-down đến chứng từ và export CSV/XLSX/PDF theo quyền; ExportRun phải lưu người yêu cầu, thời điểm và bộ lọc. |
 | FR-REP-009 | Định nghĩa chỉ số, bộ lọc và thời điểm dữ liệu phải hiển thị ngay trong báo cáo để tránh hiểu sai. |
 | FR-REP-010 | Mỗi báo cáo phải quy định và hiển thị mốc thời gian sử dụng: ngày tạo, ngày hoàn tất bán, ngày xuất/giao, ngày thanh toán hoặc ngày hạch toán; không trộn các mốc trong một chỉ số mà không ghi rõ. |
 
-### 8.11 Tệp đính kèm, audit, vận hành quản trị
+### 8.11 Tệp đính kèm và vận hành quản trị
 
 | ID | Yêu cầu |
 | --- | --- |
 | FR-OPS-001 | Lưu tệp đính kèm (ảnh hàng, phiếu nhập, biên bản kiểm, bảo hành) trong Drive thư mục tenant; Sheets chỉ giữ metadata và URL/ID. |
-| FR-OPS-002 | Audit log ghi tối thiểu: thời điểm, người dùng, hành động, thực thể/mã, Branch/kho nếu có, giá trị trước/sau rút gọn, lý do và correlation ID. |
-| FR-OPS-003 | Thay đổi có ảnh hưởng tiền/tồn/quyền phải được audit đầy đủ; người dùng không thể tự xóa log qua UI. |
+| FR-OPS-002 | Record nghiệp vụ/vận hành quan trọng ghi tối thiểu actor metadata: người tạo/sửa/duyệt/hủy, thời điểm, Branch/kho nếu có, lý do khi bắt buộc và correlation/command ID khi áp dụng. |
+| FR-OPS-003 | Thay đổi có ảnh hưởng tiền/tồn/quyền phải lưu actor metadata trên record/chứng từ/ledger liên quan; người dùng không thể tự xóa chứng từ hoặc ledger lịch sử qua UI. |
 | FR-OPS-004 | Cho phép xuất toàn bộ dữ liệu nghiệp vụ theo các bảng có liên kết, kèm hướng dẫn dữ liệu, trong phạm vi quyền Owner. |
 | FR-OPS-005 | Có quy trình tạo bản sao lưu Spreadsheet và tệp Drive theo lịch/cách thủ công do Owner kích hoạt; hiển thị lần backup gần nhất và kết quả. |
 | FR-OPS-006 | Có kiểm tra sức khỏe vận hành: phiên bản app, quyền truy cập dữ liệu, trigger, dung lượng/cảnh báo ngưỡng và lỗi batch gần nhất. |
@@ -290,23 +290,23 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 | BR-008 | Hàng trả chỉ tăng tồn bán được khi đã qua quy tắc kiểm nhận; giá trị hoàn tiền không vượt giá trị đã trả của dòng hàng sau khi xét giảm giá/khuyến mại. |
 | BR-009 | Khuyến mại và điểm phải được đảo/điều chỉnh tương ứng khi trả/hủy đơn. |
 | BR-010 | Dữ liệu của Branch/kho ngoài phạm vi người dùng không được trả về API hay xuất ra file. |
-| BR-011 | Báo cáo lợi nhuận dùng giá vốn theo phương pháp giá vốn đã được chốt trong quyết định kiến trúc; không trộn lẫn phương pháp giữa các kỳ mà không có migration/audit. |
+| BR-011 | Báo cáo lợi nhuận dùng giá vốn theo phương pháp giá vốn đã được chốt trong quyết định kiến trúc; không trộn lẫn phương pháp giữa các kỳ mà không có migration và actor metadata. |
 
 ## 10. Luồng nghiệp vụ bắt buộc
 
 ### 10.1 Bán tại quầy
 
-`Mở ca → chọn Branch/kho → quét/tìm hàng → chọn/tạo khách → áp dụng giá/khuyến mại → nhận một hay nhiều khoản thanh toán hoặc ghi nợ → kiểm tra quyền/tồn/hạn mức → hoàn tất đơn → tạo biến động tồn, thu/công nợ, điểm và audit → in phiếu → báo cáo cập nhật.`
+`Mở ca → chọn Branch/kho → quét/tìm hàng → chọn/tạo khách → áp dụng giá/khuyến mại → nhận một hay nhiều khoản thanh toán hoặc ghi nợ → kiểm tra quyền/tồn/hạn mức → hoàn tất đơn → tạo biến động tồn, thu/công nợ, điểm và actor metadata → in phiếu → báo cáo cập nhật.`
 
 ### 10.2 Mua và nhập hàng
 
-`Tạo PO → duyệt → nhận hàng một phần/toàn bộ → nhập lô/serial nếu có → xác nhận phiếu nhập → tăng tồn + cập nhật phải trả/đã trả → lưu chứng từ, audit và báo cáo.`
+`Tạo PO → duyệt → nhận hàng một phần/toàn bộ → nhập lô/serial nếu có → xác nhận phiếu nhập → tăng tồn + cập nhật phải trả/đã trả → lưu chứng từ với actor metadata và báo cáo.`
 
 ### 10.3 Chuyển và kiểm kho
 
 `Tạo yêu cầu chuyển → duyệt/xuất kho nguồn → trạng thái đang chuyển → kho đích nhận và đối chiếu → tăng tồn kho đích.`
 
-`Mở phiên kiểm → chốt số hệ thống → nhập/quét số thực tế → gửi duyệt chênh lệch → tạo phiếu điều chỉnh có lý do → audit.`
+`Mở phiên kiểm → chốt số hệ thống → nhập/quét số thực tế → gửi duyệt chênh lệch → tạo phiếu điều chỉnh có lý do và actor metadata.`
 
 ### 10.4 Trả/đổi/bảo hành
 
@@ -338,7 +338,7 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 
 - Mỗi khách nhận checklist bàn giao: spreadsheet/Drive/script owner, danh sách quyền, URL production, phiên bản, backup gần nhất và hướng dẫn khôi phục.
 - Quyền hỗ trợ của nhà cung cấp chỉ cấp theo yêu cầu; Owner khách có thể thu hồi bất cứ lúc nào.
-- Chỉ thu thập dữ liệu khách hàng cuối cần cho bán hàng; phân quyền theo nguyên tắc tối thiểu; export chứa dữ liệu cá nhân cần audit.
+- Chỉ thu thập dữ liệu khách hàng cuối cần cho bán hàng; phân quyền theo nguyên tắc tối thiểu; export chứa dữ liệu cá nhân phải lưu người yêu cầu/thời điểm/bộ lọc.
 - Không coi Google Sheets là giao diện nhập liệu tự do cho các bảng sổ cái sau khi vận hành. Cần bảo vệ sheet kỹ thuật, giới hạn người sửa trực tiếp và phát hiện/ghi nhận thay đổi ngoài ứng dụng theo chính sách triển khai.
 - Bản cập nhật sản phẩm phải có release note, migration có backup trước/sau, kiểm tra tương thích data model và phương án rollback.
 
@@ -347,7 +347,7 @@ Không tính tồn kho bằng cách sửa một con số duy nhất. Số tồn 
 1. Tenant mới có thể được cài đặt trên Google account của khách, tạo Branch/kho mặc định và không cần hạ tầng SaaS riêng của nhà cung cấp để dùng lõi sản phẩm.
 2. Hai nhân viên được cấp quyền khác nhau không thể xem/thao tác dữ liệu giá vốn, kho hoặc chi nhánh ngoài phạm vi.
 3. Một đơn POS dùng barcode, khuyến mại, thanh toán một phần và công nợ tạo đúng chứng từ, tồn, sổ tiền/công nợ, điểm và phiếu in.
-4. Nhập, chuyển, kiểm, điều chỉnh, trả hàng và bảo hành đều đối soát được từ báo cáo về chứng từ gốc/audit log.
+4. Nhập, chuyển, kiểm, điều chỉnh, trả hàng và bảo hành đều đối soát được từ báo cáo về chứng từ gốc và actor metadata.
 5. Hàng biến thể, quy đổi, combo, lô–hạn và serial/IMEI hoạt động đúng khi mô-đun được bật; tenant không bật không bị ép nhập các trường này.
 6. Dashboard và mọi báo cáo nêu rõ bộ lọc/định nghĩa; số liệu drill-down được đến chứng từ nguồn và export tuân quyền.
 7. Bản sao lưu và quy trình khôi phục được kiểm chứng trên một dữ liệu thử nghiệm trước khi bàn giao.
@@ -360,9 +360,9 @@ Các quyết định dưới đây đã được chuyển thành SRS, Solution D
 | Chủ đề | Quyết định đã chốt | Nguồn chuẩn |
 | --- | --- | --- |
 | Giá vốn | Bình quân gia quyền di động; snapshot giá vốn trên chứng từ/ledger, điều chỉnh bằng chứng từ đối ứng. | `SRS-INV-*`, `SRS-SAL-*`, [logical data model](../data-model/logical-data-model.md) |
-| Tồn, reservation và duyệt | Trừ tồn tại Completed/Shipped theo SRS; reservation/âm kho/ngoại lệ dùng state, approval và audit. | `SRS-INV-*`, `SRS-SAL-*`, `SRS-OVR-004` |
+| Tồn, reservation và duyệt | Trừ tồn tại Completed/Shipped theo SRS; reservation/âm kho/ngoại lệ dùng state, approval và actor metadata. | `SRS-INV-*`, `SRS-SAL-*`, `SRS-OVR-004` |
 | Ca bán và offline | Có ca/két và workflow duyệt; không hỗ trợ offline write hoặc đồng bộ xung đột. | `SRS-FIN-*`, `SRS-OVR-016` |
-| Sheets, partition và archive | Core/Runtime/Transaction/Audit storage role; transaction/audit partition theo kỳ, archive bất biến, không xóa chứng từ/ledger/audit để lấy chỗ. | `SRS-OVR-011`, [storage lifecycle](../data-model/storage-partitioning-and-lifecycle.md) |
+| Sheets, partition và archive | Core/Runtime/Transaction storage role; transaction partition theo kỳ, archive bất biến, không xóa chứng từ/ledger để lấy chỗ. | `SRS-OVR-011`, [storage lifecycle](../data-model/storage-partitioning-and-lifecycle.md) |
 | Identity/deployment | Web App public, execute bằng account khách; user dùng loginId/mật khẩu/session nội bộ, không dùng Google identity. | `SRS-OVR-005` đến `SRS-OVR-008`, `SRS-OVR-022`, ADR 0001 |
 | POS và in | POS local-first read, server-authoritative commit; K80/A4 in bằng browser từ receipt snapshot, PDF/Drive không chặn checkout. | `SRS-OVR-013`, `SRS-OVR-020`, `SRS-SAL-016` đến `SRS-SAL-017` |
 | Backup, restore, update | Backup manifest 30 bản, restore sang resource thay thế, versioned deployment/migration có backup và compatibility check. | `SRS-OVR-010`, `SRS-OVR-023`, ADR 0006–0007 |

@@ -50,16 +50,15 @@ Return / Transfer / Stocktake / Adjustment -> InventoryMovement
 
 Giá vốn dùng **bình quân gia quyền di động** đã được chốt: mỗi receipt/adjustment hợp lệ cập nhật giá trị và lượng on-hand; mỗi issue/sale snapshot unit cost tại thời điểm issue. Return/reversal không sửa movement cũ mà sinh movement/ledger đối ứng theo SRS. Lot/serial bổ sung allocation/state riêng, không làm thay đổi nguyên tắc ledger.
 
-## 5. Command, audit và side effect
+## 5. Command, actor metadata và side effect
 
 | Record | Mục đích |
 | --- | --- |
 | `CommandTransaction` | Idempotency key, command ID, actor, resource scope, trạng thái `Preparing`/`Committed`/`Failed`, response snapshot và recovery metadata. Fast path command mới append trực tiếp `Committed` theo ADR 0016; `Preparing` giữ cho recovery/migration hoặc command phức tạp sau này. |
-| `AuditOutbox` | Audit event bền vững tạo cùng command; chứa event ID, action, object/reference, actor, scope, sanitized before/after summary. |
-| `AuditLog` | Bản sao append-only của outbox tại Audit partition; không cho UI/import sửa/xóa. |
+| Actor metadata | Các field `createdBy`, `updatedBy`, `approvedBy`, `cancelledBy`, `reversedBy`, `uploadedBy`, `requestedBy` và thời điểm tương ứng trên chính record nghiệp vụ/vận hành. Đây là baseline truy vết theo ADR 0017, thay cho audit log riêng. |
 | `BackgroundRun` | run ID, loại việc, checkpoint, status/retry/error đã sanitize; không phải business ledger. |
 
-Query audit phải bao gồm AuditLog đã chuyển và AuditOutbox pending, hoặc worker phải chuyển trước khi event được coi là hoàn tất. Không được có khoảng thời gian audit event biến mất chỉ vì projection Audit Data đang chờ.
+Baseline không có query audit riêng. Lịch sử được truy từ chứng từ/ledger/source record và actor metadata trên record đó.
 
 ## 6. Attachment, document và export
 
@@ -68,6 +67,6 @@ Drive lưu binary; Sheets chỉ lưu metadata `attachmentId`, object type/ID/par
 ## 7. Vòng đời record
 
 - Master đã có reference: deactivate thay vì hard delete.
-- Transaction/ledger/audit: không hard delete; cancel/reversal/adjustment để thay đổi ảnh hưởng.
-- Runtime technical state: có TTL rõ ràng cho expired session, idempotency replay window, staging và completed run; cleanup phải audit/telemetry theo policy nhưng không xóa business evidence.
+- Transaction/ledger/business document: không hard delete; cancel/reversal/adjustment để thay đổi ảnh hưởng.
+- Runtime technical state: có TTL rõ ràng cho expired session, idempotency replay window, staging và completed run; cleanup chỉ ghi telemetry warning/error khi cần và không xóa business evidence.
 - Partition đóng: read-only, vẫn query/export/backup được; archive không đổi logical ID hay reference.

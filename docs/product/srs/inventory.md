@@ -32,7 +32,7 @@ newAverageCost = (quantityBefore × averageCostBefore + quantityIncrease × actu
 
 ### SRS-INV-004 — Trường hợp không có giá vốn hợp lệ
 
-Hệ thống chặn giảm tồn khi quantity không đủ theo `SRS-INV-010`. Nếu Manager/Owner duyệt âm kho nhưng variant/Warehouse không có average cost hợp lệ, user phải nhập giá vốn tạm và lý do; hệ thống snapshot giá đó, đánh dấu chênh lệch giá vốn cần đối soát. Nhập hàng về sau không được sửa lại bút toán bán cũ; Manager/Owner chỉ có thể tạo chứng từ điều chỉnh giá vốn có audit.
+Hệ thống chặn giảm tồn khi quantity không đủ theo `SRS-INV-010`. Nếu Manager/Owner duyệt âm kho nhưng variant/Warehouse không có average cost hợp lệ, user phải nhập giá vốn tạm và lý do; hệ thống snapshot giá đó, đánh dấu chênh lệch giá vốn cần đối soát. Nhập hàng về sau không được sửa lại bút toán bán cũ; Manager/Owner chỉ có thể tạo chứng từ điều chỉnh giá vốn có actor metadata.
 
 ## 3. Nhập, xuất và reservation
 
@@ -46,11 +46,11 @@ Khi POS chuyển `Completed`, hệ thống kiểm available và tạo `SaleIssue
 
 ### SRS-INV-007 — Reservation của đơn online
 
-Khi đơn online `Confirmed`, hệ thống tạo reservation theo dòng hàng và Warehouse, giảm available nhưng không giảm on-hand/giá vốn. `Packing` không thay đổi reservation. `Shipped` tạo `SaleIssue`, giảm on-hand, giải phóng reservation tương ứng và snapshot giá vốn. `Cancelled` trước Shipped giải phóng toàn bộ reservation. Reservation phải được audit, có thời hạn cấu hình và tự giải phóng khi hết hạn; tác vụ giải phóng không được hủy đơn nếu user đang thao tác.
+Khi đơn online `Confirmed`, hệ thống tạo reservation theo dòng hàng và Warehouse, giảm available nhưng không giảm on-hand/giá vốn. `Packing` không thay đổi reservation. `Shipped` tạo `SaleIssue`, giảm on-hand, giải phóng reservation tương ứng và snapshot giá vốn. `Cancelled` trước Shipped giải phóng toàn bộ reservation. Reservation phải có thời hạn cấu hình, `createdBy/createdAt` hoặc system actor khi tự giải phóng; tác vụ giải phóng không được hủy đơn nếu user đang thao tác.
 
 ### SRS-INV-008 — Lô, hạn dùng và serial
 
-Sản phẩm bật lô phải lưu mã lô, Warehouse, số lượng, ngày sản xuất/hết hạn khi cấu hình yêu cầu. Sản phẩm bật serial/IMEI phải lưu từng serial duy nhất trong tenant, trạng thái và Warehouse hiện tại. Hệ thống ưu tiên FEFO cho hàng lô có hạn dùng khi xuất; user chỉ thay lô trong quyền và trong giới hạn còn tồn. Không được xuất lô hết hạn hoặc serial không ở trạng thái bán được nếu Owner không cấu hình ngoại lệ có lý do/audit.
+Sản phẩm bật lô phải lưu mã lô, Warehouse, số lượng, ngày sản xuất/hết hạn khi cấu hình yêu cầu. Sản phẩm bật serial/IMEI phải lưu từng serial duy nhất trong tenant, trạng thái và Warehouse hiện tại. Hệ thống ưu tiên FEFO cho hàng lô có hạn dùng khi xuất; user chỉ thay lô trong quyền và trong giới hạn còn tồn. Không được xuất lô hết hạn hoặc serial không ở trạng thái bán được nếu Owner không cấu hình ngoại lệ có lý do và actor metadata.
 
 ## 4. Âm kho, điều chỉnh và hàng trả
 
@@ -102,7 +102,7 @@ Phiên kiểm phải chọn Warehouse, phạm vi hàng/lô/serial, người ki�
 
 ### SRS-INV-016 — Ghi nhận và duyệt chênh lệch
 
-Counter nhập số thực tế theo hàng/lô/serial; hệ thống tính chênh dựa trên snapshot, yêu cầu lý do với chênh lệch và không tự tạo adjustment khi nhập. Trạng thái phiên là `Draft → InProgress → Submitted → Approved | Rejected | Cancelled`. Người kiểm không được duyệt cùng phiên, trừ Owner khi cấu hình ngoại lệ có audit. `Approved` tạo CountAdjustment; `Rejected` không thay đổi tồn và cho phép tạo phiên mới.
+Counter nhập số thực tế theo hàng/lô/serial; hệ thống tính chênh dựa trên snapshot, yêu cầu lý do với chênh lệch và không tự tạo adjustment khi nhập. Trạng thái phiên là `Draft → InProgress → Submitted → Approved | Rejected | Cancelled`. Người kiểm không được duyệt cùng phiên, trừ Owner khi cấu hình ngoại lệ có actor metadata. `Approved` tạo CountAdjustment; `Rejected` không thay đổi tồn và cho phép tạo phiên mới.
 
 ## 7. Truy vấn và tiêu chí nghiệm thu
 
@@ -115,7 +115,7 @@ Hệ thống phải cung cấp thẻ kho/lịch sử movement lọc theo thời 
 | INV-AT-01 | Nhập 10 × 100.000, sau đó nhập 10 × 120.000 cùng variant/kho. | Average cost sau lần nhập hai là 110.000; các lần xuất sau snapshot 110.000. |
 | INV-AT-02 | Confirmed rồi Cancelled một đơn online. | Available giảm rồi tăng lại; on-hand không đổi; không có COGS/revenue. |
 | INV-AT-03 | Cashier bán vượt tồn khi không có ngoại lệ. | Completed bị chặn, không tạo movement. |
-| INV-AT-04 | Manager duyệt bán âm kho. | Có audit approver/lý do và SaleIssue âm đúng quantity; không tự bật âm cho đơn khác. |
+| INV-AT-04 | Manager duyệt bán âm kho. | Có approver/lý do trên record ngoại lệ và SaleIssue âm đúng quantity; không tự bật âm cho đơn khác. |
 | INV-AT-05 | Shipped phiếu chuyển 10, kho đích nhận 6. | Nguồn giảm 10; đích tăng available 6; 4 vẫn in-transit. |
 | INV-AT-06 | Bán diễn ra sau khi mở kiểm. | Movement sau snapshot được hiển thị riêng; adjustment chỉ dựa snapshot theo quy tắc đã nêu. |
 | INV-AT-07 | Khách trả hàng. | Hàng vào Quarantine và không bán được cho đến Restock; serial/lô vẫn truy vết đơn gốc. |

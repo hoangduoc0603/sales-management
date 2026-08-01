@@ -25,7 +25,7 @@ Các bảng có base columns của registry (`id`, `tenantId`, `schemaVersion`, 
 | Table | Lifecycle / storage | Cột typed chính | JSON/versioned và retention |
 | --- | --- | --- | --- |
 | `SessionMetadata` | runtime / runtime | `sessionId`, `sessionFingerprint`, `userId`, `authVersion`, `issuedAt`, `idleExpiresAt`, `absoluteExpiresAt`, `lastSeenAt`, `revokedAt`, `status` | scope/permission snapshot hash only; TTL after revoke/expiry. |
-| `ImportBatch` | runtime/evidence / runtime | `batchId`, `importType`, `schemaVersion`, `actorId`, `scopeKey`, `status`, `rowCount`, `validCount`, `invalidCount`, `selectionMode`, `committedAt` | source file metadata, error/result manifest; preserved per audit/retention policy. |
+| `ImportBatch` | runtime/evidence / runtime | `batchId`, `importType`, `schemaVersion`, `actorId`, `scopeKey`, `status`, `rowCount`, `validCount`, `invalidCount`, `selectionMode`, `committedAt` | source file metadata, actor metadata, error/result manifest; preserved per retention policy. |
 | `ImportStagingRow` | runtime / runtime | `stagingRowId`, `batchId`, `rowNumber`, `rowKey`, `validationStatus`, `errorCount`, `commitStatus`, `sourceObjectId` | sanitized parsed payload and validation errors; unique `(batchId,rowKey)`, TTL only after retained result window. |
 | `ExportRun` | runtime/evidence / runtime | `exportRunId`, `reportId`, `actorId`, `scopeFingerprint`, `status`, `requestedAt`, `startedAt`, `completedAt`, `expiresAt`, `fileId`, `rowCount`, `runId` | frozen filter/column/as-of manifest; file is private and cleanup is idempotent. |
 | `BackgroundRun` | runtime / runtime | `runId`, `jobType`, `status`, `attempt`, `leaseUntil`, `checkpointKey`, `startedAt`, `endedAt`, `errorCode` | sanitized progress/checkpoint; bounded retry and TTL. |
@@ -33,22 +33,20 @@ Các bảng có base columns của registry (`id`, `tenantId`, `schemaVersion`, 
 
 `CommandTransaction`, partition registry and `SchemaMigration` remain platform tables specified by [Sheet schema](../sheet-schema-and-registry.md). A domain import uses the single canonical `ImportBatch`/`ImportStagingRow`, not a duplicate table per module.
 
-## 3. Transaction and Audit Data — files, audit, backup and restore
+## 3. Transaction Data — files, backup and restore
 
 | Table | Lifecycle / storage | Cột typed chính | JSON/versioned và routing |
 | --- | --- | --- | --- |
 | `AttachmentMetadata` | document / transaction | `attachmentId`, `partitionKey`, `objectType`, `objectId`, `branchId`, `warehouseId`, `driveFileId`, `fileName`, `mimeType`, `sizeBytes`, `checksum`, `status`, `uploadedBy`, `deletedAt` | access classification/version metadata; logical delete/unavailable preserves source reference. |
-| `AuditOutbox` | append-only / transaction | `eventId`, `partitionKey`, `commandId`, `action`, `objectType`, `objectId`, `actorId`, `branchId`, `warehouseId`, `committedAt`, `deliveryStatus` | sanitized before/after summary; created atomically with mandatory-audit command. |
-| `AuditLog` | append-only / audit-period | `eventId`, `auditPartitionKey`, `action`, `objectType`, `objectId`, `actorId`, `branchId`, `warehouseId`, `occurredAt`, `result` | sanitized event copy; `eventId` idempotently deduplicates delivery. |
 | `BackupRun` | document/evidence / transaction | `backupRunId`, `status`, `requestedBy`, `startedAt`, `completedAt`, `manifestFileId`, `appVersion`, `schemaVersion`, `checksum`, `retentionUntil` | manifest with partition/resource/attachment metadata; 30 newest daily retained. |
 | `RestoreRun` | document/evidence / transaction | `restoreRunId`, `backupRunId`, `status`, `requestedBy`, `preparedAt`, `switchedAt`, `oldConfigVersion`, `newConfigVersion`, `healthResult` | verification/freeze/replacement/switch evidence; never points to overwritten production. |
 | `ReportProjectionState` | projection / transaction | `projectionId`, `reportId`, `branchId`, `warehouseId`, `dateBucket`, `asOf`, `sourcePartitionKey`, `buildVersion`, `status` | aggregate values/snapshot hash only; rebuildable from source ledger/document. |
 
-`AttachmentMetadata` follows its source document partition. `AuditLog` is partitioned by audit period; audit search joins only relevant audit partitions plus undelivered `AuditOutbox`. `ReportProjectionState` never replaces ledger truth and stores only dimensions/metrics permitted for its projection class; sensitive values remain backend permission-gated.
+`AttachmentMetadata` follows its source document partition. `ReportProjectionState` never replaces ledger truth and stores only dimensions/metrics permitted for its projection class; sensitive values remain backend permission-gated. Actor metadata lives on the source record itself.
 
 ## 4. Lookup, integrity và migration
 
 - Hot access lookup: `loginIdNormalized`, active `UserRole`/`UserScope`, `sessionFingerprint`, `batchId`, `runId`, `eventId`, `objectId` plus partition key. Reports use date/Branch/Warehouse projection keys; no whole-history Sheet scan on dashboard/POS path.
-- One command changing access/config writes the master version, `CommandTransaction` and `AuditOutbox` in one commit. Session cache invalidation occurs after commit and before success response.
+- One command changing access/config writes the master version, actor metadata and `CommandTransaction` in one commit. Session cache invalidation occurs after commit and before success response.
 - File IDs/config resource IDs are opaque metadata and never client authority. Server checks current object permission/scope again before file download, export download, report drill-down or restore switch.
-- All new columns are append-only migrations; state/enum expansion requires parser backward compatibility. Runtime cleanup may remove only expired technical rows/files after their evidence retention period, never audit/ledger/business document history.
+- All new columns are append-only migrations; state/enum expansion requires parser backward compatibility. Runtime cleanup may remove only expired technical rows/files after their evidence retention period, never ledger/business document history.

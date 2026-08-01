@@ -27,17 +27,17 @@ Bundle phải có công thức thành phần gồm variant, quantity cơ bản, 
 
 ### SRS-CRM-006 — Import danh mục và tem barcode
 
-Import product/variant phải dùng file mẫu Excel/CSV, staging kiểm tra trước khi ghi, báo lỗi theo dòng, chống trùng SKU/barcode/serial và cho user tải kết quả. Import hợp lệ không được tạo một phần âm thầm: user phải chọn chỉ import dòng hợp lệ hoặc hủy toàn bộ batch; quyết định và kết quả phải audit. Hệ thống hỗ trợ in/xuất tem barcode cho product/variant/đơn vị theo quyền.
+Import product/variant phải dùng file mẫu Excel/CSV, staging kiểm tra trước khi ghi, báo lỗi theo dòng, chống trùng SKU/barcode/serial và cho user tải kết quả. Import hợp lệ không được tạo một phần âm thầm: user phải chọn chỉ import dòng hợp lệ hoặc hủy toàn bộ batch; quyết định và kết quả lưu trên ImportBatch cùng `requestedBy/committedBy`. Hệ thống hỗ trợ in/xuất tem barcode cho product/variant/đơn vị theo quyền.
 
 ## 2. Khách hàng
 
 ### SRS-CRM-007 — Hồ sơ và chống trùng
 
-Khách có mã, tên, điện thoại, email, địa chỉ, ngày sinh, nhóm, trạng thái, người phụ trách và ghi chú. Tenant cấu hình kiểm tra trùng theo điện thoại và/hoặc email; khi phát hiện, user phải chọn dùng hồ sơ hiện có hoặc tạo mới với lý do nếu có quyền. Gộp khách chỉ dành cho Manager/Owner, phải giữ lịch sử đơn/công nợ/điểm và audit nguồn–đích.
+Khách có mã, tên, điện thoại, email, địa chỉ, ngày sinh, nhóm, trạng thái, người phụ trách và ghi chú. Tenant cấu hình kiểm tra trùng theo điện thoại và/hoặc email; khi phát hiện, user phải chọn dùng hồ sơ hiện có hoặc tạo mới với lý do nếu có quyền. Gộp khách chỉ dành cho Manager/Owner, phải giữ lịch sử đơn/công nợ/điểm và lưu nguồn–đích cùng `mergedBy/mergedAt`.
 
 ### SRS-CRM-008 — Nhóm khách và chính sách khách
 
-Nhóm khách có thể gán thủ công hoặc tính theo điều kiện doanh số, số lần mua, điểm, khu vực hoặc công nợ. Hệ thống snapshot nhóm/chính sách đã áp dụng ở đơn; việc khách đổi nhóm không thay đổi đơn cũ. Khách ngừng hoạt động không được chọn cho đơn mới trừ Manager duyệt ngoại lệ có audit.
+Nhóm khách có thể gán thủ công hoặc tính theo điều kiện doanh số, số lần mua, điểm, khu vực hoặc công nợ. Hệ thống snapshot nhóm/chính sách đã áp dụng ở đơn; việc khách đổi nhóm không thay đổi đơn cũ. Khách ngừng hoạt động không được chọn cho đơn mới trừ Manager duyệt ngoại lệ có lý do và actor metadata.
 
 ## 3. Bảng giá và khuyến mại
 
@@ -47,7 +47,7 @@ Bảng giá có tên, trạng thái, hiệu lực, Branch áp dụng, nhóm khá
 
 ### SRS-CRM-010 — Điều kiện và loại promotion
 
-Promotion hỗ trợ tối thiểu: giảm theo hàng, giảm theo hóa đơn, mua X tặng Y, tặng điểm và voucher/coupon. Mỗi promotion phải có điều kiện thời gian, scope Branch, nhóm khách/hàng, ngưỡng số lượng/giá trị, giới hạn lượt dùng/toàn tenant/mỗi khách, giá trị giảm, ngân sách khi dùng và trạng thái. Voucher có mã, hiệu lực, số lượt, điều kiện và audit lần sử dụng. Promotion hết hạn/ngừng không áp dụng cho đơn mới nhưng vẫn hiển thị snapshot trên đơn cũ.
+Promotion hỗ trợ tối thiểu: giảm theo hàng, giảm theo hóa đơn, mua X tặng Y, tặng điểm và voucher/coupon. Mỗi promotion phải có điều kiện thời gian, scope Branch, nhóm khách/hàng, ngưỡng số lượng/giá trị, giới hạn lượt dùng/toàn tenant/mỗi khách, giá trị giảm, ngân sách khi dùng và trạng thái. Voucher có mã, hiệu lực, số lượt, điều kiện và usage record có `redeemedBy/redeemedAt`. Promotion hết hạn/ngừng không áp dụng cho đơn mới nhưng vẫn hiển thị snapshot trên đơn cũ.
 
 ### SRS-CRM-011 — Thứ tự áp dụng giá và chống cộng dồn
 
@@ -71,7 +71,7 @@ Giá thủ công/chiết khấu thủ công chỉ được áp dụng sau khi gi
 
 ### SRS-CRM-013 — Sổ cái điểm
 
-Điểm khách hàng phải dùng ledger tăng/giảm bất biến, có nguồn đơn/return/điều chỉnh, quy tắc quy đổi, thời điểm có hiệu lực và hết hạn. Điểm chỉ được dùng trong số dư khả dụng; trả hàng phải đảo/điều chỉnh điểm đã cấp hoặc điểm đã dùng theo quan hệ đơn gốc. Điều chỉnh điểm tay cần quyền, lý do và audit.
+Điểm khách hàng phải dùng ledger tăng/giảm bất biến, có nguồn đơn/return/điều chỉnh, quy tắc quy đổi, thời điểm có hiệu lực và hết hạn. Điểm chỉ được dùng trong số dư khả dụng; trả hàng phải đảo/điều chỉnh điểm đã cấp hoặc điểm đã dùng theo quan hệ đơn gốc. Điều chỉnh điểm tay cần quyền, lý do và actor metadata.
 
 ### SRS-CRM-014 — Bảo hành
 
@@ -85,7 +85,7 @@ Tenant có thể cấu hình hoa hồng theo nhân viên, nhóm hàng hoặc pro
 
 | Mã | Kịch bản kiểm thử | Kết quả bắt buộc |
 | --- | --- | --- |
-| CRM-AT-01 | Import hai dòng có SKU trùng. | Báo lỗi theo dòng, không tạo SKU trùng; kết quả batch audit được. |
+| CRM-AT-01 | Import hai dòng có SKU trùng. | Báo lỗi theo dòng, không tạo SKU trùng; ImportBatch lưu kết quả và người thực hiện. |
 | CRM-AT-02 | Bán Bundle có thành phần thiếu tồn. | POS chặn Completed hoặc yêu cầu ngoại lệ âm kho; không trừ Bundle như một tồn độc lập. |
 | CRM-AT-03 | Một khách có bảng giá nhóm và hai promotion tự động hợp lệ. | Chỉ bảng giá ưu tiên và một promotion lợi nhất được áp dụng; lý do hiển thị/snapshot. |
 | CRM-AT-04 | Hai promotion cho cùng giá trị giảm. | Hệ thống chọn priority thấp hơn, sau đó ID nhỏ hơn; kết quả lặp lại xác định. |

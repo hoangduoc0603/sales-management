@@ -5,7 +5,7 @@
 
 ## Bối cảnh
 
-Một Spreadsheet chứa mọi master, transaction, ledger và audit sẽ chậm/dễ chạm giới hạn. Tách một Spreadsheet cho từng module lại làm tăng liên kết chéo và I/O POS.
+Một Spreadsheet chứa mọi master, transaction và ledger sẽ chậm/dễ chạm giới hạn. Tách một Spreadsheet cho từng module lại làm tăng liên kết chéo và I/O POS.
 
 ## Quyết định
 
@@ -13,7 +13,7 @@ Tách Core, Runtime, Transaction và Audit theo storage role. POS chỉ ghi acti
 
 ## Hệ quả
 
-Hot path không mở lịch sử/audit/core write. Backup/restore/report phải biết toàn bộ partition. Không được dùng row number, hard-code file ID hay scan mọi archive để tìm record.
+Hot path không mở lịch sử/core write. Backup/restore/report phải biết toàn bộ partition. Không được dùng row number, hard-code file ID hay scan mọi archive để tìm record. Audit partition trong ADR gốc đã được supersede bởi ADR 0017; baseline chỉ dùng actor metadata trên record.
 
 ## Phương án không chọn
 

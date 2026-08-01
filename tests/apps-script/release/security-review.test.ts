@@ -10,7 +10,6 @@ import { createInMemoryAuthRepository } from '../../../apps-script/src/repositor
 import { createInMemoryReportingRepository } from '../../../apps-script/src/repositories/reporting/reporting-repository';
 import { createReportingService } from '../../../apps-script/src/services/reporting/reporting-service';
 import { createInMemoryOperationsRepository } from '../../../apps-script/src/repositories/operations/operations-repository';
-import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { createOperationsService } from '../../../apps-script/src/services/operations/operations-service';
 import type { ActorContextDTO } from '../../../shared/contracts/platform/authorization';
 
@@ -87,7 +86,7 @@ describe('release security review', () => {
     });
   });
 
-  it('does not expose session token or password through API meta, error, audit summary or export payload', () => {
+  it('does not expose session token or password through API meta, error or export payload', () => {
     const api = createApiComposition({ now: () => new Date('2026-07-27T09:00:00.000Z') });
     const login = invokeRaw(api, {
       operation: 'platform.auth.login',
@@ -125,21 +124,6 @@ describe('release security review', () => {
     expect(exportRequest.ok).toBe(true);
     expect(JSON.stringify(exportRequest)).not.toContain(sessionToken);
     expect(JSON.stringify(exportRequest)).not.toContain('admin123');
-
-    const audit = invokeRaw(api, {
-      operation: 'operations.audit.search',
-      requestId: 'req-security-audit',
-      sessionToken,
-      payload: {
-        dateRange: { from: '2026-07-27', to: '2026-07-27' },
-        pageSize: 50,
-      },
-    });
-    expect(audit.ok).toBe(true);
-    const serializedAudit = JSON.stringify(audit);
-    expect(serializedAudit).not.toContain(sessionToken);
-    expect(serializedAudit).not.toContain('admin123');
-    expect(serializedAudit).not.toContain('wrong-secret-password');
   });
 
   it('denies warehouse scope bypass by edited payload before returning data', () => {
@@ -284,7 +268,6 @@ function createSecurityServices() {
 
   const operationsService = createOperationsService({
     repository: createInMemoryOperationsRepository(),
-    auditOutboxRepository: createInMemoryAuditOutboxRepository(),
     tenantId: 'tenant-default',
     appVersion: '0.1.0',
     schemaVersion: 1,

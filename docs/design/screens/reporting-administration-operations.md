@@ -11,7 +11,7 @@
 ## Phạm vi artifact
 
 - Report shell theo date semantic, Branch/Warehouse scope, `generatedAt`/`asOf`, archive coverage và drill-down; các báo cáo sales/customer, inventory/purchasing, cash/shift/aging và performance/commission.
-- Export run nền, warning scope/cột, retry, download/expired; audit có filter, delivery pending/delivered và export theo quyền.
+- Export run nền, warning scope/cột, retry, download/expired; không có audit screen/API baseline, truy vết dùng actor metadata trên record nguồn.
 - User/Role/UserScope, cấu hình tenant future-effective, lifecycle Branch/Warehouse và blocker.
 - Import Center, attachment, backup/restore theo freeze–verify–replacement–Owner confirmation–switch, Owner Operations/health/quota/capacity.
 

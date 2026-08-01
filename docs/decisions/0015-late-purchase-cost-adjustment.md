@@ -9,4 +9,4 @@ Chi phí/hóa đơn NCC đến sau receipt tạo adjustment bất biến. Chi ph
 
 ## Hệ quả
 
-Giá trị tồn hiện tại phản ánh chi phí hợp lệ, lịch sử bán giữ snapshot, và mọi chênh lệch truy vết/audit được.
+Giá trị tồn hiện tại phản ánh chi phí hợp lệ, lịch sử bán giữ snapshot, và mọi chênh lệch truy vết được bằng chứng từ điều chỉnh kèm actor metadata.

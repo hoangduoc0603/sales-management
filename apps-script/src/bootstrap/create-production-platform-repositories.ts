@@ -1,9 +1,5 @@
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
 import {
-  createSheetAuditOutboxRepository,
-  type AuditOutboxRepository,
-} from '../repositories/platform/audit-outbox-repository';
-import {
   createSheetCommandRepository,
   type CommandRepository,
 } from '../repositories/platform/command-repository';
@@ -11,7 +7,6 @@ import type { AppendOnlySheetRecordGateway } from '../repositories/platform/shee
 
 export interface ProductionPlatformRepositories {
   commandRepository: CommandRepository;
-  auditOutboxRepository: AuditOutboxRepository;
 }
 
 export interface ProductionPlatformRepositoryDependencies {
@@ -24,17 +19,11 @@ export function createProductionPlatformRepositories(
   deps: ProductionPlatformRepositoryDependencies,
 ): ProductionPlatformRepositories {
   const commandTable = findRequiredTable(deps.tableDefinitions, 'CommandTransaction');
-  const auditOutboxTable = findRequiredTable(deps.tableDefinitions, 'AuditOutbox');
 
   return {
     commandRepository: createSheetCommandRepository({
       gateway: deps.sheetGateway,
       table: commandTable,
-      partitionKey: deps.transactionPartitionKey,
-    }),
-    auditOutboxRepository: createSheetAuditOutboxRepository({
-      gateway: deps.sheetGateway,
-      table: auditOutboxTable,
       partitionKey: deps.transactionPartitionKey,
     }),
   };

@@ -75,9 +75,9 @@ Mọi thực thể nghiệp vụ phải dùng ID nội bộ bất biến, không
 
 ### SRS-OVR-004 — Đồng thời, khóa và idempotency
 
-Mọi thao tác có thể làm thay đổi tồn, tiền, công nợ, trạng thái chứng từ hoặc quyền phải chạy trong cơ chế commit có khóa và idempotency. Baseline phải dùng `ScriptLock` chỉ trong đoạn commit nghiệp vụ ngắn; không dùng logical lock theo SKU/kho ở baseline. Trước khi ghi, backend phải đọc lại dữ liệu quyết định từ nguồn hiện hành, kiểm tra idempotency lần cuối, rồi batch-write chứng từ, ledger, materialized balance, `CommandTransaction` và `AuditOutbox`.
+Mọi thao tác có thể làm thay đổi tồn, tiền, công nợ, trạng thái chứng từ hoặc quyền phải chạy trong cơ chế commit có khóa và idempotency. Baseline phải dùng `ScriptLock` chỉ trong đoạn commit nghiệp vụ ngắn; không dùng logical lock theo SKU/kho ở baseline. Trước khi ghi, backend phải đọc lại dữ liệu quyết định từ nguồn hiện hành, kiểm tra idempotency lần cuối, rồi batch-write chứng từ, ledger, materialized balance và `CommandTransaction`. Không ghi audit riêng trong hot path; record được tạo/cập nhật phải lưu actor metadata như `createdBy`, `updatedBy`, `approvedBy`, `cancelledBy` hoặc field `...By` phù hợp.
 
-Mỗi yêu cầu tạo/hoàn tất/duyệt/đảo phải mang `commandId` và khóa idempotency do client tạo. `CommandTransaction` phải hỗ trợ tối thiểu `Preparing`, `Committed`, `Failed`; fast path cho command mới được phép append trực tiếp `Committed` sau khi document/ledger/projection và `AuditOutbox` đã ghi thành công theo [ADR 0016](../../decisions/0016-command-journal-single-commit-fast-path.md). Chỉ dữ liệu của command `Committed` được tính vào số dư, báo cáo và kết quả nghiệp vụ. Sau timeout, client phải tra cứu `commandId` hoặc gửi lại cùng idempotency key; backend trả kết quả commit cũ hoặc kết quả recovery, không tạo nhóm chứng từ/ledger thứ hai.
+Mỗi yêu cầu tạo/hoàn tất/duyệt/đảo phải mang `commandId` và khóa idempotency do client tạo. `CommandTransaction` phải hỗ trợ tối thiểu `Preparing`, `Committed`, `Failed`; fast path cho command mới được phép append trực tiếp `Committed` sau khi document/ledger/projection bắt buộc đã ghi thành công theo [ADR 0016](../../decisions/0016-command-journal-single-commit-fast-path.md) và [ADR 0017](../../decisions/0017-record-actor-metadata-no-standalone-audit.md). Chỉ dữ liệu của command `Committed` được tính vào số dư, báo cáo và kết quả nghiệp vụ. Sau timeout, client phải tra cứu `commandId` hoặc gửi lại cùng idempotency key; backend trả kết quả commit cũ hoặc kết quả recovery, không tạo nhóm chứng từ/ledger thứ hai.
 
 **Tiêu chí nghiệm thu:** Hai thao tác đồng thời hoàn tất đơn cuối cùng của cùng một SKU tại một kho không thể cùng làm tồn giảm vượt quy tắc âm kho; gửi lại cùng yêu cầu hoàn tất đơn chỉ tạo một hóa đơn và một nhóm ledger; execution lỗi hoặc timeout giữa command không làm report/số dư tính dữ liệu chưa `Committed`.
 
@@ -95,7 +95,7 @@ Cache không được là nguồn quyết định tồn, quỹ, công nợ, quy�
 
 ### SRS-OVR-021 — Tác vụ nền
 
-Worker phải có `runId`, checkpoint, execution budget và retry giới hạn. Worker chỉ xử lý audit delivery, backup, export lớn, archive, import batch, reconcile/read-model rebuild, integrity check, dọn runtime TTL và cảnh báo quota/capacity. Worker không được hoàn tất POS hoặc tự tạo inventory/cash/receivable ledger thay cho command đồng bộ của người dùng.
+Worker phải có `runId`, checkpoint, execution budget và retry giới hạn. Worker chỉ xử lý backup, export lớn, archive, import batch, reconcile/read-model rebuild, integrity check, dọn runtime TTL và cảnh báo quota/capacity. Worker không được hoàn tất POS hoặc tự tạo inventory/cash/receivable ledger thay cho command đồng bộ của người dùng.
 
 ### SRS-OVR-022 — Web App công khai và session nội bộ
 
@@ -135,23 +135,23 @@ Nhân viên nghiệp vụ chỉ thao tác qua ứng dụng; các Sheet dữ li�
 
 ## 7. Audit, lưu trữ và khôi phục
 
-### SRS-OVR-009 — Audit log
+### SRS-OVR-009 — Actor metadata và lịch sử thao tác
 
-Hệ thống phải ghi audit bất biến cho các sự kiện: đăng nhập/khóa/đặt lại mật khẩu, tạo–sửa–ngừng master data, thay đổi quyền/cấu hình, tạo–duyệt–hủy–đảo chứng từ, ngoại lệ âm kho/giảm giá/hoàn trả, import/export, backup/restore và truy cập dữ liệu nhạy cảm. Mỗi dòng audit phải có event ID, loại đối tượng, ID đối tượng, hành động, before/after hoặc bản tóm tắt không chứa secret, actor, thời điểm, scope và lý do nếu bắt buộc.
+Baseline không lưu audit nghiệp vụ riêng bằng `AuditOutbox` hoặc `AuditLog`. Mọi record nghiệp vụ hoặc record vận hành quan trọng phải lưu người thực hiện trực tiếp trên record: `createdBy/createdAt`, `updatedBy/updatedAt`, và với chuyển trạng thái phải có field phù hợp như `approvedBy/approvedAt`, `cancelledBy/cancelledAt`, `reversedBy/reversedAt`, `uploadedBy/uploadedAt`, `requestedBy/requestedAt`.
 
-Với thao tác có audit bắt buộc, hệ thống phải tạo `AuditOutbox` bền vững trong cùng command nghiệp vụ. Audit chính thức có thể được chuyển bất đồng bộ sang kho audit riêng, nhưng worker phải idempotent/retry được; event đã `Committed` không được mất hoặc không truy vấn được chỉ vì audit delivery đang chậm/lỗi.
+Chứng từ, ledger và snapshot đã `Committed` vẫn là nguồn truy vết chính và không được sửa trực tiếp. Đăng nhập, lỗi, quota, health và cảnh báo kỹ thuật chỉ persist telemetry khi cần điều tra warning/error; success bình thường không tạo audit/telemetry bền vững.
 
 ### SRS-OVR-010 — Sao lưu và khôi phục
 
 Hệ thống phải tạo một bản sao lưu dữ liệu hằng ngày trong thư mục Drive riêng của tenant và giữ 30 bản gần nhất. Owner có thể tạo backup thủ công. Backup phải có manifest gồm app version, schema version, danh sách Core/Runtime/Transaction/Audit partition, row count, checksum, runtime config và metadata Drive; attachment được backup tăng dần theo metadata/file version.
 
-Chỉ Owner được yêu cầu khôi phục. Restore không được ghi đè trực tiếp bộ tài nguyên production: hệ thống phải khóa thao tác ghi, hiển thị định danh/thời điểm backup, yêu cầu xác nhận rõ ràng và tạo audit; tạo bộ Spreadsheet/Drive phục hồi riêng; kiểm tra manifest/checksum/liên kết; rồi yêu cầu Owner xác nhận chuyển runtime config sang bộ mới. Bộ cũ phải được giữ để rollback khôi phục; session bị thu hồi và health check phải thành công trước khi mở lại ghi. Lịch sử phiên bản Google Sheets/Drive chỉ là lớp khôi phục bổ sung, không thay thế backup ứng dụng.
+Chỉ Owner được yêu cầu khôi phục. Restore không được ghi đè trực tiếp bộ tài nguyên production: hệ thống phải khóa thao tác ghi, hiển thị định danh/thời điểm backup, yêu cầu xác nhận rõ ràng và lưu `requestedBy/switchedBy` trên record restore; tạo bộ Spreadsheet/Drive phục hồi riêng; kiểm tra manifest/checksum/liên kết; rồi yêu cầu Owner xác nhận chuyển runtime config sang bộ mới. Bộ cũ phải được giữ để rollback khôi phục; session bị thu hồi và health check phải thành công trước khi mở lại ghi. Lịch sử phiên bản Google Sheets/Drive chỉ là lớp khôi phục bổ sung, không thay thế backup ứng dụng.
 
 ### SRS-OVR-011 — Archive và dung lượng
 
-Dữ liệu phải được phân vai thành Core Data, Runtime Data, Transaction Data và Audit Data. Transaction/Audit Data phải được partition theo kỳ; partition đang hoạt động là vùng ghi nóng, partition đã đóng là chỉ đọc nhưng vẫn tra cứu/xuất được. Hệ thống phải tạo partition tiếp theo trước ngưỡng dung lượng/hiệu năng, không chờ Spreadsheet đầy và không tự xóa dữ liệu nghiệp vụ lịch sử.
+Dữ liệu phải được phân vai thành Core Data, Runtime Data và Transaction Data. Transaction Data phải được partition theo kỳ; partition đang hoạt động là vùng ghi nóng, partition đã đóng là chỉ đọc nhưng vẫn tra cứu/xuất được. Hệ thống phải tạo partition tiếp theo trước ngưỡng dung lượng/hiệu năng, không chờ Spreadsheet đầy và không tự xóa dữ liệu nghiệp vụ lịch sử.
 
-Archive chuyển partition đóng sang vùng lưu trữ vẫn tra cứu/xuất được nhưng không làm chậm truy vấn vận hành. Archive không được phá vỡ ID, partition routing, liên kết sổ cái, file đính kèm hoặc audit; truy vấn lịch sử phải route theo partition key/reference, không quét toàn bộ Spreadsheet lịch sử. Runtime Data có TTL và chỉ dữ liệu kỹ thuật hết hạn mới được dọn theo chính sách. Owner quyết định thời điểm archive theo hướng dẫn vận hành; thao tác archive và phục hồi archive phải audit.
+Archive chuyển partition đóng sang vùng lưu trữ vẫn tra cứu/xuất được nhưng không làm chậm truy vấn vận hành. Archive không được phá vỡ ID, partition routing, liên kết sổ cái, file đính kèm hoặc actor metadata; truy vấn lịch sử phải route theo partition key/reference, không quét toàn bộ Spreadsheet lịch sử. Runtime Data có TTL và chỉ dữ liệu kỹ thuật hết hạn mới được dọn theo chính sách. Owner quyết định thời điểm archive theo hướng dẫn vận hành; thao tác archive và phục hồi archive phải lưu actor metadata trên record vận hành tương ứng.
 
 ## 8. Yêu cầu phi chức năng
 
@@ -167,7 +167,7 @@ Archive chuyển partition đóng sang vùng lưu trữ vẫn tra cứu/xuất �
 
 ## 9. Ma trận phê duyệt mặc định
 
-Owner cấu hình ngưỡng số tiền/số lượng cho từng hành động. Dưới ngưỡng, Manager là người duyệt mặc định; từ ngưỡng Owner quy định, Owner phải duyệt. Người tạo không được tự duyệt cùng chứng từ/ngoại lệ trừ khi Owner cấu hình rõ một ngoại lệ đặc biệt và hệ thống audit cấu hình đó.
+Owner cấu hình ngưỡng số tiền/số lượng cho từng hành động. Dưới ngưỡng, Manager là người duyệt mặc định; từ ngưỡng Owner quy định, Owner phải duyệt. Người tạo không được tự duyệt cùng chứng từ/ngoại lệ trừ khi Owner cấu hình rõ một ngoại lệ đặc biệt và hệ thống lưu cấu hình cùng `createdBy/updatedBy` trên record cấu hình.
 
 | Hành động cần duyệt | Người duyệt mặc định |
 | --- | --- |

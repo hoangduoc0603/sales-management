@@ -16,7 +16,7 @@ Finance sở hữu Payment, CashTransaction, obligation Receivable/Payable, Paym
 | `finance.shift.open/close/lock` | Opening cash; close tính expected, variance/reason; Locked bất biến. |
 | `finance.expense.approve` | Expense + Disbursement/CashTransaction; không là giá vốn trừ landed cost Purchasing. |
 
-POS Completed/Shipped gọi Finance trong checkout command. CashTransaction POS luôn mang `shiftId` khi policy bắt buộc ca; không chuyển giao dịch Completed sang ca khác. Shift state: `Open → SubmittedForClose → Closed → Locked`; mọi điều chỉnh sau Locked là chứng từ mới có audit.
+POS Completed/Shipped gọi Finance trong checkout command. CashTransaction POS luôn mang `shiftId` khi policy bắt buộc ca; không chuyển giao dịch Completed sang ca khác. Shift state: `Open → SubmittedForClose → Closed → Locked`; mọi điều chỉnh sau Locked là chứng từ mới có actor metadata.
 
 ## Tests
 

@@ -48,7 +48,7 @@ Baseline hiện đã có nhiều contract/service/repository in-memory, API comp
 | Phase 6 | CashDrawer/PaymentMethod master, receivable/payable aging projection. | PaymentMethod/CashDrawer cần cho POS thực tế; aging projection cần cho công nợ bán được. |
 | Phase 8 | Deposit credit/refund khi hủy đơn có đặt cọc; attachment Drive flow; CRM policy reversal đầy đủ. | Cần ít nhất policy rõ và test nếu cho nhận cọc. |
 | Phase 10 | Archive coverage partial, drill-down token revalidates permission, worker-backed export không giữ ScriptLock. | Cần cho báo cáo/export production và bảo mật dữ liệu nhạy cảm. |
-| Phase 11 | Import worker/chunk, attachment private Drive, audit delivery, backup retention, restore replacement, archive read-only routing. | Cần cho vận hành dài hạn; có thể chia thành các lát cắt hardening. |
+| Phase 11 | Import worker/chunk, attachment private Drive, backup retention, restore replacement, archive read-only routing. | Cần cho vận hành dài hạn; audit delivery đã superseded bởi ADR 0017. |
 
 ### Decision points cần user duyệt trong Phase 12
 
@@ -66,7 +66,6 @@ Baseline hiện đã có nhiều contract/service/repository in-memory, API comp
 - `tests/apps-script/platform/google-workspace-adapter.test.ts`: contract test cho Sheet/Drive/Properties/Lock adapter seam, dùng fake Apps Script globals.
 - `apps-script/src/repositories/platform/sheet-record-repository.ts`: primitive append-only repository đọc/append typed records qua `SheetGateway`, dùng `TableDefinitionDTO` và partition key thay vì hard-code Sheet/header.
 - `tests/apps-script/platform/sheet-record-repository.test.ts`: contract test cho primitive repository production seam, gồm defensive copy, primary key bắt buộc và duplicate guard.
-- `tests/apps-script/platform/audit-outbox-sheet-repository.test.ts`: contract test cho `createSheetAuditOutboxRepository`, map `eventId` sang base primary key `id` và append qua `SheetGateway`.
 - `tests/apps-script/platform/command-sheet-repository.test.ts`: contract test cho `createSheetCommandRepository`, lưu command journal dạng append-only version và query latest outcome.
 - `apps-script/src/bootstrap/create-production-platform-repositories.ts`: factory wiring production cho platform repositories dùng `SheetGateway`, `TableDefinitionDTO[]` và active transaction partition.
 - `tests/apps-script/platform/production-platform-repositories.test.ts`: contract test cho wiring factory, gồm fail-fast khi thiếu table definition.
@@ -74,13 +73,12 @@ Baseline hiện đã có nhiều contract/service/repository in-memory, API comp
 - `tests/apps-script/inventory/inventory-sheet-repository.test.ts`: contract test cho `createSheetInventoryRepository`, append InventoryMovement bất biến và lưu InventoryBalance projection dạng versioned qua `SheetGateway`.
 - `tests/apps-script/finance/finance-sheet-repository.test.ts`: contract test cho `createSheetFinanceRepository`, ghi/đọc Shift, Payment, CashTransaction, PaymentAllocation, Obligation và finance master tối thiểu qua `SheetGateway`.
 - `tests/apps-script/sales/sales-sheet-repository.test.ts`: contract test cho `createSheetSalesRepository`, ghi/đọc SaleOrder, line/tender replacement set, ReceiptSnapshot, SaleReturn/SaleReturnLine và WarrantyCase qua `SheetGateway`.
-- `tests/apps-script/operations/operations-sheet-repository.test.ts`: contract test cho `createSheetOperationsRepository`, ghi/đọc ImportBatch/rows, AttachmentMetadata, AuditLog, BackgroundRun, BackupRun, RestoreRun, PartitionRegistry, HealthCheck, CapacityAlert và RuntimeRecord qua `SheetGateway`.
+- `tests/apps-script/operations/operations-sheet-repository.test.ts`: contract test cho `createSheetOperationsRepository`, ghi/đọc ImportBatch/rows, AttachmentMetadata, BackgroundRun, BackupRun, RestoreRun, PartitionRegistry, HealthCheck, CapacityAlert và RuntimeRecord qua `SheetGateway`.
 - `tests/apps-script/crm/customer-sheet-repository.test.ts`: contract test cho `createSheetCustomerRepository`, ghi/đọc Customer versioned và lookup phone/email normalized active qua `SheetGateway`.
 - `tests/apps-script/purchasing/purchasing-sheet-repository.test.ts`: contract test cho `createSheetPurchasingRepository`, ghi/đọc Supplier, PurchaseOrder/Line, GoodsReceipt/Line, LandedCostAdjustment, PurchaseCostVariance, SupplierReturn/Line qua `SheetGateway`.
 - `tests/apps-script/reporting/reporting-sheet-repository.test.ts`: contract test cho `createSheetReportingRepository`, ghi/đọc DashboardProjection, ReportRow replacement set và ReportingExportRun qua `SheetGateway`.
-- `tests/apps-script/platform/production-repositories.test.ts`: contract test cho `createProductionRepositories`, wiring các repository sheet-backed đã cutover vào cùng `SheetGateway`, transaction partition và audit partition.
+- `tests/apps-script/platform/production-repositories.test.ts`: contract test cho `createProductionRepositories`, wiring các repository sheet-backed đã cutover vào cùng `SheetGateway` và transaction partition.
 - `tests/apps-script/release/acceptance-flow.test.ts`: acceptance tests cross-domain cho bootstrap -> POS -> return -> purchasing -> dashboard -> backup/restore baseline.
-- `tests/apps-script/operations/audit-delivery-worker.test.ts`: worker test cho AuditOutbox -> AuditLog delivery idempotent, không ghi secret/token vào audit payload.
 - `tests/apps-script/operations/import-commit-worker.test.ts`: worker test cho ImportBatch `Committing`, commit staging rows theo chunk và retry không duplicate source object.
 - `tests/apps-script/operations/archive-worker.test.ts`: worker test cho archive closed transaction partition theo chunk, read-only routing và retry idempotency.
 - `tests/apps-script/reporting/reporting-export-worker.test.ts`: worker test cho ReportingExportRun routing `LargeWorker`, hoàn tất export run với row count và fileId idempotent.
@@ -174,7 +172,7 @@ type ReleaseReadinessResult = {
 - [x] Run adapter tests.
 - [x] Run `npm run typecheck && npm run lint`.
 
-**Follow-up evidence — 2026-07-27:** đã thêm primitive append-only Sheet record repository để domain document/ledger/audit có đường cutover production an toàn qua `SheetGateway`, đồng thời thêm `createSheetAuditOutboxRepository` cho audit outbox path, `createSheetCommandRepository` cho command journal append-only và factory `createProductionPlatformRepositories` để wiring hai repository này bằng active transaction partition. Đây chưa đóng P0 `production-persistence-adapters` vì các repository Sales/Catalog/Inventory/Finance/Operations trọng yếu chưa cutover, production Apps Script composition đầy đủ chưa wiring và chưa chạy drill trên Apps Script test project.
+**Follow-up evidence — 2026-07-27; updated by ADR 0017:** đã thêm primitive append-only Sheet record repository để domain document/ledger có đường cutover production an toàn qua `SheetGateway`, đồng thời thêm `createSheetCommandRepository` cho command journal append-only và factory `createProductionPlatformRepositories` để wiring repository này bằng active transaction partition. AuditOutbox path trong ghi chú gốc đã bị superseded; baseline dùng actor metadata trên record. Đây chưa đóng P0 `production-persistence-adapters` vì các repository Sales/Catalog/Inventory/Finance/Operations trọng yếu chưa cutover, production Apps Script composition đầy đủ chưa wiring và chưa chạy drill trên Apps Script test project.
 
 **Follow-up evidence — 2026-07-27:** đã thêm `createSheetCatalogRepository` cho Product/Variant/VariantBarcode/UnitConversionVersion, đồng thời bổ sung registry headers POS-critical (`tenantId`, `schemaVersion`, `recordVersion`, `sku`, `unitPriceVnd`, `barcode`, `unitName`) để SheetGateway không làm mất dữ liệu khi POS projection đọc từ Sheets. Đây là domain sellable cutover đầu tiên nhưng P0 vẫn mở vì Inventory/Finance/Sales/Operations repository, production composition wiring và Apps Script test-project drill chưa hoàn tất.
 
@@ -184,11 +182,11 @@ type ReleaseReadinessResult = {
 
 **Follow-up evidence — 2026-07-27:** đã thêm `createSheetSalesRepository` cho SaleOrder, SaleOrderLine, SaleTenderDraft, ReceiptSnapshot, SaleReturn/SaleReturnLine và WarrantyCase. SaleOrder/Receipt/Return/Warranty là versioned latest-read; line/tender/return-line dùng replacement-set version và marker cho set rỗng để draft update không giữ child row cũ. Registry đã bổ sung đầy đủ bảng/headers Sales/POS/Return/Warranty. Đây là domain sellable cutover thứ tư cho POS order/receipt/return path nhưng P0 vẫn mở vì Operations repository, production composition wiring và Apps Script test-project drill chưa hoàn tất.
 
-**Follow-up evidence — 2026-07-27:** đã thêm `createSheetOperationsRepository` cho ImportBatch, ImportStagingRow, AttachmentMetadata, AuditLog, BackgroundRun, BackupRun, RestoreRun, PartitionRegistry, HealthCheck, CapacityAlert và RuntimeRecord. Metadata có thể cập nhật dùng versioned latest-read; AuditLog append-only; ImportStagingRow/BackupRun retention/RuntimeRecord dùng replacement-set version. Registry đã bổ sung bảng/headers Operations runtime/evidence. P0 `production-persistence-adapters` vẫn mở cho tới khi production composition wiring và Apps Script test-project drill chứng minh đọc/ghi trên tài nguyên thật.
+**Follow-up evidence — 2026-07-27; updated by ADR 0017:** đã thêm `createSheetOperationsRepository` cho ImportBatch, ImportStagingRow, AttachmentMetadata, BackgroundRun, BackupRun, RestoreRun, PartitionRegistry, HealthCheck, CapacityAlert và RuntimeRecord. Metadata có thể cập nhật dùng versioned latest-read; ImportStagingRow/BackupRun retention/RuntimeRecord dùng replacement-set version. AuditLog không còn thuộc baseline. Registry đã bổ sung bảng/headers Operations runtime/evidence. P0 `production-persistence-adapters` vẫn mở cho tới khi production composition wiring và Apps Script test-project drill chứng minh đọc/ghi trên tài nguyên thật.
 
 **Follow-up evidence — 2026-07-27:** đã thêm `createSheetCustomerRepository`, `createSheetPurchasingRepository` và `createSheetReportingRepository`. CRM customer là versioned latest-read với lookup normalized active; Purchasing dùng versioned documents, replacement-set line tables và append-only `PurchaseCostVariance`; Reporting dùng versioned dashboard/export và replacement-set report rows. Registry đã bổ sung bảng/headers CRM/Purchasing/Reporting tương ứng.
 
-**Follow-up evidence — 2026-07-27:** đã mở rộng `createProductionRepositories` làm aggregate wiring seam cho CommandTransaction, AuditOutbox, Catalog, CRM, Inventory, Purchasing, Finance, Sales, Reporting và Operations sheet-backed repositories. Factory nhận `SheetGateway`, `TableDefinitionDTO[]`, active transaction partition và audit partition; test chứng minh các repository route đúng partition và fail-fast khi thiếu bảng trọng yếu. P0 vẫn mở vì `createApiComposition` production/runtime config chưa cutover và chưa có Apps Script test-project drill.
+**Follow-up evidence — 2026-07-27; updated by ADR 0017:** đã mở rộng `createProductionRepositories` làm aggregate wiring seam cho CommandTransaction, Catalog, CRM, Inventory, Purchasing, Finance, Sales, Reporting và Operations sheet-backed repositories. Factory nhận `SheetGateway`, `TableDefinitionDTO[]` và active transaction partition; test chứng minh các repository route đúng partition và fail-fast khi thiếu bảng trọng yếu. AuditOutbox/audit partition không còn thuộc baseline. P0 vẫn mở vì `createApiComposition` production/runtime config chưa cutover và chưa có Apps Script test-project drill.
 
 ## Task 3: Sellable scope audit for unchecked domain gaps
 
@@ -259,11 +257,11 @@ type ReleaseReadinessResult = {
 - Modify: `apps-script/src/services/operations/*`
 
 **Interfaces:**
-- Consumes: auth/session service, authorization service, reporting sensitive filtering, attachment/audit/export operations.
+- Consumes: auth/session service, authorization service, reporting sensitive filtering, attachment/export operations.
 - Produces: tests proving security release gates.
 
 - [x] Write failing tests for reset password, disable user, role/scope change revoking sessions via `authVersion`.
-- [x] Write tests asserting session token/password do not appear in API meta, audit summary, export payload or error messages.
+- [x] Write tests asserting session token/password do not appear in API meta, export payload or error messages.
 - [x] Write tests asserting Warehouse scope cannot be bypassed by payload edits.
 - [x] Write tests asserting sensitive fields are removed in dashboard/report/export/drill-down resolver when actor lacks permission.
 - [x] Run `npm test -- tests/apps-script/release/security-review.test.ts`.
@@ -280,7 +278,7 @@ type ReleaseReadinessResult = {
 - Modify: `apps-script/src/bootstrap/create-api-composition.ts`
 
 **Interfaces:**
-- Consumes: `OperationsRepository`, `AuditOutboxRepository`, runtime config store, DriveGateway and SheetGateway from Task 2.
+- Consumes: `OperationsRepository`, runtime config store, DriveGateway and SheetGateway from Task 2.
 - Produces:
   - `runBackgroundJob(input): BackgroundRunResult`
   - `requestBackup/runBackupChunk`
@@ -294,7 +292,7 @@ type ReleaseReadinessResult = {
 - [x] Run `npm test -- tests/apps-script/release/worker-backup-restore.test.ts`.
 - [x] Implement worker baseline outside POS fast path; do not hold ScriptLock during Drive/export/backup/archive work.
 - [x] Run targeted tests for operations/reporting/platform worker.
-- [x] Add local AuditOutbox delivery worker and scheduled tick wiring.
+- [x] Superseded by ADR 0017: local AuditOutbox delivery worker and scheduled tick wiring are no longer baseline.
 - [x] Add local worker-backed ReportingExportRun baseline and scheduled tick wiring.
 
 ## Task 8: UI accessibility and approved screen acceptance

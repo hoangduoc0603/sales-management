@@ -7,7 +7,7 @@
 
 ### SRS-FIN-001 — Quỹ và tài khoản thanh toán
 
-Hệ thống phải quản lý `CashDrawer`, tài khoản ngân hàng, ví và phương thức thanh toán khác theo Branch. Mỗi quỹ/tài khoản có mã, tên, loại, Branch, trạng thái và số dư truy vết từ ledger. Không cho user ghi đè số dư; điều chỉnh số dư dùng phiếu thu/chi/điều chỉnh có quyền và audit.
+Hệ thống phải quản lý `CashDrawer`, tài khoản ngân hàng, ví và phương thức thanh toán khác theo Branch. Mỗi quỹ/tài khoản có mã, tên, loại, Branch, trạng thái và số dư truy vết từ ledger. Không cho user ghi đè số dư; điều chỉnh số dư dùng phiếu thu/chi/điều chỉnh có quyền, lý do và actor metadata.
 
 ### SRS-FIN-002 — CashTransaction
 
@@ -35,7 +35,7 @@ CashTransaction/Payment/Allocation đã Approved không được sửa/xóa. Man
 
 ### SRS-FIN-007 — Hạn mức và quá hạn
 
-Tenant cấu hình hạn mức nợ, ngày đến hạn và hành vi cảnh báo/chặn. Trước Completed/Shipped bán chịu, hệ thống tính dư nợ mở cộng giá trị đơn sau payment/credit; nếu vượt hạn mức hoặc có nợ quá hạn, hệ thống cảnh báo/chặn theo policy. Ngoại lệ cần Manager/Owner duyệt, lý do và audit.
+Tenant cấu hình hạn mức nợ, ngày đến hạn và hành vi cảnh báo/chặn. Trước Completed/Shipped bán chịu, hệ thống tính dư nợ mở cộng giá trị đơn sau payment/credit; nếu vượt hạn mức hoặc có nợ quá hạn, hệ thống cảnh báo/chặn theo policy. Ngoại lệ cần Manager/Owner duyệt, lý do và `approvedBy/approvedAt`.
 
 ## 3. Ca bán và két tiền
 
@@ -45,11 +45,11 @@ Cashier chỉ được có một ca `Open` tại một CashDrawer tại một th
 
 ### SRS-FIN-009 — Ghi nhận trong ca
 
-Mọi Payment/CashTransaction liên quan POS trong ca phải liên kết ca hiện hành. Hệ thống hiển thị số dự kiến theo tiền đầu ca, thu, chi, hoàn tiền, nộp/rút quỹ và phương thức. User không được chuyển đơn đã Completed giữa các ca; sửa sai dùng chứng từ mới ở ca hiện hành hoặc quy trình điều chỉnh có audit.
+Mọi Payment/CashTransaction liên quan POS trong ca phải liên kết ca hiện hành. Hệ thống hiển thị số dự kiến theo tiền đầu ca, thu, chi, hoàn tiền, nộp/rút quỹ và phương thức. User không được chuyển đơn đã Completed giữa các ca; sửa sai dùng chứng từ mới ở ca hiện hành hoặc quy trình điều chỉnh có lý do và actor metadata.
 
 ### SRS-FIN-010 — Đóng và khóa ca
 
-Đóng ca yêu cầu Cashier nhập tiền thực tế theo phương thức, hệ thống tính expected, variance, lý do khi chênh và đính kèm nếu cấu hình. Trạng thái `Open → SubmittedForClose → Closed → Locked`; Manager/Owner duyệt variance theo ngưỡng. `Closed` không cho tạo POS mới trong ca; `Locked` là bất biến. Ca đã Closed/Locked không mở lại; chỉ Manager/Owner tạo CashTransaction/adjustment mới liên kết ca cũ nếu cần, kèm lý do/audit.
+Đóng ca yêu cầu Cashier nhập tiền thực tế theo phương thức, hệ thống tính expected, variance, lý do khi chênh và đính kèm nếu cấu hình. Trạng thái `Open → SubmittedForClose → Closed → Locked`; Manager/Owner duyệt variance theo ngưỡng. `Closed` không cho tạo POS mới trong ca; `Locked` là bất biến. Ca đã Closed/Locked không mở lại; chỉ Manager/Owner tạo CashTransaction/adjustment mới liên kết ca cũ nếu cần, kèm lý do và actor metadata.
 
 ### SRS-FIN-011 — Chi phí vận hành
 
