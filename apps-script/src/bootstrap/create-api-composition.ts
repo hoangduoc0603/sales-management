@@ -189,6 +189,7 @@ import { createCommandCoordinator } from '../services/platform/command/command-c
 import {
   actorFromSessionResult,
   createSessionService,
+  type IdGenerator,
   type LoginRateLimiter,
   type TokenFingerprinter,
 } from '../services/platform/auth/session-service';
@@ -207,6 +208,7 @@ import { createFinanceService } from '../services/finance/finance-service';
 import { createInventoryService } from '../services/inventory/inventory-service';
 import { createPurchasingService } from '../services/purchasing/purchasing-service';
 import { createReportingService } from '../services/reporting/reporting-service';
+import { ensureCurrentDashboardBaselineProjections } from '../services/reporting/dashboard-baseline-projection';
 import { createReportingPartitionCoverageResolver } from '../services/reporting/reporting-partition-coverage';
 import { createOperationsService } from '../services/operations/operations-service';
 import { createSalesService } from '../services/sales/sales-service';
@@ -218,6 +220,7 @@ export interface ApiCompositionDependencies {
   passwordService?: PasswordService;
   loginRateLimiter?: LoginRateLimiter;
   tokenFingerprinter?: TokenFingerprinter;
+  idGenerator?: IdGenerator;
   lockProvider?: LockProvider;
   tableDefinitions?: ReturnType<typeof createPlatformTableDefinitions>;
   tenantId?: string;
@@ -229,13 +232,20 @@ export function createApiComposition(clock: Clock) {
   return createApiCompositionFromDependencies({ clock });
 }
 
+function createDeterministicIdGenerator(): IdGenerator {
+  let idSequence = 0;
+  return {
+    newId(prefix) {
+      idSequence += 1;
+      return `${prefix}-${idSequence}`;
+    },
+  };
+}
+
 export function createApiCompositionFromDependencies(input: ApiCompositionDependencies) {
   const { clock } = input;
-  let idSequence = 0;
-  const newId = (prefix: string) => {
-    idSequence += 1;
-    return `${prefix}-${idSequence}`;
-  };
+  const idGenerator = input.idGenerator ?? createDeterministicIdGenerator();
+  const newId = (prefix: string) => idGenerator.newId(prefix);
   const tenantId = input.tenantId ?? 'tenant-default';
   const passwordService = input.passwordService ?? createDeterministicPasswordServiceForTest();
   const authRepository = input.repositories?.authRepository ?? createInMemoryAuthRepository([]);
@@ -360,7 +370,19 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       name: 'platform.bootstrap.install',
       kind: 'public',
       parsePayload: parseBootstrapInstallRequest,
-      handler: (input) => bootstrapService.install(input as BootstrapInstallRequest),
+      handler: (input) => {
+        const install = bootstrapService.install(input as BootstrapInstallRequest);
+        if (install.installed) {
+          ensureCurrentDashboardBaselineProjections({
+            repository: reportingRepository,
+            tenantId,
+            branches: [install.branch],
+            warehouses: [install.warehouse],
+            now: () => clock.now(),
+          });
+        }
+        return install;
+      },
     },
     {
       name: 'platform.bootstrap.getStatus',

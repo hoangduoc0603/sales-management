@@ -87,6 +87,33 @@ describe('append-only Sheet record repository', () => {
     expect(gateway.appendRequests).toHaveLength(1);
   });
 
+  it('uses narrow primary-key lookup instead of full table read before appending when gateway supports it', () => {
+    const gateway = new FakeSheetRecordGateway<AuditRecord>([], { supportFindRowsByColumn: true });
+    const repository = createAppendOnlySheetRecordRepository<AuditRecord>({
+      gateway,
+      table: auditTable,
+      partitionKey: 'FY2026-P01',
+    });
+
+    repository.append({
+      auditId: 'audit-fast-1',
+      tenantId: 'tenant-1',
+      action: 'CheckoutCommitted',
+      payloadJson: { schemaVersion: 1, source: 'sales' },
+    });
+
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([
+      {
+        tableName: 'AuditLog',
+        partitionKey: 'FY2026-P01',
+        columnName: 'auditId',
+        value: 'audit-fast-1',
+      },
+    ]);
+    expect(gateway.appendRequests).toHaveLength(1);
+  });
+
   it('rejects records without the registry primary key before touching Sheets', () => {
     const gateway = new FakeSheetRecordGateway<Record<string, unknown>>([]);
     const repository = createAppendOnlySheetRecordRepository<Record<string, unknown>>({
@@ -120,13 +147,37 @@ const auditTable: TableDefinitionDTO = {
 
 class FakeSheetRecordGateway<T extends Record<string, unknown>> {
   readonly readRequests: Array<{ tableName: string; partitionKey?: string }> = [];
+  readonly findRequests: Array<{
+    tableName: string;
+    partitionKey?: string;
+    columnName: string;
+    value: string;
+  }> = [];
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: T[] }> = [];
 
-  constructor(private readonly records: T[]) {}
+  constructor(
+    private readonly records: T[],
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {}
 
   readTable(request: { table: TableDefinitionDTO; partitionKey?: string }): T[] {
     this.readRequests.push({ tableName: request.table.tableName, partitionKey: request.partitionKey });
     return this.records.map(clone);
+  }
+
+  findRowsByColumn(
+    request: { table: TableDefinitionDTO; partitionKey?: string; columnName: string; value: string },
+  ): T[] {
+    if (this.options.supportFindRowsByColumn !== true) {
+      return this.readTable(request).filter((record) => String(record[request.columnName] ?? '') === request.value);
+    }
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      partitionKey: request.partitionKey,
+      columnName: request.columnName,
+      value: request.value,
+    });
+    return this.records.filter((record) => String(record[request.columnName] ?? '') === request.value).map(clone);
   }
 
   appendRows(request: { table: TableDefinitionDTO; partitionKey?: string; rows: readonly T[] }): { appendedRowCount: number } {

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CashDrawerDTO,
+  CashTransactionDTO,
+  PaymentDTO,
   PaymentMethodDTO,
+  ShiftDTO,
 } from '../../../shared/contracts/finance/finance';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
 import { createSheetFinanceRepository } from '../../../apps-script/src/repositories/finance/finance-repository';
@@ -143,6 +146,55 @@ describe('Sheet-backed FinanceRepository', () => {
     });
     expect(gateway.appendRequests).toEqual([]);
   });
+
+  it('uses narrow lookup paths for POS checkout finance operations when gateway supports them', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetFinanceRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.saveShift(openShiftFixture);
+    expect(
+      repository.findOpenShiftForPos({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'cashier-1',
+      }),
+    ).toMatchObject({ shiftId: 'shift-1', status: 'Open' });
+    repository.savePayment(paymentFixture);
+    repository.appendCashTransaction(cashTransactionFixture);
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
+      ['Shift', 'shiftId', 'shift-1'],
+      ['Shift', 'cashierId', 'cashier-1'],
+      ['Payment', 'paymentId', 'payment-1'],
+      ['CashTransaction', 'id', 'cash-1'],
+    ]);
+  });
+
+  it('appends new POS payment and cash transaction without preflight Sheet lookups', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetFinanceRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.saveNewPayment(paymentFixture);
+    repository.appendNewCashTransaction(cashTransactionFixture);
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.appendRequests.map((request) => request.tableName)).toEqual(['Payment', 'CashTransaction']);
+    expect(gateway.appendRequests.find((request) => request.tableName === 'Payment')?.rows[0]).toMatchObject({
+      id: 'payment-1:v1',
+      paymentId: 'payment-1',
+      recordVersion: 1,
+    });
+  });
 });
 
 const cashDrawerFixture: CashDrawerDTO = {
@@ -177,18 +229,83 @@ const shiftRowFixture = {
   expectedCashVnd: 500000,
 };
 
+const openShiftFixture: ShiftDTO = {
+  shiftId: 'shift-1',
+  tenantId: 'tenant-default',
+  branchId: 'branch-default',
+  warehouseId: 'warehouse-default',
+  cashDrawerId: 'drawer-main',
+  cashierId: 'cashier-1',
+  openedAt: '2026-07-27T08:00:00.000Z',
+  openingCashVnd: 500000,
+  expectedCashVnd: 500000,
+  status: 'Open',
+};
+
+const paymentFixture: PaymentDTO = {
+  paymentId: 'payment-1',
+  tenantId: 'tenant-default',
+  branchId: 'branch-default',
+  cashDrawerId: 'drawer-main',
+  paymentMethodId: 'cash',
+  amountVnd: 300000,
+  payerType: 'Customer',
+  payerId: 'customer-1',
+  sourceDocument: { sourceType: 'SaleOrder', sourceId: 'sale-1' },
+  status: 'Recorded',
+  effectiveAt: '2026-07-27T08:01:00.000Z',
+  shiftId: 'shift-1',
+};
+
+const cashTransactionFixture: CashTransactionDTO = {
+  cashTransactionId: 'cash-1',
+  tenantId: 'tenant-default',
+  branchId: 'branch-default',
+  cashDrawerId: 'drawer-main',
+  transactionType: 'Receipt',
+  amountVnd: 300000,
+  effectiveAt: '2026-07-27T08:01:00.000Z',
+  paymentId: 'payment-1',
+  sourceDocument: { sourceType: 'SaleOrder', sourceId: 'sale-1' },
+  actorId: 'cashier-1',
+  shiftId: 'shift-1',
+  idempotencyKey: 'idem-cash-1',
+};
+
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];
+  readonly findRequests: Array<{ tableName: string; columnName: string; value: string }> = [];
+  readCount = 0;
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
-  constructor(seed: Record<string, Record<string, unknown>[]> = {}) {
+  constructor(
+    seed: Record<string, Record<string, unknown>[]> = {},
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {
     for (const [tableName, rows] of Object.entries(seed)) {
       this.rowsByTable.set(tableName, rows.map(clone));
     }
   }
 
   readTable(request: { table: TableDefinitionDTO }): Record<string, unknown>[] {
+    this.readCount += 1;
     return this.getRows(request.table.tableName).map(clone);
+  }
+
+  findRowsByColumn(request: {
+    table: TableDefinitionDTO;
+    columnName: string;
+    value: string;
+  }): Record<string, unknown>[] {
+    if (this.options.supportFindRowsByColumn !== true) return this.readTable(request);
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      columnName: request.columnName,
+      value: request.value,
+    });
+    return this.getRows(request.table.tableName)
+      .filter((row) => String(row[request.columnName] ?? '') === request.value)
+      .map(clone);
   }
 
   appendRows(request: {

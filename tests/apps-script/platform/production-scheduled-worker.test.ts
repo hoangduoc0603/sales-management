@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryOperationsRepository } from '../../../apps-script/src/repositories/operations/operations-repository';
+import { createInMemoryAdministrationRepository } from '../../../apps-script/src/repositories/platform/administration-repository';
 import { createInMemoryAuditOutboxRepository } from '../../../apps-script/src/repositories/platform/audit-outbox-repository';
 import { createInMemoryReportingRepository } from '../../../apps-script/src/repositories/reporting/reporting-repository';
 import { runProductionScheduledWorkerTick } from '../../../apps-script/src/bootstrap/run-production-scheduled-worker';
@@ -7,6 +8,7 @@ import { runProductionScheduledWorkerTick } from '../../../apps-script/src/boots
 describe('Production scheduled worker tick', () => {
   it('runs health and daily backup jobs with BackgroundRun evidence', () => {
     const repository = createInMemoryOperationsRepository();
+    const administrationRepository = createInMemoryAdministrationRepository();
     const auditOutboxRepository = createInMemoryAuditOutboxRepository();
     const reportingRepository = createInMemoryReportingRepository();
     auditOutboxRepository.append({
@@ -55,6 +57,30 @@ describe('Production scheduled worker tick', () => {
       requestedAt: '2026-07-27T08:58:00.000Z',
       routing: 'LargeWorker',
     });
+    administrationRepository.saveTenant({
+      tenantId: 'tenant-default',
+      displayName: 'Cửa hàng production',
+      timezone: 'Asia/Ho_Chi_Minh',
+      status: 'Active',
+      activeConfigVersionId: 'config-default',
+    });
+    administrationRepository.saveBranch({
+      tenantId: 'tenant-default',
+      branchId: 'branch-default',
+      branchCode: 'BR-DEFAULT',
+      name: 'Chi nhánh mặc định',
+      status: 'Active',
+    });
+    administrationRepository.saveWarehouse({
+      tenantId: 'tenant-default',
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      warehouseCode: 'WH-DEFAULT',
+      name: 'Kho mặc định',
+      status: 'Active',
+      directSaleEnabled: true,
+      negativeStockPolicy: 'Block',
+    });
     repository.saveImportBatch({
       batchId: 'batch-1',
       importType: 'Catalog',
@@ -82,6 +108,7 @@ describe('Production scheduled worker tick', () => {
 
     const result = runProductionScheduledWorkerTick({
       repository,
+      administrationRepository,
       auditOutboxRepository,
       reportingRepository,
       tenantId: 'tenant-default',
@@ -93,6 +120,7 @@ describe('Production scheduled worker tick', () => {
 
     expect(result.runs).toEqual([
       expect.objectContaining({ runId: 'scheduled-audit-delivery', status: 'Completed' }),
+      expect.objectContaining({ runId: 'scheduled-reporting-projection-baseline-2026-07-27', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-reporting-export', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-import-commit', status: 'Completed' }),
       expect.objectContaining({ runId: 'scheduled-archive-transaction', status: 'Completed' }),
@@ -115,6 +143,14 @@ describe('Production scheduled worker tick', () => {
     expect(reportingRepository.getExportRun('export-1')).toEqual(
       expect.objectContaining({ status: 'Completed', fileId: 'export-file-export-1', rowCount: 1 }),
     );
+    expect(
+      reportingRepository.findDashboardProjection({
+        tenantId: 'tenant-default',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        dateBucket: '2026-07-27',
+      }),
+    ).toEqual(expect.objectContaining({ dateBucket: '2026-07-27' }));
     expect(repository.getImportBatch('batch-1')).toEqual(expect.objectContaining({ status: 'Completed' }));
     expect(repository.listImportRows('batch-1')).toEqual([
       expect.objectContaining({ rowKey: 'SKU-001', commitStatus: 'Committed', sourceObjectId: 'imported-catalog-1' }),

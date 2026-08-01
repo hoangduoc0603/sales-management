@@ -13,6 +13,7 @@ import {
   createImmediateLockProvider,
   type LockProvider,
 } from '../../../infrastructure/platform/runtime';
+import { recordStage } from '../../../api/performance-tracker';
 
 export interface CommandAuditInput {
   actorId: string;
@@ -35,43 +36,69 @@ interface CommandCoordinatorDependencies {
 export function createCommandCoordinator(deps: CommandCoordinatorDependencies): CommandCoordinator {
   return {
     run(command, handler, audit) {
-      return deps.lockProvider.withLock(() => {
-        const existing = deps.commandRepository.findByIdempotencyKey(command.idempotencyKey);
+      const totalStartedAt = Date.now();
+      try {
+        return deps.lockProvider.withLock(() => {
+          const measure = <T>(stage: string, operation: () => T): T => {
+            const startedAt = Date.now();
+            try {
+              return operation();
+            } finally {
+              recordStage(stage, Date.now() - startedAt);
+            }
+          };
 
-        if (existing?.status === 'Committed' && existing.resultJson !== undefined) {
-          return JSON.parse(existing.resultJson) as ReturnType<typeof handler>;
-        }
+          const existing = measure('command.findExistingMs', () =>
+            deps.commandRepository.findByIdempotencyKey(command.idempotencyKey),
+          );
 
-        const now = deps.now().toISOString();
-        deps.commandRepository.save({
-          commandId: command.commandId,
-          idempotencyKey: command.idempotencyKey,
-          status: 'Preparing',
-          createdAt: now,
-          updatedAt: now,
+          if (existing?.status === 'Committed' && existing.resultJson !== undefined) {
+            return JSON.parse(existing.resultJson) as ReturnType<typeof handler>;
+          }
+
+          const now = deps.now().toISOString();
+          try {
+            const result = measure('command.handlerMs', handler);
+            const resultJson = JSON.stringify(result);
+            measure('command.auditAppendMs', () => {
+              deps.auditOutboxRepository.append({
+                eventId: deps.newId('audit'),
+                commandId: command.commandId,
+                actorId: audit.actorId,
+                action: audit.action,
+                status: 'Pending',
+                createdAt: deps.now().toISOString(),
+              });
+            });
+            measure('command.appendCommittedMs', () => {
+              deps.commandRepository.appendNew({
+                commandId: command.commandId,
+                idempotencyKey: command.idempotencyKey,
+                status: 'Committed',
+                resultJson,
+                createdAt: now,
+                updatedAt: deps.now().toISOString(),
+              });
+            });
+
+            return result;
+          } catch (error) {
+            measure('command.appendFailedMs', () => {
+              deps.commandRepository.appendNew({
+                commandId: command.commandId,
+                idempotencyKey: command.idempotencyKey,
+                status: 'Failed',
+                errorCode: toCommandErrorCode(error),
+                createdAt: now,
+                updatedAt: deps.now().toISOString(),
+              });
+            });
+            throw error;
+          }
         });
-
-        const result = handler();
-        const resultJson = JSON.stringify(result);
-        deps.auditOutboxRepository.append({
-          eventId: deps.newId('audit'),
-          commandId: command.commandId,
-          actorId: audit.actorId,
-          action: audit.action,
-          status: 'Pending',
-          createdAt: deps.now().toISOString(),
-        });
-        deps.commandRepository.save({
-          commandId: command.commandId,
-          idempotencyKey: command.idempotencyKey,
-          status: 'Committed',
-          resultJson,
-          createdAt: now,
-          updatedAt: deps.now().toISOString(),
-        });
-
-        return result;
-      });
+      } finally {
+        recordStage('command.totalWithLockMs', Date.now() - totalStartedAt);
+      }
     },
     getStatus(input) {
       const record =
@@ -95,6 +122,14 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
       };
     },
   };
+}
+
+function toCommandErrorCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && code.trim() !== '') return code.trim();
+  }
+  return 'COMMAND_HANDLER_FAILED';
 }
 
 export function createCommandCoordinatorForTest() {

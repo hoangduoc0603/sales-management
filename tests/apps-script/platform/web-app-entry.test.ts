@@ -43,6 +43,7 @@ describe('Apps Script Web App entrypoint', () => {
 
     expect(output.getContent()).toContain('window.__CENIO_BOOT__');
     expect(output.getContent()).toContain('"debugApi":true');
+    expect(output.getContent()).toContain('<script id="cenio-boot-config" type="application/json">{"debugApi":true}</script>');
     expect(output.getContent()).toContain('<div id="root"></div>');
   });
 
@@ -100,9 +101,9 @@ describe('Apps Script Web App entrypoint', () => {
       requestId: 'req-install-run',
       payload: {
         tenantDisplayName: 'Cửa hàng An Nhiên',
-        adminLoginId: 'owner',
-        adminPassword: 'secure123',
-        confirmAdminPassword: 'secure123',
+        adminLoginId: 'admin',
+        adminPassword: 'admin123',
+        confirmAdminPassword: 'admin123',
       },
     });
 
@@ -112,7 +113,7 @@ describe('Apps Script Web App entrypoint', () => {
         status: 'Installed',
         installed: true,
         tenantDisplayName: 'Cửa hàng An Nhiên',
-        adminLoginId: 'owner',
+        adminLoginId: 'admin',
         branchName: 'Chi nhánh mặc định',
         warehouseName: 'Kho mặc định',
       },
@@ -142,14 +143,20 @@ describe('Apps Script Web App entrypoint', () => {
       requestId: 'req-install-run-again',
       payload: {
         tenantDisplayName: 'Cửa hàng An Nhiên',
-        adminLoginId: 'owner',
-        adminPassword: 'secure123',
-        confirmAdminPassword: 'secure123',
+        adminLoginId: 'admin',
+        adminPassword: 'admin123',
+        confirmAdminPassword: 'admin123',
       },
     });
 
     expect(secondRun).toMatchObject({ ok: true, data: { installed: true, status: 'Installed' } });
     expect(spreadsheetApp.createdNames).toHaveLength(4);
+
+    expect(spreadsheetApp.getSheetValues('spreadsheet-3', 'DashboardProjection')).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['tenant-default', 'branch-default', 'warehouse-default', '2026-07-27']),
+      ]),
+    );
   });
 });
 
@@ -183,6 +190,10 @@ class FakeSpreadsheetApp {
     return spreadsheet;
   }
 
+  getSheetValues(spreadsheetId: string, sheetName: string): unknown[][] {
+    return this.openById(spreadsheetId).getSheetValues(sheetName);
+  }
+
   flush(): void {
     // Apps Script compatibility seam.
   }
@@ -209,6 +220,10 @@ class FakeSpreadsheet {
     this.sheets.set(sheetName, sheet);
     return sheet;
   }
+
+  getSheetValues(sheetName: string): unknown[][] {
+    return this.sheets.get(sheetName)?.getValues() ?? [];
+  }
 }
 
 class FakeSheet {
@@ -224,6 +239,10 @@ class FakeSheet {
 
   appendRow(row: unknown[]): void {
     this.values.push(row);
+  }
+
+  getValues(): unknown[][] {
+    return this.values;
   }
 }
 

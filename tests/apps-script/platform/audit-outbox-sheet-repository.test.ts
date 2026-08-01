@@ -76,6 +76,24 @@ describe('Sheet-backed AuditOutbox repository', () => {
     ]);
     expect(repository.list()).toEqual([{ ...auditRecord, status: 'Delivered' }]);
   });
+
+  it('uses narrow event lookup before appending a new outbox version when gateway supports it', () => {
+    const gateway = new FakeSheetGateway([], { supportFindRowsByColumn: true });
+    const repository = createSheetAuditOutboxRepository({
+      gateway,
+      table: auditOutboxTable,
+      partitionKey: 'FY2026-P01',
+    });
+
+    repository.append(auditRecord);
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([
+      { columnName: 'eventId', value: 'audit-1' },
+      { columnName: 'id', value: 'audit-1:v1' },
+    ]);
+    expect(gateway.appendRequests).toHaveLength(1);
+  });
 });
 
 const auditOutboxTable = createPlatformTableDefinitions().find((table) => table.tableName === 'AuditOutbox')!;
@@ -91,11 +109,25 @@ const auditRecord: AuditOutboxRecord = {
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];
+  readonly findRequests: Array<{ columnName: string; value: string }> = [];
+  readCount = 0;
 
-  constructor(private readonly rows: Record<string, unknown>[] = []) {}
+  constructor(
+    private readonly rows: Record<string, unknown>[] = [],
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {}
 
   readTable(): Record<string, unknown>[] {
+    this.readCount += 1;
     return this.rows.map(clone);
+  }
+
+  findRowsByColumn(request: { columnName: string; value: string }): Record<string, unknown>[] {
+    if (this.options.supportFindRowsByColumn !== true) {
+      return this.readTable().filter((row) => String(row[request.columnName] ?? '') === request.value);
+    }
+    this.findRequests.push({ columnName: request.columnName, value: request.value });
+    return this.rows.filter((row) => String(row[request.columnName] ?? '') === request.value).map(clone);
   }
 
   appendRows(request: {

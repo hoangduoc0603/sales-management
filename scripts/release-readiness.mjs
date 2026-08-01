@@ -13,6 +13,7 @@ const p0Rules = [
     title: 'Thiếu Apps Script drill cho Google Workspace adapter production persistence/runtime config',
     source: 'SRS-OVR-003, SRS-OVR-008, SRS-OVR-023, sheet-schema-and-registry.md',
     evidence: ['Google Workspace adapter', 'SheetGateway', 'DriveGateway'],
+    resolvedEvidence: ['Google Workspace adapter production persistence drill pass'],
   },
   {
     id: 'pos-acceptance-benchmark',
@@ -31,6 +32,7 @@ const p0Rules = [
     title: 'Thiếu scheduled trigger/dry-run production trên Apps Script test project',
     source: 'SRS-OVR-021, LLD Administration–Reporting–Operations §5',
     evidence: ['Worker thật', 'scheduled trigger', 'BackgroundRun'],
+    resolvedEvidence: ['scheduledWorker_ trigger Apps Script evidence'],
   },
   {
     id: 'deployment-migration-drill',

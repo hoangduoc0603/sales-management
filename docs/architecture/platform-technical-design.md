@@ -57,8 +57,8 @@ invoke
 Mutation tạo/hoàn tất/duyệt/hủy/đảo phải mang `commandId` và `idempotencyKey`. Query, login và logout không được giả làm command nghiệp vụ.
 
 1. Ngoài lock: kiểm tra envelope, session, permission, payload và read hẹp không cạnh tranh.
-2. Trong `ScriptLock`: kiểm tra idempotency lần cuối, fresh-read dữ liệu cạnh tranh, chạy guard/state transition, cấp sequence cần thiết và batch-write `CommandTransaction`, document, ledger, projection và `AuditOutbox`.
-3. Gọi `SpreadsheetApp.flush()` trước release lock. Chỉ khi command là `Committed` mới trả success và cho report/read model tính kết quả.
+2. Trong `ScriptLock`: kiểm tra idempotency lần cuối, fresh-read dữ liệu cạnh tranh, chạy guard/state transition, cấp sequence cần thiết và batch-write document, ledger, projection và `AuditOutbox`.
+3. Append `CommandTransaction` `Committed` kèm response snapshot theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md), rồi gọi `SpreadsheetApp.flush()` trước release lock. Chỉ khi command là `Committed` mới trả success và cho report/read model tính kết quả.
 4. Khi timeout/unknown outcome, client gọi `command.getStatus` hoặc retry cùng key. Backend trả receipt/result đã commit hoặc recovery outcome; không tạo command mới.
 
 Lock không được bao gồm Drive, PDF, export, report, full catalog reload, network call, worker dispatch hoặc audit partition write. `LockService.getScriptLock()` được dùng; `DocumentLock` không phải nền tảng cho standalone Web App.

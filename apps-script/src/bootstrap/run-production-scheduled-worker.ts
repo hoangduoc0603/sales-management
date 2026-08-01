@@ -4,10 +4,20 @@ import { createPropertiesRuntimeConfigStore } from '../infrastructure/google-wor
 import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gateway';
 import { createActiveRuntimeTableLocator } from '../infrastructure/google-workspace/runtime-table-locator';
 import type { OperationsRepository } from '../repositories/operations/operations-repository';
+import type { AdministrationRepository } from '../repositories/platform/administration-repository';
 import type { AuditOutboxRepository } from '../repositories/platform/audit-outbox-repository';
 import type { ReportingRepository } from '../repositories/reporting/reporting-repository';
+import { ensureCurrentDashboardBaselineProjections } from '../services/reporting/dashboard-baseline-projection';
 import { createProductionRepositories } from './create-production-repositories';
 import { createPlatformTableDefinitions } from '../services/platform/registry/table-registry';
+import {
+  getScheduledWorkerTriggerStatus,
+  installScheduledWorkerTrigger,
+  removeScheduledWorkerTriggers,
+  type ScheduledWorkerTriggerInstallResult,
+  type ScheduledWorkerTriggerRemoveResult,
+  type ScheduledWorkerTriggerStatusResult,
+} from '../infrastructure/google-workspace/scheduled-worker-trigger-manager';
 import { runAuditDeliveryChunk } from '../services/operations/audit-delivery-worker';
 import { runBackupChunk } from '../services/operations/backup-restore-worker';
 import { runImportCommitChunk } from '../services/operations/import-commit-worker';
@@ -20,6 +30,7 @@ import {
 
 export interface ProductionScheduledWorkerTickDependencies {
   repository: OperationsRepository;
+  administrationRepository?: AdministrationRepository;
   auditOutboxRepository: AuditOutboxRepository;
   reportingRepository?: ReportingRepository;
   tenantId: string;
@@ -54,6 +65,26 @@ export function runProductionScheduledWorkerTick(
           checkpoint('audit:no-pending');
         },
       },
+      ...(
+        deps.reportingRepository === undefined || deps.administrationRepository === undefined
+          ? []
+          : [
+              {
+                runId: `scheduled-reporting-projection-baseline-${businessDate}`,
+                jobType: 'ReportProjection' as const,
+                execute(checkpoint: (checkpointKey: string) => void) {
+                  const result = ensureCurrentDashboardBaselineProjections({
+                    repository: deps.reportingRepository!,
+                    tenantId: deps.tenantId,
+                    branches: deps.administrationRepository!.listBranches(),
+                    warehouses: deps.administrationRepository!.listWarehouses(),
+                    now: deps.now,
+                  });
+                  checkpoint(`dashboard-baseline:${result.dateBucket}:created:${result.createdCount}:checked:${result.checkedCount}`);
+                },
+              },
+            ]
+      ),
       ...(
         deps.reportingRepository === undefined
           ? []
@@ -178,6 +209,7 @@ export function runAppsScriptScheduledWorker(): ScheduledWorkerTickResult {
 
   return runProductionScheduledWorkerTick({
     repository: repositories.operationsRepository,
+    administrationRepository: repositories.administrationRepository,
     auditOutboxRepository: repositories.auditOutboxRepository,
     reportingRepository: repositories.reportingRepository,
     tenantId: runtimeConfig.tenantId,
@@ -189,6 +221,18 @@ export function runAppsScriptScheduledWorker(): ScheduledWorkerTickResult {
       return `${prefix}-${Date.now()}-${sequence}`;
     },
   });
+}
+
+export function installScheduledWorkerTriggerForAppsScript_(): ScheduledWorkerTriggerInstallResult {
+  return installScheduledWorkerTrigger({ scriptApp: ScriptApp });
+}
+
+export function removeScheduledWorkerTriggersForAppsScript_(): ScheduledWorkerTriggerRemoveResult {
+  return removeScheduledWorkerTriggers({ scriptApp: ScriptApp });
+}
+
+export function getScheduledWorkerTriggerStatusForAppsScript_(): ScheduledWorkerTriggerStatusResult {
+  return getScheduledWorkerTriggerStatus({ scriptApp: ScriptApp });
 }
 
 export type { RuntimeConfigDTO };

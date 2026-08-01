@@ -40,9 +40,25 @@ export function createInMemoryAuditOutboxRepository(): AuditOutboxRepository {
 export function createSheetAuditOutboxRepository(deps: SheetAuditOutboxRepositoryDependencies): AuditOutboxRepository {
   const recordRepository = createAppendOnlySheetRecordRepository<AuditOutboxSheetRow>(deps);
 
+  function findRowsByColumn(columnName: string, value: string): AuditOutboxSheetRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => row as AuditOutboxSheetRow);
+  }
+
   return {
     append(record) {
-      const existingRows = recordRepository.list().filter((row) => row.eventId === record.eventId);
+      const existingRows =
+        deps.gateway.findRowsByColumn !== undefined
+          ? findRowsByColumn('eventId', record.eventId)
+          : recordRepository.list().filter((row) => row.eventId === record.eventId);
       const nextVersion = existingRows.reduce((maxVersion, row) => Math.max(maxVersion, parseVersion(row.id)), 0) + 1;
       recordRepository.append(toSheetRow(record, nextVersion));
     },

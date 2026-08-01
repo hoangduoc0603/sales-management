@@ -110,6 +110,57 @@ describe('Google Workspace adapter seams', () => {
     expect(sheet.rowRangeReadCount).toBe(0);
   });
 
+  it('uses cached full table reads for small column lookups to avoid expensive Apps Script per-row calls', () => {
+    const sheet = new FakeSheet('UserAccount', [
+      ['id', 'status', 'detailsJson'],
+      ['user-1', 'Active', '{"schemaVersion":1,"displayName":"Admin"}'],
+      ['user-2', 'Disabled', '{"schemaVersion":1,"displayName":"Disabled User"}'],
+    ]);
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-1' })).toHaveLength(1);
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'status', value: 'Active' })).toHaveLength(1);
+
+    expect(sheet.dataRangeReadCount).toBe(1);
+    expect(sheet.rowRangeReadCount).toBe(0);
+  });
+
+  it('updates cached table rows after append so same-request lookups see new data without rereading Sheets', () => {
+    const sheet = new FakeSheet('UserAccount', [
+      ['id', 'status', 'detailsJson'],
+      ['user-1', 'Active', '{"schemaVersion":1,"displayName":"Admin"}'],
+    ]);
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-1' })).toHaveLength(1);
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-2', status: 'Active', detailsJson: { displayName: 'New User' } }],
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-2' })).toHaveLength(1);
+    expect(sheet.dataRangeReadCount).toBe(1);
+    expect(sheet.rowRangeReadCount).toBe(0);
+  });
+
   it('does not read the full existing sheet only to verify headers before append', () => {
     const sheet = new FakeSheet('UserAccount', [['id', 'status', 'detailsJson']], {
       supportsRangeLookup: true,
@@ -200,6 +251,20 @@ describe('Google Workspace adapter seams', () => {
     expect(result).toBe('committed');
     expect(lockService.documentLock.calls).toEqual(['waitLock:3000', 'releaseLock']);
     expect(spreadsheetApp.flushCalls).toBe(1);
+  });
+
+  it('falls back to Apps Script script lock when document lock is unavailable', () => {
+    const lockService = new FakeLockService({ documentLockAvailable: false });
+    const provider = createAppsScriptLockProvider({
+      lockService,
+      waitTimeoutMs: 3000,
+    });
+
+    const result = provider.withLock(() => 'committed');
+
+    expect(result).toBe('committed');
+    expect(lockService.documentLock.calls).toEqual([]);
+    expect(lockService.scriptLock.calls).toEqual(['waitLock:3000', 'releaseLock']);
   });
 });
 
@@ -372,9 +437,16 @@ class FakeProperties {
 
 class FakeLockService {
   readonly documentLock = new FakeLock();
+  readonly scriptLock = new FakeLock();
 
-  getDocumentLock(): FakeLock {
-    return this.documentLock;
+  constructor(private readonly options: { documentLockAvailable?: boolean } = {}) {}
+
+  getDocumentLock(): FakeLock | null {
+    return this.options.documentLockAvailable === false ? null : this.documentLock;
+  }
+
+  getScriptLock(): FakeLock {
+    return this.scriptLock;
   }
 }
 

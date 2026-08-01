@@ -111,17 +111,95 @@ describe('Sheet-backed CommandRepository', () => {
       updatedAt: '2026-07-27T00:00:02.000Z',
     });
   });
+
+  it('uses narrow lookups for command idempotency and versioning when gateway supports it', () => {
+    const gateway = new FakeSheetGateway([], { supportFindRowsByColumn: true });
+    const repository = createSheetCommandRepository({
+      gateway,
+      table: commandTable,
+      partitionKey: 'FY2026-P01',
+    });
+
+    expect(repository.findByIdempotencyKey('sale-fast-1')).toBeUndefined();
+    repository.save({
+      commandId: 'cmd-fast-1',
+      idempotencyKey: 'sale-fast-1',
+      status: 'Preparing',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:00.000Z',
+    });
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([
+      { columnName: 'idempotencyKey', value: 'sale-fast-1' },
+      { columnName: 'commandId', value: 'cmd-fast-1' },
+      { columnName: 'id', value: 'cmd-fast-1:v1' },
+    ]);
+  });
+
+  it('appends a new committed command without version preflight lookups', () => {
+    const gateway = new FakeSheetGateway([], { supportFindRowsByColumn: true });
+    const repository = createSheetCommandRepository({
+      gateway,
+      table: commandTable,
+      partitionKey: 'FY2026-P01',
+    });
+
+    repository.appendNew({
+      commandId: 'cmd-fast-commit-1',
+      idempotencyKey: 'idem-fast-commit-1',
+      status: 'Committed',
+      resultJson: '{"receiptId":"receipt-fast-1"}',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:01.000Z',
+    });
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.appendRequests).toEqual([
+      {
+        tableName: 'CommandTransaction',
+        partitionKey: 'FY2026-P01',
+        rows: [
+          {
+            id: 'cmd-fast-commit-1:v1',
+            commandId: 'cmd-fast-commit-1',
+            idempotencyKey: 'idem-fast-commit-1',
+            status: 'Committed',
+            createdAt: '2026-07-27T00:00:00.000Z',
+            updatedAt: '2026-07-27T00:00:01.000Z',
+            resultJson: '{"receiptId":"receipt-fast-1"}',
+            errorCode: undefined,
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 const commandTable = createPlatformTableDefinitions().find((table) => table.tableName === 'CommandTransaction')!;
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];
+  readonly findRequests: Array<{ columnName: string; value: string }> = [];
+  readCount = 0;
 
-  constructor(private readonly rows: Record<string, unknown>[] = []) {}
+  constructor(
+    private readonly rows: Record<string, unknown>[] = [],
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {}
 
   readTable(): Record<string, unknown>[] {
+    this.readCount += 1;
     return this.rows.map(clone);
+  }
+
+  findRowsByColumn(request: { columnName: string; value: string }): Record<string, unknown>[] {
+    if (this.options.supportFindRowsByColumn !== true) {
+      return this.readTable().filter((row) => String(row[request.columnName] ?? '') === request.value);
+    }
+    this.findRequests.push({ columnName: request.columnName, value: request.value });
+    return this.rows.filter((row) => String(row[request.columnName] ?? '') === request.value).map(clone);
   }
 
   appendRows(request: {

@@ -1,5 +1,6 @@
 import type { ApiErrorCode } from '@shared/contracts/errors';
 import type { CustomerCreditDTO, FinancePaymentRecordResponse } from '@shared/contracts/finance/finance';
+import type { InventoryMovementResponse } from '@shared/contracts/inventory/inventory';
 import type { CatalogService } from '../catalog/catalog-service';
 import { createPricingService } from '../catalog/pricing-service';
 import type { FinanceService } from '../finance/finance-service';
@@ -7,6 +8,7 @@ import type { InventoryService } from '../inventory/inventory-service';
 import type { CommandCoordinator } from '../platform/command/command-coordinator';
 import type { FinanceRepository } from '../../repositories/finance/finance-repository';
 import type { SalesRepository } from '../../repositories/sales/sales-repository';
+import { recordStage } from '../../api/performance-tracker';
 import type {
   ReceiptFormat,
   ReceiptSnapshotDTO,
@@ -858,10 +860,21 @@ function completePosSale(
   deps: SalesServiceDependencies,
   input: SalesPosCompleteRequest,
 ): SalesServiceResult<SalesPosCompleteResponse> {
-  const shiftError = validateOpenShift(deps, input);
+  const measure = <T>(stage: string, operation: () => T): T => {
+    const startedAt = Date.now();
+    try {
+      return operation();
+    } finally {
+      recordStage(stage, Date.now() - startedAt);
+    }
+  };
+
+  const shiftError = measure<SalesServiceResult<SalesPosCompleteResponse> | undefined>('sales.pos.validateShiftMs', () =>
+    validateOpenShift(deps, input),
+  );
   if (shiftError !== undefined) return shiftError;
 
-  const quote = quoteCurrentCart(deps, input);
+  const quote = measure('sales.pos.quoteMs', () => quoteCurrentCart(deps, input));
   if (quote.quoteVersion !== input.quoteVersion) {
     return failure('PRICE_CHANGED', 'Giá hoặc khuyến mãi đã thay đổi. Vui lòng áp dụng báo giá mới trước khi hoàn tất.', {
       expectedVersion: input.quoteVersion,
@@ -869,17 +882,23 @@ function completePosSale(
     });
   }
 
-  for (const line of input.lines) {
-    const projectedLine = quote.lines.find((candidate) => candidate.lineId === line.lineId);
-    if (projectedLine === undefined || projectedLine.unitPriceVnd !== line.unitPriceVnd) {
-      return failure('PRICE_CHANGED', 'Giá bán đã thay đổi trước khi hoàn tất.', {
-        lineId: line.lineId,
-        variantId: line.variantId,
-      });
+  const priceError = measure<SalesServiceResult<SalesPosCompleteResponse> | undefined>('sales.pos.validatePriceMs', () => {
+    for (const line of input.lines) {
+      const projectedLine = quote.lines.find((candidate) => candidate.lineId === line.lineId);
+      if (projectedLine === undefined || projectedLine.unitPriceVnd !== line.unitPriceVnd) {
+        return failure('PRICE_CHANGED', 'Giá bán đã thay đổi trước khi hoàn tất.', {
+          lineId: line.lineId,
+          variantId: line.variantId,
+        });
+      }
     }
-  }
+    return undefined;
+  });
+  if (priceError !== undefined) return priceError;
 
-  const stockConflict = findStockConflict(deps, input);
+  const stockConflict = measure<SalesServiceResult<SalesPosCompleteResponse> | undefined>('sales.pos.stockCheckMs', () =>
+    findStockConflict(deps, input),
+  );
   if (stockConflict !== undefined) {
     return stockConflict;
   }
@@ -918,20 +937,25 @@ function completePosSale(
     completedAt: now,
   };
 
-  const inventoryMovements = [];
-  for (const line of input.lines) {
-    const issue = deps.inventoryService.issueForSale({
-      commandId: `${input.commandId}-${line.lineId}-issue`,
-      idempotencyKey: `${input.idempotencyKey}-${line.lineId}-issue`,
-      warehouseId: input.warehouseId,
-      variantId: line.variantId,
-      quantityMilli: line.quantityMilli,
-      sourceDocument: { sourceType: 'SaleOrder', sourceId: saleOrderId, sourceLineId: line.lineId },
-      actorId: input.cashierId,
-    });
-    if (!issue.ok) return failure(issue.error.code, issue.error.message);
-    inventoryMovements.push(issue.data);
-  }
+  const inventoryResult = measure<SalesServiceResult<readonly InventoryMovementResponse[]>>('sales.pos.inventoryIssueMs', () => {
+    const inventoryMovements = [];
+    for (const line of input.lines) {
+      const issue = deps.inventoryService.issueForSale({
+        commandId: `${input.commandId}-${line.lineId}-issue`,
+        idempotencyKey: `${input.idempotencyKey}-${line.lineId}-issue`,
+        warehouseId: input.warehouseId,
+        variantId: line.variantId,
+        quantityMilli: line.quantityMilli,
+        sourceDocument: { sourceType: 'SaleOrder', sourceId: saleOrderId, sourceLineId: line.lineId },
+        actorId: input.cashierId,
+      });
+      if (!issue.ok) return failure(issue.error.code, issue.error.message);
+      inventoryMovements.push(issue.data);
+    }
+    return { ok: true, data: inventoryMovements };
+  });
+  if (!inventoryResult.ok) return inventoryResult;
+  const inventoryMovements = inventoryResult.data;
 
   const receivable =
     receivableVnd > 0
@@ -942,7 +966,7 @@ function completePosSale(
           amountVnd: receivableVnd,
         })
       : undefined;
-  const financeResult =
+  const financeResult = measure('sales.pos.financeRecordMs', () =>
     paidVnd > 0
       ? deps.financeService.recordPayment({
           commandId: `${input.commandId}-payment`,
@@ -958,24 +982,26 @@ function completePosSale(
           allocations: [],
           actorId: input.cashierId,
         })
-      : undefined;
+      : undefined,
+  );
   if (financeResult !== undefined && !financeResult.ok) {
     return failure(financeResult.error.code, financeResult.error.message);
   }
 
   const receipt = buildReceipt(input, order, lines, changeVnd);
-  deps.repository.saveOrder(order);
-  deps.repository.saveLines(order.saleOrderId, lines);
-  deps.repository.saveTenders(
-    order.saleOrderId,
-    input.tenders.map((tender) => ({
-      ...tender,
-      cashDrawerId: tender.cashDrawerId ?? input.cashDrawerId,
-      saleOrderId: order.saleOrderId,
-      tenderDraftId: deps.newId('sale-tender'),
-    })),
-  );
-  deps.repository.saveReceipt(receipt);
+  measure('sales.pos.persistOrderMs', () => {
+    deps.repository.saveNewCompletedPosSale({
+      order,
+      lines,
+      tenders: input.tenders.map((tender) => ({
+        ...tender,
+        cashDrawerId: tender.cashDrawerId ?? input.cashDrawerId,
+        saleOrderId: order.saleOrderId,
+        tenderDraftId: deps.newId('sale-tender'),
+      })),
+      receipt,
+    });
+  });
 
   return {
     ok: true,

@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest';
+import {
+  getScheduledWorkerTriggerStatus,
+  installScheduledWorkerTrigger,
+  removeScheduledWorkerTriggers,
+} from '../../../apps-script/src/infrastructure/google-workspace/scheduled-worker-trigger-manager';
+
+describe('scheduled worker trigger manager', () => {
+  it('cài đúng một trigger scheduledWorker_ mỗi 5 phút và xoá duplicate cũ', () => {
+    const scriptApp = new FakeScriptApp([
+      new FakeTrigger('scheduledWorker_'),
+      new FakeTrigger('warmRuntime_'),
+      new FakeTrigger('scheduledWorker_'),
+    ]);
+
+    const result = installScheduledWorkerTrigger({ scriptApp });
+
+    expect(result).toEqual({
+      handlerName: 'scheduledWorker_',
+      intervalMinutes: 5,
+      removedCount: 2,
+      triggerCount: 1,
+    });
+    expect(scriptApp.triggers.map((trigger) => trigger.getHandlerFunction())).toEqual([
+      'warmRuntime_',
+      'scheduledWorker_',
+    ]);
+    expect(scriptApp.createdIntervals).toEqual([5]);
+  });
+
+  it('chỉ xoá scheduled worker trigger và giữ warm-up trigger', () => {
+    const scriptApp = new FakeScriptApp([
+      new FakeTrigger('warmRuntime_'),
+      new FakeTrigger('scheduledWorker_'),
+    ]);
+
+    const result = removeScheduledWorkerTriggers({ scriptApp });
+
+    expect(result).toEqual({
+      handlerName: 'scheduledWorker_',
+      removedCount: 1,
+      triggerCount: 0,
+    });
+    expect(scriptApp.triggers.map((trigger) => trigger.getHandlerFunction())).toEqual(['warmRuntime_']);
+  });
+
+  it('trả trạng thái trigger hiện tại để kiểm tra trong Apps Script editor', () => {
+    const scriptApp = new FakeScriptApp([
+      new FakeTrigger('warmRuntime_'),
+      new FakeTrigger('scheduledWorker_'),
+    ]);
+
+    expect(getScheduledWorkerTriggerStatus({ scriptApp })).toEqual({
+      handlerName: 'scheduledWorker_',
+      intervalMinutes: 5,
+      triggerCount: 1,
+    });
+  });
+});
+
+class FakeScriptApp {
+  readonly createdIntervals: number[] = [];
+
+  constructor(readonly triggers: FakeTrigger[]) {}
+
+  getProjectTriggers(): FakeTrigger[] {
+    return this.triggers;
+  }
+
+  deleteTrigger(trigger: FakeTrigger): void {
+    const index = this.triggers.indexOf(trigger);
+    if (index >= 0) this.triggers.splice(index, 1);
+  }
+
+  newTrigger(handlerName: string): FakeTriggerBuilder {
+    return new FakeTriggerBuilder(this, handlerName);
+  }
+}
+
+class FakeTriggerBuilder {
+  private intervalMinutes = 0;
+
+  constructor(
+    private readonly scriptApp: FakeScriptApp,
+    private readonly handlerName: string,
+  ) {}
+
+  timeBased(): FakeTriggerBuilder {
+    return this;
+  }
+
+  everyMinutes(intervalMinutes: number): FakeTriggerBuilder {
+    this.intervalMinutes = intervalMinutes;
+    return this;
+  }
+
+  create(): FakeTrigger {
+    this.scriptApp.createdIntervals.push(this.intervalMinutes);
+    const trigger = new FakeTrigger(this.handlerName);
+    this.scriptApp.triggers.push(trigger);
+    return trigger;
+  }
+}
+
+class FakeTrigger {
+  constructor(private readonly handlerName: string) {}
+
+  getHandlerFunction(): string {
+    return this.handlerName;
+  }
+}

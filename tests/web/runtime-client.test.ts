@@ -15,6 +15,15 @@ describe('runtime api client', () => {
     expect(result).toMatchObject({ ok: true });
   });
 
+  it('không fallback local fake khi đang chạy trong Apps Script HtmlService dù bridge chưa sẵn sàng tại mount', () => {
+    expect(
+      detectRuntimeApiMode({
+        hasGoogleScriptRun: () => false,
+        isAppsScriptRuntime: () => true,
+      }),
+    ).toBe('apps-script');
+  });
+
   it('ưu tiên Apps Script client khi google.script.run tồn tại', async () => {
     const client = createRuntimeApiClient({
       hasGoogleScriptRun: () => true,

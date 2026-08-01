@@ -37,7 +37,7 @@ Khi Catalog/price/promotion thay đổi, mutation tăng resource version hoặc 
 
 Không mở Drive, sinh PDF, export, gửi notification, load catalog, refresh báo cáo hoặc gọi dịch vụ ngoài trong lock. Với baseline một thu ngân, lock hầu như không có contention. Không xây logical lock phức tạp trước khi telemetry chứng minh `lockWaitMs` là bottleneck.
 
-`CommandTransaction` có `Preparing`, `Committed`, `Failed`. Chỉ record thuộc command `Committed` được tính vào report/read model. Retry cùng idempotency key trả result cũ hoặc tiếp tục recovery an toàn; không tạo order/ledger lần hai.
+`CommandTransaction` hỗ trợ `Preparing`, `Committed`, `Failed`, nhưng command mới trên fast path dùng single-commit append theo [ADR 0016](../decisions/0016-command-journal-single-commit-fast-path.md): kiểm tra idempotency, ghi document/ledger/projection và `AuditOutbox`, rồi append `Committed` kèm response snapshot. Chỉ record thuộc command `Committed` được tính vào report/read model. Retry cùng idempotency key trả result cũ hoặc tiếp tục recovery an toàn; không tạo order/ledger lần hai.
 
 ## 4. I/O, quota và worker
 

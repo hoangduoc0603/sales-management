@@ -99,6 +99,33 @@ describe('Sheet-backed InventoryRepository', () => {
     });
     expect(gateway.appendRequests).toEqual([]);
   });
+
+  it('uses narrow lookup paths for POS inventory balance and movement writes when gateway supports them', () => {
+    const gateway = new FakeSheetGateway(
+      {
+        InventoryBalance: [
+          { ...balanceRowFixture, id: 'balance-warehouse-1-variant-1:v1', recordVersion: 1, availableMilli: 1000 },
+        ],
+      },
+      { supportFindRowsByColumn: true },
+    );
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    expect(repository.getBalance('warehouse-1', 'variant-1')).toMatchObject({ availableMilli: 1000 });
+    repository.applyProjection({ ...balanceFixture, availableMilli: 700 });
+    repository.appendMovement({ ...movementFixture, movementId: 'movement-2', idempotencyKey: 'idem-2' });
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
+      ['InventoryBalance', 'balanceId', 'balance-warehouse-1-variant-1'],
+      ['InventoryBalance', 'balanceId', 'balance-warehouse-1-variant-1'],
+      ['InventoryMovement', 'id', 'movement-2'],
+    ]);
+  });
 });
 
 const movementFixture: InventoryMovementDTO = {
@@ -146,16 +173,38 @@ const balanceRowFixture = {
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: unknown[] }> = [];
+  readonly findRequests: Array<{ tableName: string; columnName: string; value: string }> = [];
+  readCount = 0;
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
-  constructor(seed: Record<string, Record<string, unknown>[]> = {}) {
+  constructor(
+    seed: Record<string, Record<string, unknown>[]> = {},
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {
     for (const [tableName, rows] of Object.entries(seed)) {
       this.rowsByTable.set(tableName, rows.map(clone));
     }
   }
 
   readTable(request: { table: TableDefinitionDTO }): Record<string, unknown>[] {
+    this.readCount += 1;
     return this.getRows(request.table.tableName).map(clone);
+  }
+
+  findRowsByColumn(request: {
+    table: TableDefinitionDTO;
+    columnName: string;
+    value: string;
+  }): Record<string, unknown>[] {
+    if (this.options.supportFindRowsByColumn !== true) return this.readTable(request);
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      columnName: request.columnName,
+      value: request.value,
+    });
+    return this.getRows(request.table.tableName)
+      .filter((row) => String(row[request.columnName] ?? '') === request.value)
+      .map(clone);
   }
 
   appendRows(request: {

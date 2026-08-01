@@ -15,6 +15,12 @@ export interface SalesRepository {
   saveLines(saleOrderId: string, lines: readonly SaleOrderLineDTO[]): void;
   saveTenders(saleOrderId: string, tenders: readonly SaleTenderDraftDTO[]): void;
   saveReceipt(receipt: ReceiptSnapshotDTO): void;
+  saveNewCompletedPosSale(input: {
+    order: SaleOrderDTO;
+    lines: readonly SaleOrderLineDTO[];
+    tenders: readonly SaleTenderDraftDTO[];
+    receipt: ReceiptSnapshotDTO;
+  }): void;
   getOrder(saleOrderId: string): SaleOrderDTO | undefined;
   getLines(saleOrderId: string): readonly SaleOrderLineDTO[];
   getTenders(saleOrderId: string): readonly SaleTenderDraftDTO[];
@@ -49,6 +55,12 @@ export function createInMemorySalesRepository(): SalesRepository {
     },
     saveReceipt(receipt) {
       receiptsByOrderId.set(receipt.saleOrderId, cloneReceipt(receipt));
+    },
+    saveNewCompletedPosSale(input) {
+      orders.set(input.order.saleOrderId, clone(input.order));
+      linesByOrderId.set(input.order.saleOrderId, input.lines.map(clone));
+      tendersByOrderId.set(input.order.saleOrderId, input.tenders.map(clone));
+      receiptsByOrderId.set(input.receipt.saleOrderId, cloneReceipt(input.receipt));
     },
     getOrder(saleOrderId) {
       return cloneOptional(orders.get(saleOrderId));
@@ -174,7 +186,7 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
     childIdField: 'saleOrderLineId',
     setVersionField: 'lineSetVersion',
     partitionKey: deps.transactionPartitionKey,
-    getTenantId: (saleOrderId) => orders.list().find((order) => order.saleOrderId === saleOrderId)?.tenantId,
+    getTenantId: (saleOrderId) => orders.findById(saleOrderId)?.tenantId,
     stripParentFieldFromRecord: true,
   });
   const tenders = createChildSetTable<SaleTenderDraftDTO>({
@@ -184,7 +196,7 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
     childIdField: 'tenderDraftId',
     setVersionField: 'tenderSetVersion',
     partitionKey: deps.transactionPartitionKey,
-    getTenantId: (saleOrderId) => orders.list().find((order) => order.saleOrderId === saleOrderId)?.tenantId,
+    getTenantId: (saleOrderId) => orders.findById(saleOrderId)?.tenantId,
   });
   const receipts = createVersionedTable<ReceiptSnapshotDTO>({
     gateway: deps.gateway,
@@ -209,7 +221,7 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
     childIdField: 'returnLineId',
     setVersionField: 'lineSetVersion',
     partitionKey: deps.transactionPartitionKey,
-    getTenantId: (returnId) => returns.list().find((returnOrder) => returnOrder.returnId === returnId)?.tenantId,
+    getTenantId: (returnId) => returns.findById(returnId)?.tenantId,
   });
   const warrantyCases = createVersionedTable<WarrantyCaseDTO>({
     gateway: deps.gateway,
@@ -233,8 +245,14 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
     saveReceipt(receipt) {
       receipts.save(receipt);
     },
+    saveNewCompletedPosSale(input) {
+      orders.saveNew(input.order);
+      orderLines.saveNewSet(input.order.saleOrderId, input.lines, input.order.tenantId);
+      tenders.saveNewSet(input.order.saleOrderId, input.tenders, input.order.tenantId);
+      receipts.saveNew(input.receipt);
+    },
     getOrder(saleOrderId) {
-      return orders.list().find((order) => order.saleOrderId === saleOrderId);
+      return orders.findById(saleOrderId);
     },
     getLines(saleOrderId) {
       return orderLines.listSet(saleOrderId);
@@ -264,7 +282,7 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
       returnLines.saveSet(returnOrder.returnId, returnOrder.lines);
     },
     getReturn(returnId) {
-      const returnOrder = returns.list().find((candidate) => candidate.returnId === returnId);
+      const returnOrder = returns.findById(returnId);
       return returnOrder === undefined ? undefined : { ...returnOrder, lines: returnLines.listSet(returnId) };
     },
     listReturns(sourceSaleOrderId) {
@@ -277,7 +295,7 @@ export function createSheetSalesRepository(deps: SheetSalesRepositoryDependencie
       warrantyCases.save(warrantyCase);
     },
     getWarrantyCase(warrantyCaseId) {
-      return warrantyCases.list().find((warrantyCase) => warrantyCase.warrantyCaseId === warrantyCaseId);
+      return warrantyCases.findById(warrantyCaseId);
     },
     listWarrantyCases(saleOrderId) {
       return warrantyCases
@@ -300,7 +318,9 @@ interface VersionedTableDependencies<TRecord extends object> {
 
 interface VersionedTable<TRecord extends object> {
   list(): TRecord[];
+  findById(recordId: string): TRecord | undefined;
   save(record: TRecord): void;
+  saveNew(record: TRecord): void;
 }
 
 function createVersionedTable<TRecord extends object>(deps: VersionedTableDependencies<TRecord>): VersionedTable<TRecord> {
@@ -321,6 +341,19 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
       .map((row) => deepClone(row) as SalesRow);
   }
 
+  function findRowsByColumn(columnName: string, value: string): SalesRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => deepClone(row) as SalesRow);
+  }
+
   function latestRows(): SalesRow[] {
     const latestById = new Map<string, SalesRow>();
     for (const row of readRows()) {
@@ -336,13 +369,19 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
     list() {
       return latestRows().map((row) => deepClone(fromRow(row)));
     },
+    findById(recordId) {
+      const latest = findRowsByColumn(deps.idField, recordId).reduce<SalesRow | undefined>(
+        (current, row) => current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current,
+        undefined,
+      );
+      return latest === undefined ? undefined : deepClone(fromRow(latest));
+    },
     save(record) {
       const row = toRow(record);
       const recordId = String(row[deps.idField] ?? '');
       if (recordId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
       const nextVersion =
-        readRows()
-          .filter((current) => String(current[deps.idField] ?? '') === recordId)
+        findRowsByColumn(deps.idField, recordId)
           .reduce((max, current) => Math.max(max, getRecordVersion(current)), 0) + 1;
       deps.gateway.appendRows({
         table: deps.table,
@@ -353,6 +392,23 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
             id: `${recordId}:v${nextVersion}`,
             schemaVersion: deps.table.schemaVersion,
             recordVersion: nextVersion,
+          },
+        ],
+      });
+    },
+    saveNew(record) {
+      const row = toRow(record);
+      const recordId = String(row[deps.idField] ?? '');
+      if (recordId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
+      deps.gateway.appendRows({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        rows: [
+          {
+            ...row,
+            id: `${recordId}:v1`,
+            schemaVersion: deps.table.schemaVersion,
+            recordVersion: 1,
           },
         ],
       });
@@ -374,6 +430,7 @@ interface ChildSetTableDependencies<TRecord extends object> {
 interface ChildSetTable<TRecord extends object> {
   listSet(parentId: string): TRecord[];
   saveSet(parentId: string, records: readonly TRecord[]): void;
+  saveNewSet(parentId: string, records: readonly TRecord[], tenantId: string): void;
 }
 
 function createChildSetTable<TRecord extends object>(deps: ChildSetTableDependencies<TRecord>): ChildSetTable<TRecord> {
@@ -383,10 +440,22 @@ function createChildSetTable<TRecord extends object>(deps: ChildSetTableDependen
       .map((row) => deepClone(row) as SalesRow);
   }
 
+  function findRowsByColumn(columnName: string, value: string): SalesRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => deepClone(row) as SalesRow);
+  }
+
   function nextSetVersion(parentId: string): number {
     return (
-      readRows()
-        .filter((row) => String(row[deps.parentField] ?? '') === parentId)
+      findRowsByColumn(deps.parentField, parentId)
         .reduce((max, row) => Math.max(max, getPositiveInteger(row[deps.setVersionField])), 0) + 1
     );
   }
@@ -431,8 +500,7 @@ function createChildSetTable<TRecord extends object>(deps: ChildSetTableDependen
               const childId = String(row[deps.childIdField] ?? '');
               if (childId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.childIdField}`);
               const childVersion =
-                readRows()
-                  .filter((current) => String(current[deps.childIdField] ?? '') === childId)
+                findRowsByColumn(deps.childIdField, childId)
                   .reduce((max, current) => Math.max(max, getRecordVersion(current)), 0) + 1;
               return {
                 ...row,
@@ -442,6 +510,35 @@ function createChildSetTable<TRecord extends object>(deps: ChildSetTableDependen
                 schemaVersion: deps.table.schemaVersion,
                 recordVersion: childVersion,
                 [deps.setVersionField]: setVersion,
+              };
+            });
+      deps.gateway.appendRows({ table: deps.table, partitionKey: deps.partitionKey, rows });
+    },
+    saveNewSet(parentId, records, tenantId) {
+      const rows =
+        records.length === 0
+          ? [
+              {
+                id: `${parentId}:${deps.setVersionField}:s1:empty`,
+                tenantId,
+                [deps.parentField]: parentId,
+                [deps.setVersionField]: 1,
+                setIsEmpty: true,
+                schemaVersion: deps.table.schemaVersion,
+              },
+            ]
+          : records.map((record) => {
+              const row = deepClone(record) as SalesRow;
+              const childId = String(row[deps.childIdField] ?? '');
+              if (childId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.childIdField}`);
+              return {
+                ...row,
+                tenantId: row.tenantId ?? tenantId,
+                [deps.parentField]: parentId,
+                id: `${childId}:v1:s1`,
+                schemaVersion: deps.table.schemaVersion,
+                recordVersion: 1,
+                [deps.setVersionField]: 1,
               };
             });
       deps.gateway.appendRows({ table: deps.table, partitionKey: deps.partitionKey, rows });

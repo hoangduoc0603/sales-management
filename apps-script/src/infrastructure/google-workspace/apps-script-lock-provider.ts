@@ -2,7 +2,8 @@ import type { LockProvider } from '../platform/runtime';
 
 export interface AppsScriptLockProviderDependencies {
   lockService: {
-    getDocumentLock(): AppsScriptLockLike;
+    getDocumentLock(): AppsScriptLockLike | null;
+    getScriptLock(): AppsScriptLockLike;
   };
   spreadsheetApp?: {
     flush(): void;
@@ -22,7 +23,7 @@ export function createAppsScriptLockProvider(
 
   return {
     withLock(operation) {
-      const lock = deps.lockService.getDocumentLock();
+      const lock = deps.lockService.getDocumentLock() ?? deps.lockService.getScriptLock();
       lock.waitLock(waitTimeoutMs);
       try {
         const result = operation();

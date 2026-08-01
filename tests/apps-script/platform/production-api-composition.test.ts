@@ -76,6 +76,135 @@ describe('Production API composition', () => {
       }),
     ).toThrow(/Missing active runtime config/);
   });
+
+  it('uses injected production id generator so sessions are unique across composition instances', () => {
+    const gateway = new FakeSheetGateway();
+    const credentialVerifierStore = new FakeCredentialVerifierStore();
+    const idGenerator = createSequenceIdGenerator();
+
+    const firstComposition = createProductionApiComposition({
+      clock: { now: () => new Date('2026-07-27T09:00:00.000Z') },
+      runtimeConfigStore: { getActiveConfig: () => runtimeConfig, saveActiveConfig: () => undefined },
+      sheetGateway: gateway,
+      credentialVerifierStore,
+      passwordService: createDeterministicPasswordServiceForTest(),
+      lockProvider: { withLock: (operation) => operation() },
+      idGenerator,
+    });
+    expect(
+      firstComposition.invoke({
+        operation: 'platform.bootstrap.install',
+        requestId: 'req-install-unique',
+        payload: {
+          tenantDisplayName: 'Cửa hàng production',
+          adminLoginId: 'admin',
+          temporaryPassword: 'admin123',
+        },
+      }),
+    ).toMatchObject({ ok: true });
+
+    const firstLogin = firstComposition.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login-unique-1',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+
+    const secondComposition = createProductionApiComposition({
+      clock: { now: () => new Date('2026-07-27T09:01:00.000Z') },
+      runtimeConfigStore: { getActiveConfig: () => runtimeConfig, saveActiveConfig: () => undefined },
+      sheetGateway: gateway,
+      credentialVerifierStore,
+      passwordService: createDeterministicPasswordServiceForTest(),
+      lockProvider: { withLock: (operation) => operation() },
+      idGenerator,
+    });
+    const secondLogin = secondComposition.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login-unique-2',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+
+    expect(firstLogin).toMatchObject({ ok: true });
+    expect(secondLogin).toMatchObject({ ok: true });
+    if (!firstLogin.ok || !secondLogin.ok) throw new Error('login failed');
+    expect(secondLogin.data.sessionToken).not.toBe(firstLogin.data.sessionToken);
+    expect(
+      secondComposition.invoke({
+        operation: 'reporting.dashboard.get',
+        requestId: 'req-dashboard-unique',
+        sessionToken: secondLogin.data.sessionToken,
+        payload: {
+          branchId: 'branch-default',
+          warehouseId: 'warehouse-default',
+          dateRange: { from: '2026-07-27', to: '2026-07-27' },
+          requestedSensitiveFields: [],
+        },
+      }),
+    ).not.toMatchObject({ ok: false, error: { code: 'SESSION_EXPIRED' } });
+  });
+
+  it('creates a current-day baseline dashboard projection during tenant bootstrap', () => {
+    const gateway = new FakeSheetGateway();
+    const credentialVerifierStore = new FakeCredentialVerifierStore();
+    const composition = createProductionApiComposition({
+      clock: { now: () => new Date('2026-07-31T09:00:00.000Z') },
+      runtimeConfigStore: { getActiveConfig: () => runtimeConfig, saveActiveConfig: () => undefined },
+      sheetGateway: gateway,
+      credentialVerifierStore,
+      passwordService: createDeterministicPasswordServiceForTest(),
+      lockProvider: { withLock: (operation) => operation() },
+      idGenerator: createSequenceIdGenerator(),
+    });
+
+    expect(
+      composition.invoke({
+        operation: 'platform.bootstrap.install',
+        requestId: 'req-install-dashboard-baseline',
+        payload: {
+          tenantDisplayName: 'Cửa hàng production',
+          adminLoginId: 'admin',
+          temporaryPassword: 'admin123',
+        },
+      }),
+    ).toMatchObject({ ok: true });
+
+    const login = composition.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login-dashboard-baseline',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+    expect(login).toMatchObject({ ok: true });
+    if (!login.ok) throw new Error('login failed');
+
+    expect(
+      composition.invoke({
+        operation: 'reporting.dashboard.get',
+        requestId: 'req-dashboard-baseline',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          branchId: 'branch-default',
+          warehouseId: 'warehouse-default',
+          dateRange: { from: '2026-07-31', to: '2026-07-31' },
+          requestedSensitiveFields: [],
+        },
+      }),
+    ).toMatchObject({
+      ok: true,
+      data: {
+        scope: { branchId: 'branch-default', warehouseId: 'warehouse-default' },
+        kpis: [
+          { kpiId: 'netRevenue', valueVnd: 0 },
+          { kpiId: 'completedOrders', valueCount: 0 },
+          { kpiId: 'collected', valueVnd: 0 },
+          { kpiId: 'receivableOverdue', valueVnd: 0 },
+        ],
+        revenueSeries: [],
+        decisionQueue: [],
+        manualOrders: [],
+      },
+    });
+    expect(gateway.appendRequests.map((request) => request.tableName)).toContain('DashboardProjection');
+  });
 });
 
 const runtimeConfig: RuntimeConfigDTO = {
@@ -135,4 +264,14 @@ class FakeSheetGateway {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function createSequenceIdGenerator() {
+  let sequence = 0;
+  return {
+    newId(prefix: string): string {
+      sequence += 1;
+      return `${prefix}-prod-${sequence}`;
+    },
+  };
 }

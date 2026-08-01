@@ -38,6 +38,11 @@ export function createAppsScriptProductionComposition(clock: Clock) {
     tokenFingerprinter: createAppsScriptSessionTokenFingerprinter({
       getPepper: () => tenantSecretStore.getOrCreateSessionPepper(),
     }),
+    idGenerator: {
+      newId(prefix) {
+        return `${prefix}-${Utilities.getUuid()}`;
+      },
+    },
     lockProvider: createAppsScriptLockProvider({
       lockService: LockService,
       spreadsheetApp: SpreadsheetApp,

@@ -60,6 +60,62 @@ function getWarmupTriggerStatus_() {
   return SalesManagement.getWarmupTriggerStatusForAppsScript_();
 }
 
+function scheduledWorker() {
+  return SalesManagement.scheduledWorker_();
+}
+
+function scheduledWorker_() {
+  return SalesManagement.scheduledWorker_();
+}
+
+function installScheduledWorkerTrigger() {
+  return SalesManagement.installScheduledWorkerTriggerForAppsScript_();
+}
+
+function installScheduledWorkerTrigger_() {
+  return SalesManagement.installScheduledWorkerTriggerForAppsScript_();
+}
+
+function removeScheduledWorkerTriggers() {
+  return SalesManagement.removeScheduledWorkerTriggersForAppsScript_();
+}
+
+function removeScheduledWorkerTriggers_() {
+  return SalesManagement.removeScheduledWorkerTriggersForAppsScript_();
+}
+
+function getScheduledWorkerTriggerStatus() {
+  return SalesManagement.getScheduledWorkerTriggerStatusForAppsScript_();
+}
+
+function getScheduledWorkerTriggerStatus_() {
+  return SalesManagement.getScheduledWorkerTriggerStatusForAppsScript_();
+}
+
+function runHealthCheck() {
+  return SalesManagement.runHealthCheckForAppsScript_();
+}
+
+function runHealthCheck_() {
+  return SalesManagement.runHealthCheckForAppsScript_();
+}
+
+function requestManualBackup() {
+  return SalesManagement.requestManualBackupForAppsScript_();
+}
+
+function requestManualBackup_() {
+  return SalesManagement.requestManualBackupForAppsScript_();
+}
+
+function runPosAcceptanceDrill() {
+  return SalesManagement.runPosAcceptanceDrillForAppsScript_();
+}
+
+function runPosAcceptanceDrill_() {
+  return SalesManagement.runPosAcceptanceDrillForAppsScript_();
+}
+
 `;
 
 rmSync(artifactDirectory, { force: true, recursive: true });

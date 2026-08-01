@@ -54,7 +54,7 @@ Giá vốn dùng **bình quân gia quyền di động** đã được chốt: m�
 
 | Record | Mục đích |
 | --- | --- |
-| `CommandTransaction` | Idempotency key, command ID, actor, resource scope, trạng thái `Preparing`/`Committed`/`Failed`, response snapshot và recovery metadata. |
+| `CommandTransaction` | Idempotency key, command ID, actor, resource scope, trạng thái `Preparing`/`Committed`/`Failed`, response snapshot và recovery metadata. Fast path command mới append trực tiếp `Committed` theo ADR 0016; `Preparing` giữ cho recovery/migration hoặc command phức tạp sau này. |
 | `AuditOutbox` | Audit event bền vững tạo cùng command; chứa event ID, action, object/reference, actor, scope, sanitized before/after summary. |
 | `AuditLog` | Bản sao append-only của outbox tại Audit partition; không cho UI/import sửa/xóa. |
 | `BackgroundRun` | run ID, loại việc, checkpoint, status/retry/error đã sanitize; không phải business ledger. |

@@ -50,7 +50,7 @@ api -> services -> repositories -> infrastructure
 3. yêu cầu Inventory issue hàng, lot/serial và movement/balance projection;
 4. yêu cầu Finance tạo payment, cash và receivable ledger/allocation;
 5. yêu cầu CRM điều chỉnh point/voucher khi hợp lệ;
-6. ghi Sale Order `Completed`, `CommandTransaction` và `AuditOutbox`;
+6. ghi Sale Order `Completed`, `AuditOutbox`, rồi append `CommandTransaction` `Committed` theo single-commit fast path;
 7. trả receipt snapshot bất biến.
 
 Các bước trên cùng thực hiện trong synchronous command vì cùng quyết định kết quả bán. Không dùng HTTP, trigger hoặc background event để hoàn tất tồn/tiền/công nợ. Nếu một điều kiện thất bại, command không được `Committed` và UI nhận lỗi nghiệp vụ có thể xử lý.

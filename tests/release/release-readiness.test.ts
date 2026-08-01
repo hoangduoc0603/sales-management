@@ -6,15 +6,13 @@ describe('release readiness gate', () => {
     const result = collectReleaseReadiness({ rootDir: process.cwd() });
 
     expect(result.status).toBe('Blocked');
-    expect(result.p0Gaps.map((gap) => gap.id)).toEqual(
-      expect.arrayContaining([
-        'production-persistence-adapters',
-        'pos-acceptance-benchmark',
-        'backup-restore-drill',
-        'scheduled-worker-runtime',
-        'deployment-migration-drill',
-      ]),
-    );
+    expect(result.p0Gaps.map((gap) => gap.id)).toEqual([
+      'pos-acceptance-benchmark',
+      'backup-restore-drill',
+      'deployment-migration-drill',
+    ]);
+    expect(result.p0Gaps.map((gap) => gap.id)).not.toContain('production-persistence-adapters');
+    expect(result.p0Gaps.map((gap) => gap.id)).not.toContain('scheduled-worker-runtime');
     expect(result.p0Gaps.map((gap) => gap.id)).not.toContain('security-release-review');
     expect(result.p1Gaps.map((gap) => gap.id)).not.toContain('account-session-revoke');
   });
@@ -25,13 +23,17 @@ describe('release readiness gate', () => {
     expect(result.p0Gaps).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: 'production-persistence-adapters',
-          title: expect.stringContaining('Google Workspace adapter'),
-          source: expect.stringContaining('SRS-OVR-023'),
+          id: 'pos-acceptance-benchmark',
+          title: expect.stringContaining('POS'),
+          source: expect.stringContaining('SRS-OVR-024'),
         }),
         expect.objectContaining({
           id: 'backup-restore-drill',
           source: expect.stringContaining('ADR 0007'),
+        }),
+        expect.objectContaining({
+          id: 'deployment-migration-drill',
+          source: expect.stringContaining('ADR 0006'),
         }),
       ]),
     );

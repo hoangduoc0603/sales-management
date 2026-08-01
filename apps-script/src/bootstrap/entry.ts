@@ -7,4 +7,14 @@ export {
   removeWarmupTriggersForAppsScript_,
   warmRuntimeForAppsScript_,
 } from './runtime-warmup';
-export { runAppsScriptScheduledWorker as scheduledWorker_ } from './run-production-scheduled-worker';
+export {
+  getScheduledWorkerTriggerStatusForAppsScript_,
+  installScheduledWorkerTriggerForAppsScript_,
+  removeScheduledWorkerTriggersForAppsScript_,
+  runAppsScriptScheduledWorker as scheduledWorker_,
+} from './run-production-scheduled-worker';
+export {
+  requestManualBackupForAppsScript_,
+  runHealthCheckForAppsScript_,
+} from './operations-maintenance';
+export { runPosAcceptanceDrillForAppsScript_ } from './pos-acceptance-drill';

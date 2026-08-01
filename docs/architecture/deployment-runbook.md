@@ -238,7 +238,21 @@ Kiểm tra trạng thái bằng function `getWarmupTriggerStatus`. Kết quả t
 
 Khi cần tắt warm-up trigger trên tenant test hoặc khi bàn giao chính sách vận hành khác, chạy `removeWarmupTriggers`. Việc này chỉ xoá trigger `warmRuntime_`.
 
-### 7.2. Fallback kỹ thuật cho test tenant
+### 7.2. Cài scheduled worker trigger
+
+Sau khi Web App đã khởi tạo xong runtime config, Owner mở Apps Script editor, chọn function `installScheduledWorkerTrigger`, bấm **Run** và duyệt quyền nếu được hỏi.
+
+Hành vi:
+
+- tạo đúng một installable time-driven trigger gọi `scheduledWorker_` mỗi 5 phút;
+- nếu đã có trigger `scheduledWorker_` cũ/duplicate, script xoá duplicate rồi tạo lại một trigger mới;
+- không xoá hoặc thay đổi trigger `warmRuntime_`;
+- worker chạy các tác vụ nền đã thiết kế: audit delivery, export lớn, import commit, archive, health check, backup daily và baseline reporting projection hiện tại;
+- worker không hoàn tất POS, không tạo ledger cốt lõi thay command đồng bộ và không giữ lock POS fast path.
+
+Kiểm tra trạng thái bằng function `getScheduledWorkerTriggerStatus`. Khi cần tắt trên tenant test, chạy `removeScheduledWorkerTriggers`.
+
+### 7.3. Fallback kỹ thuật cho test tenant
 
 Trong trường hợp cần debug bằng Apps Script editor/clasp, vẫn có thể chạy bootstrap mặc định:
 
@@ -267,7 +281,7 @@ Không commit biên bản có ID thật nếu repo có thể chia sẻ cho bên 
 
 ## 9. Health check sau triển khai
 
-Chạy operation:
+Trong Web App/API đã đăng nhập Owner, chạy operation:
 
 ```json
 {
@@ -277,6 +291,14 @@ Chạy operation:
   }
 }
 ```
+
+Trong Apps Script editor, có thể chạy owner-managed smoke function:
+
+```text
+runHealthCheck
+```
+
+Function này chạy trực tiếp bằng quyền Google account đang sở hữu/deploy Apps Script, gọi `operations.health.check` với actor bảo trì nội bộ `apps-script-owner`, ghi kết quả đã sanitize vào Execution log và không tạo session người dùng.
 
 Health check phải xác nhận:
 
@@ -300,6 +322,8 @@ Trước mọi upgrade/migration:
 2. chạy compatibility check;
 3. tạo backup thủ công:
 
+Trong Web App/API đã đăng nhập Owner:
+
 ```json
 {
   "operation": "operations.backup.request",
@@ -310,6 +334,14 @@ Trước mọi upgrade/migration:
   }
 }
 ```
+
+Trong Apps Script editor, có thể chạy owner-managed smoke function:
+
+```text
+requestManualBackup
+```
+
+Function này tạo backup thủ công bằng quyền Google account đang sở hữu/deploy Apps Script, ghi `backupRunId`, trạng thái, checksum manifest và số partition/resource vào Execution log. Không dùng function này để restore hoặc switch runtime config.
 
 4. đợi worker hoàn tất backup;
 5. kiểm manifest gồm app/schema version, partitions/resources, row count, checksum và attachment metadata;

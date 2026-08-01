@@ -127,6 +127,38 @@ describe('deploy webapp tooling', () => {
     expect(buildScript).toContain('SalesManagement.getWarmupTriggerStatusForAppsScript_()');
   });
 
+  it('exposes owner-managed scheduled worker helpers in the Apps Script artifact', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript).toContain('function scheduledWorker()');
+    expect(buildScript).toContain('SalesManagement.scheduledWorker_()');
+    expect(buildScript).toContain('function installScheduledWorkerTrigger()');
+    expect(buildScript).toContain('SalesManagement.installScheduledWorkerTriggerForAppsScript_()');
+    expect(buildScript).toContain('function removeScheduledWorkerTriggers()');
+    expect(buildScript).toContain('SalesManagement.removeScheduledWorkerTriggersForAppsScript_()');
+    expect(buildScript).toContain('function getScheduledWorkerTriggerStatus()');
+    expect(buildScript).toContain('SalesManagement.getScheduledWorkerTriggerStatusForAppsScript_()');
+  });
+
+  it('exposes owner-managed operations maintenance smoke helpers in the Apps Script artifact', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript).toContain('function runHealthCheck()');
+    expect(buildScript).toContain('SalesManagement.runHealthCheckForAppsScript_()');
+    expect(buildScript).toContain('function runHealthCheck_()');
+    expect(buildScript).toContain('function requestManualBackup()');
+    expect(buildScript).toContain('SalesManagement.requestManualBackupForAppsScript_()');
+    expect(buildScript).toContain('function requestManualBackup_()');
+  });
+
+  it('exposes owner-managed POS production acceptance drill helper in the Apps Script artifact', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript).toContain('function runPosAcceptanceDrill()');
+    expect(buildScript).toContain('SalesManagement.runPosAcceptanceDrillForAppsScript_()');
+    expect(buildScript).toContain('function runPosAcceptanceDrill_()');
+  });
+
   it('places Apps Script entrypoint wrappers before the bundled code so the editor function picker can detect them', () => {
     const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
 

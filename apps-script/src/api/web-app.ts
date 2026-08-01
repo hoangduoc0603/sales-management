@@ -95,7 +95,8 @@ function readDebugApiFlag(value: string | undefined): boolean | undefined {
 }
 
 function injectBootConfig(html: string, config: AppsScriptBootConfig): string {
-  const script = `<script>window.__CENIO_BOOT__=${safeJsonForInlineScript(config)};</script>`;
+  const serializedConfig = safeJsonForInlineScript(config);
+  const script = `<script>window.__CENIO_BOOT__=${serializedConfig};</script><script id="cenio-boot-config" type="application/json">${serializedConfig}</script>`;
   if (html.includes('</head>')) {
     return html.replace('</head>', `${script}</head>`);
   }

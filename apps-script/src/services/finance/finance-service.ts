@@ -222,8 +222,8 @@ export function createFinanceService(deps: FinanceServiceDependencies): FinanceS
           ? createCustomerCredit(deps, input.branchId, input.payerId, payment.paymentId, overpaymentVnd)
           : undefined;
 
-      deps.repository.savePayment(payment);
-      deps.repository.appendCashTransaction(cashTransaction);
+      deps.repository.saveNewPayment(payment);
+      deps.repository.appendNewCashTransaction(cashTransaction);
       finalizedAllocations.forEach((allocation) => deps.repository.appendPaymentAllocation(allocation));
       if (customerCredit !== undefined) {
         deps.repository.saveCustomerCredit(customerCredit);

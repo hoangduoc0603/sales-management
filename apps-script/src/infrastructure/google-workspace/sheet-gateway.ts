@@ -68,10 +68,19 @@ interface SheetLike {
 export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway {
   const spreadsheetCache = new Map<string, SpreadsheetLike>();
   const sheetCache = new Map<string, SheetLike | null>();
+  const tableRecordCache = new Map<string, Record<string, unknown>[]>();
 
   return {
     readTable(request) {
       const startedAt = Date.now();
+      const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
+      const cachedRows = tableRecordCache.get(tableKey);
+      if (cachedRows !== undefined) {
+        recordIo('sheetReadCacheHit');
+        recordStage('sheet.readTableMs', Date.now() - startedAt);
+        return cachedRows.map(deepCloneRecord);
+      }
+
       const { sheet } = openLocatedSheet(
         deps,
         request.table,
@@ -89,11 +98,23 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
 
       const actualHeaders = values[0].map((value) => String(value));
       const result = values.slice(1).map((row) => rowToRecord(row, actualHeaders, request.table.headers));
+      tableRecordCache.set(tableKey, result.map(deepCloneRecord));
       recordStage('sheet.readTableMs', Date.now() - startedAt);
       return result;
     },
     findRowsByColumn(request) {
       const startedAt = Date.now();
+      const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
+      const cachedRows = tableRecordCache.get(tableKey);
+      if (cachedRows !== undefined) {
+        const result = filterRecordsByColumn(cachedRows, request.columnName, request.value);
+        recordIo('sheetFindCount');
+        recordIo('sheetFindCacheHit');
+        recordIo('sheetFindRows', result.length);
+        recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+        return result;
+      }
+
       const { sheet } = openLocatedSheet(
         deps,
         request.table,
@@ -115,6 +136,19 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         const actualHeaders = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map((value) => String(value));
         const columnIndex = actualHeaders.indexOf(request.columnName);
         if (columnIndex === -1) return [];
+
+        if (sheet.getLastRow() - 1 <= smallTableFullScanRowThreshold) {
+          const values = sheet.getDataRange().getValues();
+          recordIo('sheetReadCount');
+          recordIo('sheetReadRows', Math.max(0, values.length - 1));
+          const rows = values.slice(1).map((row) => rowToRecord(row, actualHeaders, request.table.headers));
+          tableRecordCache.set(tableKey, rows.map(deepCloneRecord));
+          const result = filterRecordsByColumn(rows, request.columnName, request.value);
+          recordIo('sheetFindRows', result.length);
+          recordIo('sheetFindSmallFullScanCount');
+          recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+          return result;
+        }
 
         const finder = sheet
           .getRange(2, columnIndex + 1, sheet.getLastRow() - 1, 1)
@@ -198,6 +232,12 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         }
       }
 
+      const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
+      const cachedRows = tableRecordCache.get(tableKey);
+      if (cachedRows !== undefined) {
+        cachedRows.push(...request.rows.map(deepCloneRecord));
+      }
+
       recordStage('sheet.appendRowsMs', Date.now() - startedAt);
       return { appendedRowCount: request.rows.length };
     },
@@ -205,6 +245,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
 }
 
 const maxIndividualFindRowReads = 5;
+const smallTableFullScanRowThreshold = 500;
 
 function openLocatedSheet(
   deps: SheetGatewayDependencies,
@@ -287,6 +328,27 @@ function filterRowsByColumnFromFullScan(
     .slice(1)
     .filter((row) => String(row[columnIndex] ?? '') === value)
     .map((row) => rowToRecord(row, actualHeaders, table.headers));
+}
+
+function getTableCacheKey(
+  deps: SheetGatewayDependencies,
+  table: TableDefinitionDTO,
+  partitionKey: string | undefined,
+): string {
+  const location = deps.tableLocator({ table, partitionKey });
+  return `${location.spreadsheetId}:${location.sheetName}`;
+}
+
+function filterRecordsByColumn(
+  rows: readonly Record<string, unknown>[],
+  columnName: string,
+  value: string,
+): Record<string, unknown>[] {
+  return rows.filter((row) => String(row[columnName] ?? '') === value).map(deepCloneRecord);
+}
+
+function deepCloneRecord(record: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
 }
 
 function rowToRecord(

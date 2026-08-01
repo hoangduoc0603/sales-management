@@ -72,9 +72,22 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
     return deps.gateway.readTable({ table: balanceTable }).map((row) => deepClone(row) as InventoryBalanceSheetRow);
   }
 
+  function findBalanceRowsByColumn(columnName: string, value: string): InventoryBalanceSheetRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: balanceTable,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: balanceTable });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => deepClone(row) as InventoryBalanceSheetRow);
+  }
+
   function listLatestBalances(warehouseId?: string): InventoryBalanceDTO[] {
     const latestByBalanceId = new Map<string, InventoryBalanceSheetRow>();
-    for (const row of readBalanceRows()) {
+    const rows = warehouseId === undefined ? readBalanceRows() : findBalanceRowsByColumn('warehouseId', warehouseId);
+    for (const row of rows) {
       if (warehouseId !== undefined && row.warehouseId !== warehouseId) continue;
       const current = latestByBalanceId.get(row.balanceId);
       if (current === undefined || getRecordVersion(row) > getRecordVersion(current)) {
@@ -92,6 +105,12 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
       return movementRepository.list().map(fromMovementRow);
     },
     getBalance(warehouseId, variantId) {
+      const balanceId = `balance-${warehouseId}-${variantId}`;
+      const latest = findBalanceRowsByColumn('balanceId', balanceId).reduce<InventoryBalanceSheetRow | undefined>(
+        (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
+        undefined,
+      );
+      if (latest !== undefined) return fromBalanceRow(latest);
       return listLatestBalances(warehouseId).find((balance) => balance.variantId === variantId);
     },
     listBalances(warehouseId) {
@@ -99,9 +118,10 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
     },
     applyProjection(balance) {
       const nextVersion =
-        readBalanceRows()
-          .filter((row) => row.balanceId === balance.balanceId)
-          .reduce((max, row) => Math.max(max, getRecordVersion(row)), 0) + 1;
+        findBalanceRowsByColumn('balanceId', balance.balanceId).reduce(
+          (max, row) => Math.max(max, getRecordVersion(row)),
+          0,
+        ) + 1;
       deps.gateway.appendRows({
         table: balanceTable,
         rows: [

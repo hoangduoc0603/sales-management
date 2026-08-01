@@ -20,7 +20,10 @@ import { createActiveRuntimeTableLocator } from '../infrastructure/google-worksp
 import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gateway';
 import { createPropertiesTenantSecretStore } from '../infrastructure/google-workspace/tenant-secret-store';
 import { createAppsScriptSessionTokenFingerprinter } from '../services/platform/auth/session-token-fingerprinter';
+import { ensureCurrentDashboardBaselineProjections } from '../services/reporting/dashboard-baseline-projection';
+import { createPlatformTableDefinitions } from '../services/platform/registry/table-registry';
 import { createProductionApiComposition } from './create-production-api-composition';
+import { createProductionRepositories } from './create-production-repositories';
 
 const appVersion = '0.1.0';
 const schemaVersion = 1;
@@ -30,6 +33,7 @@ const installCompletedAtKey = 'salesManagement.install.completedAt';
 const installLastErrorKey = 'salesManagement.install.lastError';
 const installTenantDisplayNameKey = 'salesManagement.install.tenantDisplayName';
 const installDraftRuntimeConfigKey = 'salesManagement.install.draftRuntimeConfig';
+const installDashboardBaselineMarkerKey = 'salesManagement.install.dashboardBaselineMarker';
 const requiredInstallScopes = [
   'https://www.googleapis.com/auth/script.storage',
   'https://www.googleapis.com/auth/drive',
@@ -80,6 +84,7 @@ function getInstallStatus(): InstallStatusResponse {
   const runtimeConfig = createPropertiesRuntimeConfigStore({ properties }).getActiveConfig();
 
   if (runtimeConfig !== undefined) {
+    ensureInstalledDashboardBaseline(properties, runtimeConfig);
     return {
       status: 'Installed',
       installed: true,
@@ -104,6 +109,36 @@ function getInstallStatus(): InstallStatusResponse {
     completedAt: properties.getProperty(installCompletedAtKey) ?? undefined,
     lastErrorMessage: properties.getProperty(installLastErrorKey) ?? undefined,
   };
+}
+
+function ensureInstalledDashboardBaseline(
+  properties: GoogleAppsScript.Properties.Properties,
+  runtimeConfig: RuntimeConfigDTO,
+): void {
+  const businessDate = new Date().toISOString().slice(0, 10);
+  const marker = `${runtimeConfig.tenantId}:${businessDate}:v1`;
+  if (properties.getProperty(installDashboardBaselineMarkerKey) === marker) return;
+
+  const tableDefinitions = createPlatformTableDefinitions();
+  const repositories = createProductionRepositories({
+    sheetGateway: createSheetGateway({
+      spreadsheetApp: SpreadsheetApp,
+      tableLocator: createActiveRuntimeTableLocator(runtimeConfig),
+    }),
+    tableDefinitions,
+    transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
+    auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
+    credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
+  });
+
+  ensureCurrentDashboardBaselineProjections({
+    repository: repositories.reportingRepository,
+    tenantId: runtimeConfig.tenantId,
+    branches: repositories.administrationRepository.listBranches(),
+    warehouses: repositories.administrationRepository.listWarehouses(),
+    now: () => new Date(),
+  });
+  properties.setProperty(installDashboardBaselineMarkerKey, marker);
 }
 
 function runInstall(input: InstallRunRequest): InstallRunResponse {

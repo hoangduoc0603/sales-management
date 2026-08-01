@@ -19,9 +19,17 @@ declare global {
   }
 }
 
-export function createGoogleScriptRunInvoker(): ApiInvoker {
+export interface GoogleScriptRunInvokerOptions {
+  getRun?: () => GoogleScriptRun | undefined;
+  sleep?: (durationMs: number) => Promise<void>;
+  now?: () => number;
+  bridgeTimeoutMs?: number;
+  pollIntervalMs?: number;
+}
+
+export function createGoogleScriptRunInvoker(options: GoogleScriptRunInvokerOptions = {}): ApiInvoker {
   return {
-    invoke: <T>(request: ApiRequest) => invokeWithGoogleScriptRun<T>(request),
+    invoke: <T>(request: ApiRequest) => invokeWithGoogleScriptRun<T>(request, options),
   };
 }
 
@@ -29,10 +37,13 @@ export function createGoogleScriptRunClient(): ApiClient {
   return createApiClient(createGoogleScriptRunInvoker());
 }
 
-function invokeWithGoogleScriptRun<T>(request: ApiRequest): Promise<ApiResult<T>> {
-  const run = window.google?.script?.run;
+async function invokeWithGoogleScriptRun<T>(
+  request: ApiRequest,
+  options: GoogleScriptRunInvokerOptions,
+): Promise<ApiResult<T>> {
+  const run = await waitForGoogleScriptRun(options);
   if (!run) {
-    return Promise.resolve(createTransportError<T>(request));
+    return createTransportError<T>(request);
   }
 
   return new Promise((resolve) => {
@@ -41,6 +52,31 @@ function invokeWithGoogleScriptRun<T>(request: ApiRequest): Promise<ApiResult<T>
       .withFailureHandler(() => resolve(createTransportError<T>(request)))
       .invoke(request);
   });
+}
+
+async function waitForGoogleScriptRun(options: GoogleScriptRunInvokerOptions): Promise<GoogleScriptRun | undefined> {
+  const getRun = options.getRun ?? defaultGetGoogleScriptRun;
+  const sleep = options.sleep ?? defaultSleep;
+  const now = options.now ?? Date.now;
+  const timeoutMs = options.bridgeTimeoutMs ?? 5000;
+  const pollIntervalMs = options.pollIntervalMs ?? 50;
+  const deadline = now() + timeoutMs;
+
+  let run = getRun();
+  while (!run && now() < deadline) {
+    await sleep(pollIntervalMs);
+    run = getRun();
+  }
+
+  return run;
+}
+
+function defaultGetGoogleScriptRun(): GoogleScriptRun | undefined {
+  return typeof window === 'undefined' ? undefined : window.google?.script?.run;
+}
+
+function defaultSleep(durationMs: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, durationMs));
 }
 
 function createTransportError<T>(request: ApiRequest): ApiResult<T> {

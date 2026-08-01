@@ -4,7 +4,7 @@ import type { RuntimeConfigStore } from '../infrastructure/google-workspace/runt
 import type { PlatformCacheStore } from '../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from '../repositories/platform/sheet-record-repository';
 import type { CredentialVerifierStore } from '../repositories/platform/auth-repository';
-import type { LoginRateLimiter, TokenFingerprinter } from '../services/platform/auth/session-service';
+import type { IdGenerator, LoginRateLimiter, TokenFingerprinter } from '../services/platform/auth/session-service';
 import {
   createAppsScriptHmacSha256PasswordService,
   type PasswordService,
@@ -26,6 +26,7 @@ export interface ProductionApiCompositionDependencies {
   tenantSecretStore?: TenantSecretStore;
   loginRateLimiter?: LoginRateLimiter;
   tokenFingerprinter?: TokenFingerprinter;
+  idGenerator?: IdGenerator;
   lockProvider: LockProvider;
   passwordService?: PasswordService;
 }
@@ -55,6 +56,7 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
       }),
     loginRateLimiter: deps.loginRateLimiter,
     tokenFingerprinter: deps.tokenFingerprinter,
+    idGenerator: deps.idGenerator,
     lockProvider: deps.lockProvider,
     tableDefinitions,
     tenantId: runtimeConfig.tenantId,

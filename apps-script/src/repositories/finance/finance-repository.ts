@@ -20,10 +20,12 @@ export interface FinanceRepository {
   savePaymentMethod(method: PaymentMethodDTO): void;
   saveShift(shift: ShiftDTO): void;
   savePayment(payment: PaymentDTO): void;
+  saveNewPayment(payment: PaymentDTO): void;
   saveObligation(obligation: ObligationDTO): void;
   saveCustomerCredit(credit: CustomerCreditDTO): void;
   saveSupplierPrepayment(prepayment: SupplierPrepaymentDTO): void;
   appendCashTransaction(transaction: CashTransactionDTO): void;
+  appendNewCashTransaction(transaction: CashTransactionDTO): void;
   appendPaymentAllocation(allocation: PaymentAllocationDTO): void;
   getShift(shiftId: string): ShiftDTO | undefined;
   findOpenShiftByCashier(cashierId: string): ShiftDTO | undefined;
@@ -63,6 +65,9 @@ export function createInMemoryFinanceRepository(): FinanceRepository {
     savePayment(payment) {
       payments.set(payment.paymentId, clone(payment));
     },
+    saveNewPayment(payment) {
+      payments.set(payment.paymentId, clone(payment));
+    },
     saveObligation(obligation) {
       obligations.set(obligation.obligationId, clone(obligation));
     },
@@ -73,6 +78,12 @@ export function createInMemoryFinanceRepository(): FinanceRepository {
       supplierPrepayments.set(prepayment.prepaymentId, clone(prepayment));
     },
     appendCashTransaction(transaction) {
+      if (cashTransactions.has(transaction.cashTransactionId)) {
+        throw new Error(`CashTransaction is append-only: duplicate ${transaction.cashTransactionId}.`);
+      }
+      cashTransactions.set(transaction.cashTransactionId, clone(transaction));
+    },
+    appendNewCashTransaction(transaction) {
       if (cashTransactions.has(transaction.cashTransactionId)) {
         throw new Error(`CashTransaction is append-only: duplicate ${transaction.cashTransactionId}.`);
       }
@@ -188,14 +199,16 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     toRow: supplierPrepaymentToRow,
     fromRow: supplierPrepaymentFromRow,
   });
+  const cashTransactionTable = findTable(deps.tableDefinitions, 'CashTransaction');
+  const paymentAllocationTable = findTable(deps.tableDefinitions, 'PaymentAllocation');
   const cashTransactions = createAppendOnlySheetRecordRepository<FinanceRow>({
     gateway: deps.gateway,
-    table: findTable(deps.tableDefinitions, 'CashTransaction'),
+    table: cashTransactionTable,
     partitionKey: deps.transactionPartitionKey,
   });
   const allocations = createAppendOnlySheetRecordRepository<FinanceRow>({
     gateway: deps.gateway,
-    table: findTable(deps.tableDefinitions, 'PaymentAllocation'),
+    table: paymentAllocationTable,
     partitionKey: deps.transactionPartitionKey,
   });
 
@@ -211,6 +224,9 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     },
     savePayment(payment) {
       payments.save(payment);
+    },
+    saveNewPayment(payment) {
+      payments.saveNew(payment);
     },
     saveObligation(obligation) {
       if (obligation.obligationType === 'Receivable') {
@@ -228,18 +244,25 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     appendCashTransaction(transaction) {
       cashTransactions.append(cashTransactionToRow(transaction));
     },
+    appendNewCashTransaction(transaction) {
+      deps.gateway.appendRows({
+        table: cashTransactionTable,
+        partitionKey: deps.transactionPartitionKey,
+        rows: [cashTransactionToRow(transaction)],
+      });
+    },
     appendPaymentAllocation(allocation) {
       allocations.append(paymentAllocationToRow(allocation));
     },
     getShift(shiftId) {
-      return shifts.list().find((shift) => shift.shiftId === shiftId);
+      return shifts.findById(shiftId);
     },
     findOpenShiftByCashier(cashierId) {
-      return shifts.list().find((shift) => shift.cashierId === cashierId && shift.status === 'Open');
+      return shifts.findByColumn('cashierId', cashierId).find((shift) => shift.status === 'Open');
     },
     findOpenShiftForPos({ branchId, cashierId, warehouseId }) {
       return shifts
-        .list()
+        .findByColumn('cashierId', cashierId)
         .find(
           (shift) =>
             shift.branchId === branchId &&
@@ -249,10 +272,10 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
         );
     },
     getPayment(paymentId) {
-      return payments.list().find((payment) => payment.paymentId === paymentId);
+      return payments.findById(paymentId);
     },
     getObligation(obligationId) {
-      return [...receivables.list(), ...payables.list()].find((obligation) => obligation.obligationId === obligationId);
+      return receivables.findById(obligationId) ?? payables.findById(obligationId);
     },
     listCashTransactions() {
       return cashTransactions.list().map(cashTransactionFromRow);
@@ -283,7 +306,10 @@ interface VersionedTableDependencies<TRecord extends object> {
 
 interface VersionedTable<TRecord extends object> {
   list(): TRecord[];
+  findById(recordId: string): TRecord | undefined;
+  findByColumn(columnName: string, value: string): TRecord[];
   save(record: TRecord): void;
+  saveNew(record: TRecord): void;
 }
 
 function createVersionedTable<TRecord extends object>(deps: VersionedTableDependencies<TRecord>): VersionedTable<TRecord> {
@@ -302,6 +328,19 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
     return deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey }).map(deepClone);
   }
 
+  function findRowsByColumn(columnName: string, value: string): FinanceRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => deepClone(row) as FinanceRow);
+  }
+
   function latestRows(): FinanceRow[] {
     const latestById = new Map<string, FinanceRow>();
     for (const row of readRows()) {
@@ -317,14 +356,32 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
     list() {
       return latestRows().map((row) => deepClone(fromRow(row)));
     },
+    findById(recordId) {
+      const latest = findRowsByColumn(deps.idField, recordId).reduce<FinanceRow | undefined>(
+        (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
+        undefined,
+      );
+      return latest === undefined ? undefined : deepClone(fromRow(latest));
+    },
+    findByColumn(columnName, value) {
+      const latestById = new Map<string, FinanceRow>();
+      for (const row of findRowsByColumn(columnName, value)) {
+        const recordId = String(row[deps.idField] ?? '');
+        if (recordId === '') continue;
+        const current = latestById.get(recordId);
+        if (current === undefined || getRecordVersion(row) > getRecordVersion(current)) latestById.set(recordId, row);
+      }
+      return [...latestById.values()].map((row) => deepClone(fromRow(row)));
+    },
     save(record) {
       const row = toRow(record);
       const recordId = String(row[deps.idField] ?? '');
       if (recordId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
       const nextVersion =
-        readRows()
-          .filter((current) => String(current[deps.idField] ?? '') === recordId)
-          .reduce((max, current) => Math.max(max, getRecordVersion(current)), 0) + 1;
+        findRowsByColumn(deps.idField, recordId).reduce(
+          (max, current) => Math.max(max, getRecordVersion(current)),
+          0,
+        ) + 1;
       deps.gateway.appendRows({
         table: deps.table,
         partitionKey: deps.partitionKey,
@@ -334,6 +391,23 @@ function createVersionedTable<TRecord extends object>(deps: VersionedTableDepend
             id: `${recordId}:v${nextVersion}`,
             schemaVersion: deps.table.schemaVersion,
             recordVersion: nextVersion,
+          },
+        ],
+      });
+    },
+    saveNew(record) {
+      const row = toRow(record);
+      const recordId = String(row[deps.idField] ?? '');
+      if (recordId.trim() === '') throw new Error(`MissingRecordId:${deps.table.tableName}.${deps.idField}`);
+      deps.gateway.appendRows({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        rows: [
+          {
+            ...row,
+            id: `${recordId}:v1`,
+            schemaVersion: deps.table.schemaVersion,
+            recordVersion: 1,
           },
         ],
       });

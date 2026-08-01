@@ -19,5 +19,6 @@ ADR ghi bối cảnh, quyết định, hệ quả và phương án thay thế ch
 | [0013](0013-explicit-save-pos-draft.md) | Accepted | POS local-first; chỉ persist đơn khi user lưu tạm. |
 | [0014](0014-scaled-quantity-integer-inventory-value.md) | Accepted | Quantity milli-unit, inventory value và issue value VND integer. |
 | [0015](0015-late-purchase-cost-adjustment.md) | Accepted | Chi phí mua muộn vào tồn còn lại, phần đã bán thành variance. |
+| [0016](0016-command-journal-single-commit-fast-path.md) | Accepted | Command journal dùng single-commit fast path cho command mới, giữ idempotency và audit outbox đồng bộ. |
 
 ADR thay đổi quyết định đã Accepted phải ghi rõ `Supersedes`/`Superseded by`; không để hai quyết định mâu thuẫn cùng Accepted.

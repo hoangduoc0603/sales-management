@@ -12,7 +12,7 @@ Google identity không được dùng để suy ra actor ứng dụng. `loginId`
 
 - User business profile lưu tại Core Data, nhưng credential verifier không lưu trong Spreadsheet/source/log/export. Mỗi credential dùng verifier `hmac-sha256-v1` với salt riêng từng user; tenant credential pepper nằm trong Script Properties và không xuất hiện trong Sheet, source, log hoặc export.
 - Mật khẩu tạm admin được sinh/cấp một lần trong bootstrap, buộc đổi khi login thành công đầu tiên và không persisted ở dạng plaintext.
-- Session token là opaque random secret; browser chỉ giữ trong `sessionStorage`/memory, server chỉ lưu HMAC fingerprint theo tenant session pepper, user ID, issued time, idle expiry, absolute expiry, auth version và revoke status.
+- Session token là opaque random secret; browser chỉ giữ trong `sessionStorage`/memory, server chỉ lưu HMAC fingerprint theo tenant session pepper, user ID, issued time, idle expiry, absolute expiry, auth version và revoke status. Production Apps Script phải sinh token/record ID bằng UUID/random generator; ID deterministic chỉ được dùng trong test/dev composition để có fixture ổn định.
 - Session idle tối đa 1 giờ và absolute lifetime 8 giờ. Bất cứ reset password, disable user hoặc thay đổi role/scope nào đều tăng auth version và revoke session hiện có.
 - Login sai năm lần liên tiếp khóa account 15 phút. Login, lock, reset, revoke và bất thường auth đều audit; log không chứa password/token.
 

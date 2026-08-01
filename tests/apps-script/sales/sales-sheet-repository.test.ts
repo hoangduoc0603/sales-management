@@ -117,6 +117,73 @@ describe('Sheet-backed SalesRepository', () => {
       attachmentIdsJson: ['drive-file-1'],
     });
   });
+
+  it('uses narrow lookup paths when saving new POS checkout documents', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetSalesRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.saveOrder(completedOrderFixture);
+    repository.saveLines(completedOrderFixture.saleOrderId, [lineFixture]);
+    repository.saveTenders(completedOrderFixture.saleOrderId, [tenderFixture]);
+    repository.saveReceipt(receiptFixture);
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
+      ['SaleOrder', 'saleOrderId', 'sale-1'],
+      ['SaleOrderLine', 'saleOrderId', 'sale-1'],
+      ['SaleOrderLine', 'saleOrderLineId', 'line-1'],
+      ['SaleOrder', 'saleOrderId', 'sale-1'],
+      ['SaleTenderDraft', 'saleOrderId', 'sale-1'],
+      ['SaleTenderDraft', 'tenderDraftId', 'tender-1'],
+      ['SaleOrder', 'saleOrderId', 'sale-1'],
+      ['ReceiptSnapshot', 'receiptId', 'receipt-1'],
+    ]);
+    expect(gateway.appendRequests.map((request) => request.tableName)).toEqual([
+      'SaleOrder',
+      'SaleOrderLine',
+      'SaleTenderDraft',
+      'ReceiptSnapshot',
+    ]);
+  });
+
+  it('appends new completed POS sale documents without preflight Sheet lookups', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetSalesRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.saveNewCompletedPosSale({
+      order: completedOrderFixture,
+      lines: [lineFixture],
+      tenders: [tenderFixture],
+      receipt: receiptFixture,
+    });
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.appendRequests.map((request) => request.tableName)).toEqual([
+      'SaleOrder',
+      'SaleOrderLine',
+      'SaleTenderDraft',
+      'ReceiptSnapshot',
+    ]);
+    expect(gateway.appendRequests.find((request) => request.tableName === 'SaleOrder')?.rows[0]).toMatchObject({
+      id: 'sale-1:v1',
+      recordVersion: 1,
+    });
+    expect(gateway.appendRequests.find((request) => request.tableName === 'SaleOrderLine')?.rows[0]).toMatchObject({
+      id: 'line-1:v1:s1',
+      saleOrderId: 'sale-1',
+      lineSetVersion: 1,
+      recordVersion: 1,
+    });
+  });
 });
 
 const draftOrderFixture: SaleOrderDTO = {
@@ -280,16 +347,47 @@ function toOrderSeedRow(order: SaleOrderDTO): Record<string, unknown> {
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];
+  readonly findRequests: Array<{
+    tableName: string;
+    partitionKey?: string;
+    columnName: string;
+    value: string;
+  }> = [];
+  readCount = 0;
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
-  constructor(seed: Record<string, Record<string, unknown>[]> = {}) {
+  constructor(
+    seed: Record<string, Record<string, unknown>[]> = {},
+    private readonly options: { supportFindRowsByColumn?: boolean } = {},
+  ) {
     for (const [tableName, rows] of Object.entries(seed)) {
       this.rowsByTable.set(tableName, rows.map(clone));
     }
   }
 
   readTable(request: { table: TableDefinitionDTO }): Record<string, unknown>[] {
+    this.readCount += 1;
     return this.getRows(request.table.tableName).map(clone);
+  }
+
+  findRowsByColumn(request: {
+    table: TableDefinitionDTO;
+    partitionKey?: string;
+    columnName: string;
+    value: string;
+  }): Record<string, unknown>[] {
+    if (this.options.supportFindRowsByColumn !== true) {
+      return this.readTable(request).filter((row) => String(row[request.columnName] ?? '') === request.value);
+    }
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      partitionKey: request.partitionKey,
+      columnName: request.columnName,
+      value: request.value,
+    });
+    return this.getRows(request.table.tableName)
+      .filter((row) => String(row[request.columnName] ?? '') === request.value)
+      .map(clone);
   }
 
   appendRows(request: {

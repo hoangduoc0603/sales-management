@@ -38,12 +38,25 @@ export function createAppendOnlySheetRecordRepository<TRecord extends Record<str
       .map((record) => deepClone(record) as TRecord);
   }
 
+  function findByColumn(columnName: string, value: string): TRecord[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((record) => String(record[columnName] ?? '') === value)
+      .map((record) => deepClone(record) as TRecord);
+  }
+
   return {
     list() {
       return readAll();
     },
     findById(id) {
-      const record = readAll().find((current) => String(current[primaryKey]) === id);
+      const record = findByColumn(primaryKey, id)[0];
       return record === undefined ? undefined : deepClone(record);
     },
     append(record) {
@@ -53,7 +66,7 @@ export function createAppendOnlySheetRecordRepository<TRecord extends Record<str
       }
 
       const primaryKeyText = String(primaryKeyValue);
-      if (readAll().some((current) => String(current[primaryKey]) === primaryKeyText)) {
+      if (findByColumn(primaryKey, primaryKeyText).length > 0) {
         throw new Error(`DuplicatePrimaryKey:${deps.table.tableName}.${primaryKey}:${primaryKeyText}`);
       }
 

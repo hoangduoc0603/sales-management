@@ -22,6 +22,7 @@ export type BackgroundJobType =
   | 'AuditDelivery'
   | 'Import'
   | 'Export'
+  | 'ReportProjection'
   | 'Backup'
   | 'Archive'
   | 'RuntimeCleanup'

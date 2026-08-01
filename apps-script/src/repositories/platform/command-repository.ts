@@ -18,6 +18,7 @@ export interface CommandTransactionRecord {
 export interface CommandRepository {
   findByIdempotencyKey(idempotencyKey: string): CommandTransactionRecord | undefined;
   findByCommandId(commandId: string): CommandTransactionRecord | undefined;
+  appendNew(record: CommandTransactionRecord): void;
   save(record: CommandTransactionRecord): void;
 }
 
@@ -37,6 +38,9 @@ export function createInMemoryCommandRepository(): CommandRepository {
     findByCommandId(commandId) {
       return byCommandId.get(commandId);
     },
+    appendNew(record) {
+      byCommandId.set(record.commandId, { ...record });
+    },
     save(record) {
       byCommandId.set(record.commandId, { ...record });
     },
@@ -45,6 +49,19 @@ export function createInMemoryCommandRepository(): CommandRepository {
 
 export function createSheetCommandRepository(deps: SheetCommandRepositoryDependencies): CommandRepository {
   const recordRepository = createAppendOnlySheetRecordRepository<CommandTransactionSheetRow>(deps);
+
+  function findRowsByColumn(columnName: string, value: string): CommandTransactionSheetRow[] {
+    const rows =
+      deps.gateway.findRowsByColumn?.({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        columnName,
+        value,
+      }) ?? deps.gateway.readTable({ table: deps.table, partitionKey: deps.partitionKey });
+    return rows
+      .filter((row) => String(row[columnName] ?? '') === value)
+      .map((row) => row as CommandTransactionSheetRow);
+  }
 
   function listLatest(): CommandTransactionRecord[] {
     const latestByCommandId = new Map<string, CommandTransactionSheetRow>();
@@ -57,15 +74,39 @@ export function createSheetCommandRepository(deps: SheetCommandRepositoryDepende
     return [...latestByCommandId.values()].map(fromSheetRow);
   }
 
+  function latestFromRows(rows: readonly CommandTransactionSheetRow[]): CommandTransactionRecord | undefined {
+    let latest: CommandTransactionSheetRow | undefined;
+    for (const row of rows) {
+      if (latest === undefined || compareCommandRows(row, latest) > 0) latest = row;
+    }
+    return latest === undefined ? undefined : fromSheetRow(latest);
+  }
+
   return {
     findByIdempotencyKey(idempotencyKey) {
+      if (deps.gateway.findRowsByColumn !== undefined) {
+        return latestFromRows(findRowsByColumn('idempotencyKey', idempotencyKey));
+      }
       return listLatest().find((record) => record.idempotencyKey === idempotencyKey);
     },
     findByCommandId(commandId) {
+      if (deps.gateway.findRowsByColumn !== undefined) {
+        return latestFromRows(findRowsByColumn('commandId', commandId));
+      }
       return listLatest().find((record) => record.commandId === commandId);
     },
+    appendNew(record) {
+      deps.gateway.appendRows({
+        table: deps.table,
+        partitionKey: deps.partitionKey,
+        rows: [toSheetRow(record, 1)],
+      });
+    },
     save(record) {
-      const existingRows = recordRepository.list().filter((row) => row.commandId === record.commandId);
+      const existingRows =
+        deps.gateway.findRowsByColumn !== undefined
+          ? findRowsByColumn('commandId', record.commandId)
+          : recordRepository.list().filter((row) => row.commandId === record.commandId);
       const nextVersion = existingRows.reduce((maxVersion, row) => Math.max(maxVersion, parseVersion(row.id)), 0) + 1;
       recordRepository.append(toSheetRow(record, nextVersion));
     },

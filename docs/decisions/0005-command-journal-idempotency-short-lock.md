@@ -1,7 +1,8 @@
 # ADR 0005 — Command journal, idempotency và ScriptLock ngắn
 
 **Trạng thái:** Accepted  
-**Liên quan:** [runtime và hiệu năng](../architecture/runtime-and-performance.md)
+**Liên quan:** [runtime và hiệu năng](../architecture/runtime-and-performance.md)  
+**Superseded một phần bởi:** [ADR 0016](0016-command-journal-single-commit-fast-path.md) về cách ghi `CommandTransaction` trên happy path.
 
 ## Bối cảnh
 
