@@ -37,6 +37,7 @@ apps-script/
       reporting/     # Repository DashboardProjection, report rows và ExportRun
     services/        # Nghiệp vụ và điều phối use case
       platform/      # Platform core: auth, authorization, bootstrap, command, registry
+        runtime/     # Runtime warm-up, health-light và policy giữ fast path sẵn sàng
         worker/      # Background runner chung cho job có lease, checkpoint và retry budget
       administration/ # Use case quản trị tenant/branch/warehouse tối thiểu
       catalog/       # Use case catalog, POS projection và pricing/quote
@@ -52,6 +53,7 @@ web/
     app/             # Composition root, router, provider và layout khung
       app-shell/     # AppShell, topbar/sidebar, scope selector và navigation khung
       auth/          # Auth gate, login/change-password flow và session storage frontend
+      install/       # First-run setup UI trước auth để khách tự khởi tạo dữ liệu trên Google account của họ
       theme/         # Theme light/dark utilities và bridge với browser
     components/      # Component UI tái sử dụng toàn ứng dụng
       ui/            # Primitive UI dùng chung theo Cenio Core
@@ -108,6 +110,7 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `web/src/app/` | Router, provider, layout khung và khởi tạo ứng dụng | UI hoặc nghiệp vụ chỉ thuộc một tính năng |
 | `web/src/app/app-shell/` | AppShell dùng chung: sidebar, topbar, theme toggle, scope selector và navigation shell | Nội dung riêng từng màn nghiệp vụ |
 | `web/src/app/auth/` | Login/change-password gate, session token storage phía browser và orchestration auth frontend | Password verifier/backend auth service hoặc phân quyền domain |
+| `web/src/app/install/` | First-run setup gate trước auth, form khởi tạo tenant/admin nội bộ và orchestration gọi `platform.install.*` | Bootstrap backend, Drive/Sheets provisioning thật hoặc UI nghiệp vụ sau đăng nhập |
 | `web/src/app/theme/` | Tiện ích theme light/dark, đọc/ghi theme preference và apply `data-theme` | Token CSS hoặc style component |
 | `web/src/features/<feature>/` | Page, component, hook, state, gọi API và type chỉ phục vụ `<feature>` | Component hoặc tiện ích dùng cho nhiều tính năng |
 | `web/src/features/dashboard/` | Dashboard vận hành, route tổng quan và state riêng màn dashboard | AppShell dùng chung hoặc report service backend |
@@ -125,7 +128,8 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `web/src/styles/` | CSS, token và style toàn cục | Style chỉ của một feature |
 | `apps-script/src/api/` | Hàm public, endpoint và trigger nhận input rồi gọi service | Nghiệp vụ, truy cập Sheet/Drive trực tiếp |
 | `apps-script/src/services/` | Use case, validation nghiệp vụ và điều phối repository | Chi tiết `SpreadsheetApp`, `DriveApp` hoặc giao thức frontend |
-| `apps-script/src/services/platform/` | Use case nền tảng: auth/session, authorization, bootstrap tenant, command và registry | Luồng nghiệp vụ bán hàng, kho, mua hàng hoặc báo cáo theo domain |
+| `apps-script/src/services/platform/` | Use case nền tảng: auth/session, authorization, bootstrap tenant, command, registry và runtime policy | Luồng nghiệp vụ bán hàng, kho, mua hàng hoặc báo cáo theo domain |
+| `apps-script/src/services/platform/runtime/` | Runtime warm-up/service nhẹ để giữ cache và Apps Script execution path sẵn sàng; không tạo session, audit, ledger hoặc chạy worker nặng | Scheduled worker nghiệp vụ, backup/export/archive, login thật hoặc mutation domain |
 | `apps-script/src/services/platform/worker/` | Background runner dùng chung cho scheduled job có lease, checkpoint, retry budget và sanitized error | Job nghiệp vụ cụ thể như backup/archive hoặc logic domain |
 | `apps-script/src/services/administration/` | Use case quản trị tenant, chi nhánh, kho, scope và cấu hình vận hành | Auth/session core hoặc adapter Google Workspace |
 | `apps-script/src/services/catalog/` | Use case Product/Variant/Barcode/Unit, POS projection và quote giá/khuyến mại | Repository mapping, frontend cache hoặc ledger tồn/tiền |

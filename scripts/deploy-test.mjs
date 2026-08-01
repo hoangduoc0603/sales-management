@@ -43,7 +43,7 @@ async function main() {
   }
 
   const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const pushResult = spawnSync(npxCommand, ['clasp', 'push'], {
+  const pushResult = spawnSync(npxCommand, ['clasp', 'push', '--force'], {
     cwd: repositoryRoot,
     stdio: 'inherit',
   });

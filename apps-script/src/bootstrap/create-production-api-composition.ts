@@ -1,12 +1,15 @@
 import type { Clock } from '../api/invoke';
 import type { LockProvider } from '../infrastructure/platform/runtime';
 import type { RuntimeConfigStore } from '../infrastructure/google-workspace/runtime-config-store';
+import type { PlatformCacheStore } from '../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from '../repositories/platform/sheet-record-repository';
 import type { CredentialVerifierStore } from '../repositories/platform/auth-repository';
+import type { LoginRateLimiter, TokenFingerprinter } from '../services/platform/auth/session-service';
 import {
-  createAppsScriptPbkdf2PasswordService,
+  createAppsScriptHmacSha256PasswordService,
   type PasswordService,
 } from '../services/platform/auth/password-service';
+import type { TenantSecretStore } from '../infrastructure/google-workspace/tenant-secret-store';
 import { createPlatformTableDefinitions } from '../services/platform/registry/table-registry';
 import {
   createApiCompositionFromDependencies,
@@ -19,6 +22,10 @@ export interface ProductionApiCompositionDependencies {
   runtimeConfigStore: RuntimeConfigStore;
   sheetGateway: AppendOnlySheetRecordGateway;
   credentialVerifierStore: CredentialVerifierStore;
+  platformCacheStore?: PlatformCacheStore;
+  tenantSecretStore?: TenantSecretStore;
+  loginRateLimiter?: LoginRateLimiter;
+  tokenFingerprinter?: TokenFingerprinter;
   lockProvider: LockProvider;
   passwordService?: PasswordService;
 }
@@ -36,11 +43,18 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
     auditPartitionKey: runtimeConfig.storage.audit.activePartitionKey,
     credentialVerifierStore: deps.credentialVerifierStore,
+    platformCacheStore: deps.platformCacheStore,
   });
   const compositionDeps: ApiCompositionDependencies = {
     clock: deps.clock,
     repositories,
-    passwordService: deps.passwordService ?? createAppsScriptPbkdf2PasswordService(),
+    passwordService:
+      deps.passwordService ??
+      createAppsScriptHmacSha256PasswordService({
+        getPepper: () => requireTenantSecretStore(deps.tenantSecretStore).getOrCreateCredentialPepper(),
+      }),
+    loginRateLimiter: deps.loginRateLimiter,
+    tokenFingerprinter: deps.tokenFingerprinter,
     lockProvider: deps.lockProvider,
     tableDefinitions,
     tenantId: runtimeConfig.tenantId,
@@ -49,4 +63,11 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
   };
 
   return createApiCompositionFromDependencies(compositionDeps);
+}
+
+function requireTenantSecretStore(store: TenantSecretStore | undefined): TenantSecretStore {
+  if (store === undefined) {
+    throw new Error('Missing tenant secret store.');
+  }
+  return store;
 }

@@ -6,6 +6,7 @@ export const bootstrapInstallRequestSchema = z
     tenantDisplayName: z.string().trim().min(1).optional(),
     adminLoginId: z.string().trim().min(1).optional(),
     temporaryPassword: z.string().min(1).optional(),
+    adminPasswordChangeRequired: z.boolean().optional(),
   })
   .strict();
 

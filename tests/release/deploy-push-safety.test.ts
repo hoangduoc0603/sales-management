@@ -15,6 +15,7 @@ describe('deploy push safety guard', () => {
     expect(deployScript).toContain('validateLocalClaspConfig');
     expect(deployScript).toContain('scriptId');
     expect(deployScript).toContain("rootDir: './dist'");
+    expect(deployScript).toContain("'clasp', 'push', '--force'");
     expect(deployScript).toContain('không được commit');
   });
 });

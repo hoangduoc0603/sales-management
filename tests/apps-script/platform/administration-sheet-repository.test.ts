@@ -110,14 +110,154 @@ describe('SheetAdministrationRepository', () => {
       'Warehouse',
     ]);
   });
+
+  it('uses id lookups for current scope records instead of reading full administration tables', () => {
+    const gateway = new FakeSheetGateway();
+    const repository = createSheetAdministrationRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+    });
+
+    repository.saveTenant({
+      tenantId: 'tenant-default',
+      displayName: 'Cửa hàng mặc định',
+      status: 'Active',
+      timezone: 'Asia/Ho_Chi_Minh',
+      activeConfigVersionId: 'config-default',
+    });
+    repository.saveBranch({
+      branchId: 'branch-default',
+      tenantId: 'tenant-default',
+      branchCode: 'BR-DEFAULT',
+      name: 'Chi nhánh mặc định',
+      status: 'Active',
+    });
+    repository.saveWarehouse({
+      warehouseId: 'warehouse-default',
+      tenantId: 'tenant-default',
+      branchId: 'branch-default',
+      warehouseCode: 'WH-DEFAULT',
+      name: 'Kho mặc định',
+      status: 'Active',
+      directSaleEnabled: true,
+      negativeStockPolicy: 'Block',
+      lotTrackingDefault: false,
+      serialTrackingDefault: false,
+    });
+
+    gateway.readRequests = [];
+    gateway.findRequests = [];
+
+    expect(repository.findTenantById('tenant-default')).toEqual(
+      expect.objectContaining({ tenantId: 'tenant-default' }),
+    );
+    expect(repository.findBranchesByIds(['branch-default'])).toEqual([
+      expect.objectContaining({ branchId: 'branch-default' }),
+    ]);
+    expect(repository.findWarehousesByIds(['warehouse-default'])).toEqual([
+      expect.objectContaining({ warehouseId: 'warehouse-default' }),
+    ]);
+
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
+      ['Tenant', 'tenantId', 'tenant-default'],
+      ['Branch', 'branchId', 'branch-default'],
+      ['Warehouse', 'warehouseId', 'warehouse-default'],
+    ]);
+  });
+
+  it('caches current scope master records after the first lookup', () => {
+    const gateway = new FakeSheetGateway();
+    const cacheStore = new FakePlatformCacheStore();
+    const repository = createSheetAdministrationRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      cacheStore,
+    });
+
+    repository.saveTenant({
+      tenantId: 'tenant-default',
+      displayName: 'Cửa hàng mặc định',
+      status: 'Active',
+      timezone: 'Asia/Ho_Chi_Minh',
+      activeConfigVersionId: 'config-default',
+    });
+    repository.saveBranch({
+      branchId: 'branch-default',
+      tenantId: 'tenant-default',
+      branchCode: 'BR-DEFAULT',
+      name: 'Chi nhánh mặc định',
+      status: 'Active',
+    });
+    repository.saveWarehouse({
+      warehouseId: 'warehouse-default',
+      tenantId: 'tenant-default',
+      branchId: 'branch-default',
+      warehouseCode: 'WH-DEFAULT',
+      name: 'Kho mặc định',
+      status: 'Active',
+      directSaleEnabled: true,
+      negativeStockPolicy: 'Block',
+      lotTrackingDefault: false,
+      serialTrackingDefault: false,
+    });
+    cacheStore.clear();
+
+    gateway.findRequests = [];
+    expect(repository.findTenantById('tenant-default')).toEqual(
+      expect.objectContaining({ tenantId: 'tenant-default' }),
+    );
+    expect(repository.findBranchesByIds(['branch-default'])).toEqual([
+      expect.objectContaining({ branchId: 'branch-default' }),
+    ]);
+    expect(repository.findWarehousesByIds(['warehouse-default'])).toEqual([
+      expect.objectContaining({ warehouseId: 'warehouse-default' }),
+    ]);
+    expect(gateway.findRequests).toHaveLength(3);
+    expect(cacheStore.ttls()).toEqual([21600, 21600, 21600]);
+
+    gateway.findRequests = [];
+    gateway.readRequests = [];
+    expect(repository.findTenantById('tenant-default')).toEqual(
+      expect.objectContaining({ tenantId: 'tenant-default' }),
+    );
+    expect(repository.findBranchesByIds(['branch-default'])).toEqual([
+      expect.objectContaining({ branchId: 'branch-default' }),
+    ]);
+    expect(repository.findWarehousesByIds(['warehouse-default'])).toEqual([
+      expect.objectContaining({ warehouseId: 'warehouse-default' }),
+    ]);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.readRequests).toEqual([]);
+  });
 });
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; partitionKey?: string; rows: Record<string, unknown>[] }> = [];
+  readRequests: Array<{ tableName: string; partitionKey?: string }> = [];
+  findRequests: Array<{ tableName: string; columnName: string; value: string; partitionKey?: string }> = [];
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
   readTable(request: { table: TableDefinitionDTO; partitionKey?: string }): Record<string, unknown>[] {
+    this.readRequests.push({ tableName: request.table.tableName, partitionKey: request.partitionKey });
     return this.getRows(request.table.tableName).map(clone);
+  }
+
+  findRowsByColumn(request: {
+    table: TableDefinitionDTO;
+    partitionKey?: string;
+    columnName: string;
+    value: string;
+  }): Record<string, unknown>[] {
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      columnName: request.columnName,
+      value: request.value,
+      partitionKey: request.partitionKey,
+    });
+    return this.getRows(request.table.tableName)
+      .filter((row) => String(row[request.columnName] ?? '') === request.value)
+      .map(clone);
   }
 
   appendRows(request: {
@@ -138,6 +278,33 @@ class FakeSheetGateway {
       this.rowsByTable.set(tableName, rows);
     }
     return rows;
+  }
+}
+
+class FakePlatformCacheStore {
+  private readonly values = new Map<string, string>();
+  private readonly ttlValues: number[] = [];
+
+  get(key: string): string | undefined {
+    return this.values.get(key);
+  }
+
+  put(key: string, value: string, expirationInSeconds = 0): void {
+    this.values.set(key, value);
+    this.ttlValues.push(expirationInSeconds);
+  }
+
+  remove(key: string): void {
+    this.values.delete(key);
+  }
+
+  clear(): void {
+    this.values.clear();
+    this.ttlValues.length = 0;
+  }
+
+  ttls(): number[] {
+    return [...this.ttlValues];
   }
 }
 

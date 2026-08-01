@@ -3,9 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type { InstallStatusResponse } from '@shared/contracts/platform/install';
 import type { ReportingDashboardResponse } from '@shared/contracts/reporting/reporting';
 import { DashboardHome } from '../../web/src/features/dashboard/dashboard-home';
 import { SalesManagementApp } from '../../web/src/app/sales-management-app';
+import { AuthFlow } from '../../web/src/app/auth/auth-flow';
 
 const scope: CurrentScopeResponse = {
   tenant: {
@@ -56,11 +58,51 @@ const actor: ActorContextDTO = {
   },
 };
 
+const installedStatus: InstallStatusResponse = {
+  status: 'Installed',
+  installed: true,
+  canRetry: false,
+  appVersion: '0.1.0',
+  schemaVersion: 1,
+  tenantDisplayName: 'Công ty Cenio Retail',
+};
+
 describe('SalesManagementApp', () => {
   it('khởi đầu ở login nội bộ khi chưa có session', () => {
-    const html = renderToStaticMarkup(createElement(SalesManagementApp, { initialSessionToken: undefined }));
+    const html = renderToStaticMarkup(
+      createElement(SalesManagementApp, {
+        initialInstallStatus: installedStatus,
+        initialSessionToken: undefined,
+      }),
+    );
 
     expect(html).toContain('Đăng nhập nội bộ');
+  });
+
+  it('hiển thị first-run setup trước login khi Web App chưa được khởi tạo', () => {
+    const html = renderToStaticMarkup(
+      createElement(SalesManagementApp, {
+        initialInstallStatus: {
+          status: 'NotInstalled',
+          installed: false,
+          canRetry: true,
+          appVersion: '0.1.0',
+          schemaVersion: 1,
+        },
+        runtimeMode: 'apps-script',
+      }),
+    );
+
+    expect(html).toContain('Khởi tạo hệ thống lần đầu');
+    expect(html).not.toContain('Đăng nhập nội bộ');
+  });
+
+  it('hiển thị loading rõ ràng khi đang kiểm tra trạng thái cài đặt', () => {
+    const html = renderToStaticMarkup(createElement(SalesManagementApp, { runtimeMode: 'apps-script' }));
+
+    expect(html).toContain('Đang kiểm tra cài đặt');
+    expect(html).toContain('cn-install-spinner');
+    expect(html).toContain('Kiểm tra runtime config');
   });
 
   it('DashboardHome có đúng 4 KPI chính theo handoff', () => {
@@ -119,6 +161,25 @@ describe('SalesManagementApp', () => {
     expect(html).not.toContain('cn-pos-header');
     expect(html).not.toContain('Ca POS đang mở');
     expect(html).not.toContain('Dữ liệu quầy sẵn sàng');
+  });
+
+  it('login nội bộ hiển thị cảnh báo kiểm tra cài đặt nền kèm retry mà không chặn form', () => {
+    const html = renderToStaticMarkup(
+      createElement(AuthFlow, {
+        installWarning: {
+          message: 'Không xác nhận được trạng thái cài đặt ở nền.',
+          onRetry: () => undefined,
+        },
+        isSubmitting: false,
+        mode: 'login',
+        onChangePassword: () => undefined,
+        onLogin: () => undefined,
+      } as never),
+    );
+
+    expect(html).toContain('Không xác nhận được trạng thái cài đặt ở nền.');
+    expect(html).toContain('Thử lại');
+    expect(html).toContain('Đăng nhập nội bộ');
   });
 });
 

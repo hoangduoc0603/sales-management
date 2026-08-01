@@ -32,7 +32,7 @@ type ApiResult<T> =
   | { ok: false; error: ApiError; meta: ApiMeta };
 ```
 
-`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Token không được đưa vào telemetry, error, audit summary hoặc persisted command response.
+`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Login trả kèm `currentScope`; phiên đã có token dùng `platform.session.bootstrap` để lấy actor + current scope trong một round-trip, không gọi tách `session.me` rồi `scope.getCurrent` trong luồng mở app. Token không được đưa vào telemetry, error, audit summary hoặc persisted command response.
 
 ## 2. Operation registry và pipeline
 
@@ -69,6 +69,7 @@ Lock không được bao gồm Drive, PDF, export, report, full catalog reload, 
 | --- | --- | --- |
 | Validation | `INVALID_INPUT`, `INVALID_STATE_TRANSITION` | Không retry; hiển thị field/business error. |
 | Authorization | `SESSION_EXPIRED`, `PERMISSION_DENIED`, `SCOPE_DENIED` | Xóa state nhạy cảm; login/refresh scope. |
+| Login throttle | `AUTH_RATE_LIMITED`, `AUTH_LOCKED` | Giữ form login, hiển thị retry guidance; không đọc thêm dữ liệu nghiệp vụ. |
 | Business conflict | `PRICE_CHANGED`, `PROMOTION_CHANGED`, `INSUFFICIENT_STOCK`, `VERSION_CONFLICT` | Không tự sửa giỏ; trả detail để user xác nhận/tải lại. |
 | Command outcome | `COMMAND_PENDING`, `COMMAND_ALREADY_COMMITTED` | Poll status hoặc dùng committed response; không phát lệnh mới. |
 | Retryable runtime | `LOCK_TIMEOUT`, `GOOGLE_SERVICE_UNAVAILABLE`, `QUOTA_TEMPORARY` | Giữ input, retry cùng idempotency key theo policy adapter. |
@@ -80,7 +81,7 @@ Mọi `ApiMeta` có `requestId`, `operation`, `serverTime`, `durationMs`, stage 
 
 - Cache browser/server chỉ phục vụ read model theo [runtime performance](runtime-and-performance.md); cache miss không được đổi semantic của command.
 - Worker gọi service nội bộ qua `WorkerContext`, không gọi `invoke`. Worker có `runId`, checkpoint, execution budget, lease/idempotency và không complete POS/ledger cốt lõi.
-- Credential verifier/session metadata được Platform service xử lý; domain service chỉ nhận `ActorContext`, không đọc password/token hay Script Properties.
+- Credential verifier/session metadata được Platform service xử lý; domain service chỉ nhận `ActorContext`, không đọc password/token hay Script Properties. Hot path auth/session dùng lookup theo `loginIdNormalized`, `userId` và `sessionFingerprint`, không scan toàn bảng.
 - API handler bắt buộc check action và scope trên backend cho cả read, print, export, attachment và backup/restore.
 
 ## 6. Code placement và test seam

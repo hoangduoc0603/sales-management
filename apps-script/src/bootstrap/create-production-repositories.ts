@@ -1,4 +1,5 @@
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../infrastructure/platform/cache';
 import {
   createSheetAdministrationRepository,
   type AdministrationRepository,
@@ -71,6 +72,7 @@ export interface ProductionRepositoryDependencies {
   transactionPartitionKey: string;
   auditPartitionKey: string;
   credentialVerifierStore: CredentialVerifierStore;
+  platformCacheStore?: PlatformCacheStore;
 }
 
 export function createProductionRepositories(deps: ProductionRepositoryDependencies): ProductionRepositories {
@@ -79,10 +81,12 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
       credentialVerifierStore: deps.credentialVerifierStore,
+      cacheStore: deps.platformCacheStore,
     }),
     administrationRepository: createSheetAdministrationRepository({
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
+      cacheStore: deps.platformCacheStore,
     }),
     commandRepository: createSheetCommandRepository({
       gateway: deps.sheetGateway,

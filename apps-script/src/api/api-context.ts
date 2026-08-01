@@ -1,6 +1,7 @@
 import type { ApiCommand, ApiMeta } from '@shared/contracts/api';
 import type { ActorContextDTO, ScopeResolutionDTO } from '@shared/contracts/platform/authorization';
 import type { OperationName } from '@shared/contracts/platform/operations';
+import { readPerformanceSnapshot } from './performance-tracker';
 
 export interface Clock {
   now(): Date;
@@ -37,13 +38,14 @@ export function createMeta(context: {
   clock: Clock;
 }): ApiMeta {
   const finishedAt = context.clock.now();
+  const performance = readPerformanceSnapshot();
 
   return {
     requestId: context.requestId,
     operation: context.operation,
     serverTime: finishedAt.toISOString(),
     durationMs: Math.max(0, finishedAt.getTime() - context.startedAt.getTime()),
-    stages: {},
-    io: {},
+    stages: performance.stages,
+    io: performance.io,
   };
 }

@@ -26,15 +26,9 @@ export function createAdministrationService(deps: AdministrationServiceDependenc
 
   return {
     getCurrentScope(actor) {
-      const tenant = deps.repository
-        .listTenants()
-        .find((candidate) => candidate.tenantId === actor.tenantId);
-      const branches = deps.repository
-        .listBranches()
-        .filter((branch) => actor.scope.branchIds.includes(branch.branchId));
-      const warehouses = deps.repository
-        .listWarehouses()
-        .filter((warehouse) => actor.scope.warehouseIds.includes(warehouse.warehouseId));
+      const tenant = deps.repository.findTenantById(actor.tenantId);
+      const branches = deps.repository.findBranchesByIds(actor.scope.branchIds);
+      const warehouses = deps.repository.findWarehousesByIds(actor.scope.warehouseIds);
 
       if (tenant === undefined || branches[0] === undefined || warehouses[0] === undefined) {
         throw new Error('Current scope is not configured for actor.');
@@ -55,9 +49,7 @@ export function createAdministrationService(deps: AdministrationServiceDependenc
         return { disabled: false, blockers };
       }
 
-      const warehouse = deps.repository
-        .listWarehouses()
-        .find((candidate) => candidate.warehouseId === input.warehouseId);
+      const warehouse = deps.repository.findWarehousesByIds([input.warehouseId])[0];
 
       if (warehouse === undefined) {
         throw new Error('Warehouse does not exist.');

@@ -4,6 +4,10 @@ import { createPropertiesCredentialVerifierStore } from '../infrastructure/googl
 import { createPropertiesRuntimeConfigStore } from '../infrastructure/google-workspace/runtime-config-store';
 import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gateway';
 import { createActiveRuntimeTableLocator } from '../infrastructure/google-workspace/runtime-table-locator';
+import { createAppsScriptLoginRateLimiter } from '../infrastructure/google-workspace/login-rate-limiter';
+import { createAppsScriptCacheStore } from '../infrastructure/google-workspace/cache-store';
+import { createPropertiesTenantSecretStore } from '../infrastructure/google-workspace/tenant-secret-store';
+import { createAppsScriptSessionTokenFingerprinter } from '../services/platform/auth/session-token-fingerprinter';
 import { createProductionApiComposition } from './create-production-api-composition';
 
 export function createAppsScriptProductionComposition(clock: Clock) {
@@ -17,6 +21,8 @@ export function createAppsScriptProductionComposition(clock: Clock) {
     spreadsheetApp: SpreadsheetApp,
     tableLocator: createActiveRuntimeTableLocator(runtimeConfig),
   });
+  const tenantSecretStore = createPropertiesTenantSecretStore({ properties });
+  const platformCacheStore = createAppsScriptCacheStore({ cacheService: CacheService });
 
   return createProductionApiComposition({
     clock,
@@ -26,6 +32,12 @@ export function createAppsScriptProductionComposition(clock: Clock) {
     },
     sheetGateway,
     credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
+    platformCacheStore,
+    tenantSecretStore,
+    loginRateLimiter: createAppsScriptLoginRateLimiter({ cacheService: CacheService }),
+    tokenFingerprinter: createAppsScriptSessionTokenFingerprinter({
+      getPepper: () => tenantSecretStore.getOrCreateSessionPepper(),
+    }),
     lockProvider: createAppsScriptLockProvider({
       lockService: LockService,
       spreadsheetApp: SpreadsheetApp,

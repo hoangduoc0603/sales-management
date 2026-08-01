@@ -2,6 +2,12 @@ import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
 
 export interface AppendOnlySheetRecordGateway {
   readTable(request: { table: TableDefinitionDTO; partitionKey?: string }): Record<string, unknown>[];
+  findRowsByColumn?(request: {
+    table: TableDefinitionDTO;
+    partitionKey?: string;
+    columnName: string;
+    value: string;
+  }): Record<string, unknown>[];
   appendRows(request: {
     table: TableDefinitionDTO;
     partitionKey?: string;

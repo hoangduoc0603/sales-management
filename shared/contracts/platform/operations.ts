@@ -1,10 +1,13 @@
 export const operationNames = [
+  'platform.install.getStatus',
+  'platform.install.run',
   'platform.bootstrap.install',
   'platform.bootstrap.getStatus',
   'platform.auth.login',
   'platform.auth.logout',
   'platform.auth.changeOwnPassword',
   'platform.session.me',
+  'platform.session.bootstrap',
   'platform.command.getStatus',
   'platform.registry.getTableDefinitions',
   'platform.scope.getCurrent',

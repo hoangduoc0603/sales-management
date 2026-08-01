@@ -46,6 +46,33 @@ describe('createLocalFakeBackendClient', () => {
 
     await expect(
       client.invoke({
+        operation: 'platform.install.getStatus',
+        requestId: 'req-install-status',
+        payload: {},
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { status: 'Installed', installed: true },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'platform.install.run',
+        requestId: 'req-install-run',
+        payload: {
+          tenantDisplayName: 'Cửa hàng test',
+          adminLoginId: 'admin',
+          adminPassword: 'admin1234',
+          confirmAdminPassword: 'admin1234',
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { status: 'Installed', tenantDisplayName: 'Cửa hàng test' },
+    });
+
+    await expect(
+      client.invoke({
         operation: 'platform.bootstrap.getStatus',
         requestId: 'req-bootstrap-status',
         payload: {},

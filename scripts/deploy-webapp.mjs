@@ -137,7 +137,7 @@ async function main() {
     process.exit(verifyResult.status ?? 1);
   }
 
-  const pushResult = spawnSync(npxCommand, ['clasp', 'push'], {
+  const pushResult = spawnSync(npxCommand, ['clasp', 'push', '--force'], {
     cwd: repositoryRoot,
     stdio: 'inherit',
   });

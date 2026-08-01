@@ -27,7 +27,7 @@ export interface DashboardHomeProps {
   onRefresh?: () => void;
 }
 
-type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+type LoadStatus = 'idle' | 'loading' | 'ready' | 'not-ready' | 'error';
 type DateRangePreset = 'today' | 'yesterday' | 'last7';
 
 export function DashboardHome({
@@ -79,7 +79,7 @@ export function DashboardHome({
     });
 
     if (!result.ok) {
-      setStatus('error');
+      setStatus(result.error.code === 'DASHBOARD_NOT_READY' ? 'not-ready' : 'error');
       setErrorMessage(result.error.message);
       return;
     }
@@ -142,6 +142,15 @@ export function DashboardHome({
           onAction={handleRefresh}
           title="Chưa tải được Dashboard"
           tone="danger"
+        />
+      ) : status === 'not-ready' ? (
+        <StateBlock
+          actionLabel="Tải lại"
+          description="Hệ thống đã đăng nhập và xác định phạm vi, nhưng DashboardProjection cho phạm vi/ngày này chưa được tạo. Bạn vẫn có thể dùng các màn nghiệp vụ khác."
+          detail={errorMessage}
+          onAction={handleRefresh}
+          title="Dashboard chưa có dữ liệu tổng hợp"
+          tone="warning"
         />
       ) : !dashboard ? (
         <StateBlock

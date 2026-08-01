@@ -2,9 +2,13 @@ import type { CurrentScopeResponse } from '@shared/contracts/platform/administra
 import type {
   AuthChangeOwnPasswordResponse,
   AuthLoginResponse,
-  SessionMeResponse,
+  SessionBootstrapResponse,
 } from '@shared/contracts/platform/auth';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type {
+  InstallRunResponse,
+  InstallStatusResponse,
+} from '@shared/contracts/platform/install';
 import type { ApiClient } from '../lib/api/client';
 import { createRuntimeApiClient, type RuntimeApiMode } from '../lib/api/runtime-client';
 import {
@@ -16,8 +20,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StateBlock } from '../components/ui/state-block';
 import { AuthFlow, type ChangePasswordInput, type LoginInput } from './auth/auth-flow';
 import { createSessionStorage } from './auth/session-storage';
+import { InstallCheckingScreen, InstallFlow, type InstallFormInput } from './install/install-flow';
+import { createInstallReadinessStorage } from './install/install-readiness-storage';
+import { checkInstallStatusWithTimeout } from './install/install-status-check';
 import { AppShell, type AppRoute } from './app-shell/app-shell';
-import { resolveSalesManagementAppStage } from './sales-management-app-stage';
+import { resolveSalesManagementAppStage, type InstallReadiness } from './sales-management-app-stage';
 import { applyBrowserTheme, readBrowserTheme, toggleTheme, type AppTheme } from './theme/theme';
 import { DashboardHome } from '../features/dashboard/dashboard-home';
 import { CatalogCrmHome } from '../features/catalog/catalog-crm-home';
@@ -34,11 +41,13 @@ export interface SalesManagementAppProps {
   initialActor?: ActorContextDTO;
   initialRoute?: AppRoute;
   initialScope?: CurrentScopeResponse;
+  initialInstallStatus?: InstallStatusResponse;
 }
 
 export function SalesManagementApp({
   apiClient,
   initialActor,
+  initialInstallStatus,
   initialRoute,
   initialScope,
   initialSessionToken,
@@ -54,6 +63,7 @@ export function SalesManagementApp({
     [apiClient, runtimeMode],
   );
   const sessionStorage = useMemo(() => createSessionStorage(), []);
+  const installReadinessStorage = useMemo(() => createInstallReadinessStorage(), []);
   const localDebugActor = useMemo(
     () => (localDebugAuthEnabled ? createLocalDebugActor() : undefined),
     [localDebugAuthEnabled],
@@ -63,7 +73,23 @@ export function SalesManagementApp({
     [localDebugAuthEnabled],
   );
   const effectiveInitialScope = initialScope ?? localDebugScope;
+  const preAuthenticated = Boolean(initialSessionToken && initialActor && effectiveInitialScope);
+  const hasInitialInstalledMarker = useMemo(
+    () =>
+      !localDebugAuthEnabled &&
+      initialInstallStatus === undefined &&
+      installReadinessStorage.readInstalled(),
+    [initialInstallStatus, installReadinessStorage, localDebugAuthEnabled],
+  );
+  const effectiveInitialInstallStatus =
+    initialInstallStatus ??
+    (localDebugAuthEnabled || preAuthenticated || hasInitialInstalledMarker
+      ? createInstalledStatus(effectiveInitialScope)
+      : undefined);
   const [theme, setTheme] = useState<AppTheme>('light');
+  const [installStatus, setInstallStatus] = useState<InstallStatusResponse | undefined>(
+    effectiveInitialInstallStatus,
+  );
   const [sessionToken, setSessionToken] = useState<string | undefined>(
     initialSessionToken ?? (localDebugAuthEnabled ? LOCAL_DEBUG_SESSION_TOKEN : sessionStorage.read()),
   );
@@ -72,7 +98,10 @@ export function SalesManagementApp({
   const [authMode, setAuthMode] = useState<'login' | 'change-password-required'>('login');
   const [notice, setNotice] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [installCheckFailure, setInstallCheckFailure] = useState<string>();
+  const [installStatusCheckAttempt, setInstallStatusCheckAttempt] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(sessionToken && !actor));
   const [route, setRoute] = useState<AppRoute>(initialRoute ?? 'dashboard');
   const [selectedBranchId, setSelectedBranchId] = useState(effectiveInitialScope?.activeBranchId);
@@ -83,6 +112,57 @@ export function SalesManagementApp({
     setTheme(nextTheme);
     applyBrowserTheme(nextTheme);
   }, []);
+
+  useEffect(() => {
+    if (localDebugAuthEnabled || initialInstallStatus !== undefined) {
+      return;
+    }
+
+    let isActive = true;
+    setInstallCheckFailure(undefined);
+    if (!hasInitialInstalledMarker) {
+      setInstallStatus(undefined);
+    }
+
+    void checkInstallStatusWithTimeout(client, createRequestId('install-status'))
+      .then((result) => {
+        if (!isActive) return;
+
+        if (!result.ok) {
+          setInstallCheckFailure(result.message);
+          return;
+        }
+
+        setInstallStatus(result.data);
+        setInstallCheckFailure(undefined);
+
+        if (result.data.installed || result.data.status === 'Installed') {
+          installReadinessStorage.markInstalled();
+          return;
+        }
+
+        installReadinessStorage.clearInstalled();
+        sessionStorage.clear();
+        setSessionToken(undefined);
+        setActor(undefined);
+        setScope(undefined);
+        setSelectedBranchId(undefined);
+        setSelectedWarehouseId(undefined);
+        setAuthMode('login');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    client,
+    hasInitialInstalledMarker,
+    initialInstallStatus,
+    installReadinessStorage,
+    installStatusCheckAttempt,
+    localDebugAuthEnabled,
+    sessionStorage,
+  ]);
 
   const clearSession = useCallback(() => {
     sessionStorage.clear();
@@ -105,25 +185,11 @@ export function SalesManagementApp({
     setAuthMode('login');
   }, [localDebugActor, localDebugAuthEnabled, localDebugScope, sessionStorage]);
 
-  const loadScope = useCallback(
-    async (token: string) => {
-      const scopeResult = await client.invoke<CurrentScopeResponse>({
-        operation: 'platform.scope.getCurrent',
-        requestId: createRequestId('scope'),
-        sessionToken: token,
-        payload: {},
-      });
-
-      if (!scopeResult.ok) {
-        throw new Error(scopeResult.error.message);
-      }
-
-      setScope(scopeResult.data);
-      setSelectedBranchId(scopeResult.data.activeBranchId);
-      setSelectedWarehouseId(scopeResult.data.activeWarehouseId);
-    },
-    [client],
-  );
+  const applyScope = useCallback((nextScope: CurrentScopeResponse) => {
+    setScope(nextScope);
+    setSelectedBranchId(nextScope.activeBranchId);
+    setSelectedWarehouseId(nextScope.activeWarehouseId);
+  }, []);
 
   useEffect(() => {
     if (!sessionToken || actor) {
@@ -133,13 +199,13 @@ export function SalesManagementApp({
     let isActive = true;
     setIsBootstrapping(true);
     void client
-      .invoke<SessionMeResponse>({
-        operation: 'platform.session.me',
-        requestId: createRequestId('session-me'),
+      .invoke<SessionBootstrapResponse>({
+        operation: 'platform.session.bootstrap',
+        requestId: createRequestId('session-bootstrap'),
         sessionToken,
         payload: {},
       })
-      .then(async (result) => {
+      .then((result) => {
         if (!isActive) return;
 
         if (!result.ok) {
@@ -148,7 +214,7 @@ export function SalesManagementApp({
         }
 
         setActor(result.data.actor);
-        await loadScope(sessionToken);
+        applyScope(result.data.currentScope);
       })
       .catch(() => {
         if (isActive) clearSession();
@@ -160,7 +226,7 @@ export function SalesManagementApp({
     return () => {
       isActive = false;
     };
-  }, [actor, clearSession, client, loadScope, sessionToken]);
+  }, [actor, applyScope, clearSession, client, sessionToken]);
 
   const handleLogin = useCallback(
     async (input: LoginInput) => {
@@ -180,6 +246,7 @@ export function SalesManagementApp({
 
       setSessionToken(result.data.sessionToken);
       setActor(result.data.actor);
+      applyScope(result.data.currentScope);
 
       if (result.data.passwordChangeRequired) {
         setAuthMode('change-password-required');
@@ -189,11 +256,63 @@ export function SalesManagementApp({
       }
 
       sessionStorage.write(result.data.sessionToken);
-      await loadScope(result.data.sessionToken);
       setNotice(undefined);
       setIsSubmitting(false);
     },
-    [client, loadScope, sessionStorage],
+    [applyScope, client, sessionStorage],
+  );
+
+  const handleInstall = useCallback(
+    async (input: InstallFormInput) => {
+      setIsInstalling(true);
+      setErrorMessage(undefined);
+      const result = await client.invoke<InstallRunResponse>({
+        operation: 'platform.install.run',
+        requestId: createRequestId('install-run'),
+        payload: input,
+      });
+
+      if (!result.ok) {
+        setErrorMessage(result.error.message);
+        setInstallStatus((current) => ({
+          status: 'Failed',
+          installed: false,
+          canRetry: true,
+          appVersion: current?.appVersion ?? '0.1.0',
+          schemaVersion: current?.schemaVersion ?? 1,
+          tenantDisplayName: input.tenantDisplayName,
+          lastErrorMessage: result.error.message,
+        }));
+        setIsInstalling(false);
+        return;
+      }
+
+      setSessionToken(undefined);
+      setActor(undefined);
+      setScope(undefined);
+      setSelectedBranchId(undefined);
+      setSelectedWarehouseId(undefined);
+      sessionStorage.clear();
+      installReadinessStorage.markInstalled();
+      setInstallStatus({
+        status: 'Installed',
+        installed: true,
+        canRetry: false,
+        appVersion: installStatus?.appVersion ?? '0.1.0',
+        schemaVersion: installStatus?.schemaVersion ?? 1,
+        tenantDisplayName: result.data.tenantDisplayName,
+        completedAt: new Date().toISOString(),
+      });
+      setNotice('Đã khởi tạo hệ thống. Vui lòng đăng nhập bằng tài khoản admin vừa tạo.');
+      setIsInstalling(false);
+    },
+    [
+      client,
+      installReadinessStorage,
+      installStatus?.appVersion,
+      installStatus?.schemaVersion,
+      sessionStorage,
+    ],
   );
 
   const handleChangePassword = useCallback(
@@ -248,18 +367,61 @@ export function SalesManagementApp({
     });
   }, []);
 
+  const handleInstallStatusRetry = useCallback(() => {
+    setInstallStatusCheckAttempt((current) => current + 1);
+  }, []);
+
   const stage = resolveSalesManagementAppStage({
     actorReady: actor !== undefined,
     authMode,
     bootstrapping: isBootstrapping,
+    installReadiness: resolveInstallReadiness(installStatus, isInstalling, installCheckFailure),
     scopeReady: scope !== undefined && selectedBranchId !== undefined && selectedWarehouseId !== undefined,
     sessionReady: sessionToken !== undefined,
   });
+
+  if (stage === 'install-checking') {
+    return <InstallCheckingScreen />;
+  }
+
+  if (stage === 'install-check-failed') {
+    return (
+      <InstallCheckingScreen
+        errorMessage={installCheckFailure}
+        mode="failed"
+        onRetry={handleInstallStatusRetry}
+      />
+    );
+  }
+
+  if (stage === 'install-required' || stage === 'installing') {
+    return (
+      <InstallFlow
+        errorMessage={errorMessage}
+        isSubmitting={isInstalling || installStatus?.status === 'Installing'}
+        onInstall={handleInstall}
+        status={
+          installStatus ?? {
+            status: 'Installing',
+            installed: false,
+            canRetry: false,
+            appVersion: '0.1.0',
+            schemaVersion: 1,
+          }
+        }
+      />
+    );
+  }
 
   if (stage === 'auth') {
     return (
       <AuthFlow
         errorMessage={errorMessage}
+        installWarning={
+          installCheckFailure && (installStatus?.installed || installStatus?.status === 'Installed')
+            ? { message: installCheckFailure, onRetry: handleInstallStatusRetry }
+            : undefined
+        }
         isSubmitting={isSubmitting}
         mode={authMode}
         notice={notice}
@@ -347,6 +509,41 @@ export function SalesManagementApp({
 
 function createRequestId(scope: string): string {
   return `web-${scope}-${Date.now()}`;
+}
+
+export function resolveInstallReadiness(
+  installStatus: InstallStatusResponse | undefined,
+  isInstalling: boolean,
+  installCheckFailure?: string,
+): InstallReadiness {
+  if (isInstalling || installStatus?.status === 'Installing') {
+    return 'installing';
+  }
+
+  if (installStatus && (installStatus.installed || installStatus.status === 'Installed')) {
+    return 'installed';
+  }
+
+  if (installCheckFailure) {
+    return 'check-failed';
+  }
+
+  if (!installStatus) {
+    return 'checking';
+  }
+
+  return 'required';
+}
+
+function createInstalledStatus(scope: CurrentScopeResponse | undefined): InstallStatusResponse {
+  return {
+    status: 'Installed',
+    installed: true,
+    canRetry: false,
+    appVersion: '0.1.0',
+    schemaVersion: 1,
+    tenantDisplayName: scope?.tenant.displayName,
+  };
 }
 
 function shouldUseLocalDebugAuth(runtimeMode: RuntimeApiMode | undefined): boolean {

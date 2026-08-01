@@ -18,7 +18,7 @@ if (verifyResult.status !== 0) {
 validateLocalClaspConfig(repositoryRoot);
 
 const claspCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const claspResult = spawnSync(claspCommand, ['clasp', 'push'], {
+const claspResult = spawnSync(claspCommand, ['clasp', 'push', '--force'], {
   cwd: repositoryRoot,
   stdio: 'inherit',
 });

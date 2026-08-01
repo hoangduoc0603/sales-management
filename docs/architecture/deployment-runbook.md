@@ -101,7 +101,7 @@ Script `deploy:push` sẽ:
 2. kiểm tra `.clasp.json` local tồn tại;
 3. kiểm tra `.clasp.json` có `scriptId`;
 4. kiểm tra `rootDir` là `./dist`;
-5. chạy `npx clasp push`.
+5. chạy `npx clasp push --force`.
 
 Nếu script báo thiếu `.clasp.json`, không sửa `.clasp.json.example` để thêm `scriptId`. Phải tạo `.clasp.json` local riêng.
 
@@ -117,7 +117,7 @@ Script `deploy:test` sẽ:
 
 1. kiểm tra `.clasp.json` local tồn tại và trỏ tới `rootDir: "./dist"`;
 2. chạy `npm run verify`;
-3. chạy `npx clasp push`;
+3. chạy `npx clasp push --force`;
 4. đọc HEAD/test deployment ID từ `npx clasp deployments --json`;
 5. in test Web App URL dạng `https://script.google.com/macros/s/<DEPLOYMENT_ID>/dev`.
 
@@ -134,7 +134,7 @@ npm run deploy:webapp
 Lệnh này sẽ:
 
 1. chạy `npm run verify`;
-2. push artifact trong `dist/`;
+2. force-push artifact trong `dist/`;
 3. tạo Apps Script version mới;
 4. deploy version đó thành Web App;
 5. in `Deployment ID` và `Web App URL` nếu `clasp` trả deployment ID.
@@ -143,6 +143,12 @@ Manifest source phải có Web App config:
 
 ```json
 {
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.storage",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/spreadsheets"
+  ],
   "webapp": {
     "executeAs": "USER_DEPLOYING",
     "access": "ANYONE_ANONYMOUS"
@@ -152,6 +158,12 @@ Manifest source phải có Web App config:
 
 Cấu hình này bám theo ADR 0001: Web App public, chạy bằng quyền Google account khách/Owner triển khai; user đăng nhập bằng tài khoản/mật khẩu nội bộ của app, không dựa vào Google identity.
 
+Nếu manifest thay đổi `oauthScopes`, lần mở Web App tiếp theo có thể yêu cầu Owner review permissions lại. First-run setup cần Drive/Sheets/Properties scope để tạo thư mục, Spreadsheet dữ liệu và runtime config. Warm-up trigger cần `script.scriptapp` scope để Owner cài đặt/xoá installable trigger trên chính Apps Script project của khách.
+
+Nếu Web App không tự hiện OAuth prompt sau khi thêm scope, Owner mở Apps Script editor, chọn function `authorizeSetupScopes`, bấm **Run** và duyệt quyền. Function này chỉ đọc Script Properties, Drive root và flush Spreadsheet service để kích hoạt authorization; không tạo dữ liệu tenant.
+
+Nếu `/dev` vẫn báo thiếu quyền sau khi Owner đã duyệt scope trong editor, tạo hoặc cập nhật versioned Web App deployment bằng `npm run deploy:webapp`. Khi `oauthScopes` thay đổi, test deployment cũ có thể chưa phản ánh đầy đủ authorization/deployment config cho runtime Web App.
+
 Sau lần deploy đầu tiên, ghi lại `Deployment ID` ngoài source repo. Các lần cập nhật nên redeploy vào deployment cũ để giữ nguyên Web App URL:
 
 ```bash
@@ -160,35 +172,39 @@ npm run deploy:webapp -- --deploymentId <DEPLOYMENT_ID>
 
 Ghi lại deployment ID và Web App URL vào biên bản bàn giao ngoài source repo.
 
-## 7. Bootstrap tenant
+## 7. First-run setup tenant qua Web App
 
-Bootstrap phải chạy một lần sau deploy đầu tiên.
+Sau deploy đầu tiên, mở Web App URL. Nếu Apps Script project chưa có runtime config, ứng dụng hiển thị màn **Khởi tạo hệ thống lần đầu** trước màn đăng nhập.
 
-Với tenant test/mặc định, chạy:
+Người sở hữu Google account triển khai nhập:
 
-```bash
-npm run bootstrap:default
-```
+- tên cửa hàng/doanh nghiệp;
+- `loginId` admin nội bộ;
+- mật khẩu admin nội bộ và xác nhận mật khẩu.
 
-Lệnh này gọi Apps Script function `installDefaultTenant_` qua clasp. Function này tạo Drive root, storage folders, các Spreadsheet dữ liệu, runtime config trong Script Properties và seed tenant/admin mặc định. Đây là owner-run function, không phải UI public bootstrap.
+Khi bấm **Khởi tạo hệ thống**, Web App gọi `platform.install.run`. Operation này chạy bằng quyền account deploy Web App, tạo Drive root, storage folders, các Spreadsheet dữ liệu, runtime config trong Script Properties và seed tenant/admin mặc định. Sau khi thành công, ứng dụng chuyển về màn đăng nhập nội bộ.
 
-Nếu `clasp run` báo `Script function not found. Please make sure script is deployed as API executable.`, bootstrap chưa chạy. Cách xử lý nhanh cho lần đầu triển khai:
+Quy tắc UX/kỹ thuật:
 
-1. mở Apps Script editor bằng `npx clasp open-script`;
-2. chọn function `installDefaultTenant_`;
-3. bấm Run và duyệt quyền Google nếu được hỏi;
-4. kiểm tra function chạy xong không lỗi;
-5. mở lại Web App và đăng nhập bằng `admin/admin123`.
+- không kiểm tra danh tính ứng dụng bằng Google account; Google account chỉ cấp quyền sở hữu Drive/Sheets/Apps Script;
+- không yêu cầu chạy script thủ công trong luồng khách tự cài;
+- không kiểm tra runtime config ở mọi API sau đăng nhập bằng nhiều bước thừa; install gate gọi `platform.install.getStatus` trước auth khi chưa có marker local, hoặc kiểm tra nền khi browser đã từng nhận trạng thái `Installed`;
+- marker local `Installed` chỉ là tối ưu UX có version trong `localStorage`; backend runtime config vẫn là source of truth;
+- nếu `platform.install.getStatus` không phản hồi trong 15 giây, fresh open hiển thị state phục hồi có nút thử lại thay vì mở setup; các lần mở đã có marker giữ login và hiển thị cảnh báo non-blocking;
+- nếu setup lỗi, màn install hiển thị lỗi đã sanitize và cho phép thử lại;
+- nếu backend trả `NotInstalled` sau khi browser có marker `Installed`, app xóa marker/session local và chuyển về setup;
+- nếu hệ thống đã được khởi tạo, gọi lại `platform.install.run` phải trả trạng thái `Installed` và không tạo thêm bộ dữ liệu mới.
 
-Payload nghiệp vụ tối thiểu:
+Payload nghiệp vụ tối thiểu của `platform.install.run`:
 
 ```json
 {
-  "operation": "platform.bootstrap.install",
+  "operation": "platform.install.run",
   "payload": {
     "tenantDisplayName": "<Tên doanh nghiệp>",
     "adminLoginId": "admin",
-    "temporaryPassword": "<MẬT_KHẨU_TẠM_CHUYỂN_RIÊNG_CHO_KHÁCH>"
+    "adminPassword": "<MẬT_KHẨU_ADMIN>",
+    "confirmAdminPassword": "<MẬT_KHẨU_ADMIN>"
   }
 }
 ```
@@ -205,7 +221,32 @@ Kết quả bootstrap cần tạo hoặc ghi nhận:
 - scheduled worker trigger;
 - health/readiness baseline.
 
-Mật khẩu tạm chỉ được chuyển cho khách qua kênh riêng, không ghi trong repo, issue, log hoặc Sheets. Sau lần đăng nhập đầu tiên, admin phải đổi mật khẩu.
+Mật khẩu admin do người cài đặt nhập trực tiếp trong Web App, không ghi trong repo, issue, log hoặc Sheets.
+
+### 7.1. Cài warm-up trigger để giảm cold start
+
+Sau khi first-run setup thành công, Owner mở Apps Script editor, chọn function `installWarmupTrigger`, bấm **Run** và duyệt quyền nếu được hỏi. Apps Script editor thường không hiển thị function có hậu tố `_` trong dropdown, nên các function thao tác thủ công luôn dùng alias không có `_`.
+
+Hành vi:
+
+- tạo đúng một installable time-driven trigger gọi `warmRuntime_` mỗi 5 phút;
+- nếu đã có trigger `warmRuntime_` cũ/duplicate, script xoá duplicate rồi tạo lại một trigger mới;
+- không xoá hoặc thay đổi trigger `scheduledWorker_`;
+- warm-up chỉ đọc runtime config, auth profile admin và current scope mặc định để làm ấm Apps Script runtime/cache; không đăng nhập, không tạo session, không ghi audit, không chạy backup/export/archive.
+
+Kiểm tra trạng thái bằng function `getWarmupTriggerStatus`. Kết quả trả về gồm `triggerCount`, `lastStartedAt`, `lastCompletedAt`, `lastDurationMs`, `lastStatus` và `lastError` nếu lần warm-up gần nhất lỗi.
+
+Khi cần tắt warm-up trigger trên tenant test hoặc khi bàn giao chính sách vận hành khác, chạy `removeWarmupTriggers`. Việc này chỉ xoá trigger `warmRuntime_`.
+
+### 7.2. Fallback kỹ thuật cho test tenant
+
+Trong trường hợp cần debug bằng Apps Script editor/clasp, vẫn có thể chạy bootstrap mặc định:
+
+```bash
+npm run bootstrap:default
+```
+
+Lệnh này gọi function owner-only `installDefaultTenant_` và tạo tài khoản test `admin/admin123`. Chỉ dùng cho môi trường test/debug; không dùng làm luồng cài đặt chuẩn để bàn giao cho khách.
 
 ## 8. Record runtime config và bàn giao
 

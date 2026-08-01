@@ -1,23 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { createPbkdf2PasswordService } from '../../../apps-script/src/services/platform/auth/password-service';
+import { createHmacSha256PasswordService } from '../../../apps-script/src/services/platform/auth/password-service';
 
-describe('Pbkdf2PasswordService', () => {
-  it('creates salted PBKDF2 verifier and validates only matching password', () => {
-    const service = createPbkdf2PasswordService({
-      iterations: 12,
-      keyLengthBytes: 32,
+describe('HmacSha256PasswordService', () => {
+  it('creates salted HMAC verifier and validates only matching password', () => {
+    const service = createHmacSha256PasswordService({
       randomSalt: () => 'salt-fixed',
-      deriveKey: ({ password, salt, iterations, keyLengthBytes }) =>
-        `derived-${password}-${salt}-${iterations}-${keyLengthBytes}`,
+      getPepper: () => 'tenant-pepper-fixed',
+      hmacSha256: ({ password, salt, pepper }) => `hmac-${password}-${salt}-${pepper}`,
     });
 
     const verifier = service.createVerifier('admin123');
 
-    expect(verifier).toBe(
-      'pbkdf2-sha256:12:32:salt-fixed:derived-admin123-salt-fixed-12-32',
-    );
+    expect(verifier).toBe('hmac-sha256-v1:salt-fixed:hmac-admin123-salt-fixed-tenant-pepper-fixed');
     expect(service.verifyPassword({ password: 'admin123', verifier })).toBe(true);
     expect(service.verifyPassword({ password: 'wrong', verifier })).toBe(false);
     expect(service.verifyPassword({ password: 'admin123', verifier: 'malformed' })).toBe(false);
+    expect(
+      service.verifyPassword({
+        password: 'admin123',
+        verifier: 'pbkdf2-sha256:120000:32:salt:legacy-derived',
+      }),
+    ).toBe(false);
   });
 });

@@ -163,6 +163,7 @@ import {
 } from '@shared/schemas/sales/sales';
 import { createInvokeHandler, type Clock } from '../api/invoke';
 import { createOperationRegistry } from '../api/operation-registry';
+import { recordStage } from '../api/performance-tracker';
 import { createInMemoryCatalogRepository } from '../repositories/catalog/catalog-repository';
 import { createInMemoryCustomerRepository } from '../repositories/crm/customer-repository';
 import { createInMemoryFinanceRepository } from '../repositories/finance/finance-repository';
@@ -188,6 +189,8 @@ import { createCommandCoordinator } from '../services/platform/command/command-c
 import {
   actorFromSessionResult,
   createSessionService,
+  type LoginRateLimiter,
+  type TokenFingerprinter,
 } from '../services/platform/auth/session-service';
 import {
   createDeterministicPasswordServiceForTest,
@@ -213,6 +216,8 @@ export interface ApiCompositionDependencies {
   clock: Clock;
   repositories?: Partial<ProductionRepositories>;
   passwordService?: PasswordService;
+  loginRateLimiter?: LoginRateLimiter;
+  tokenFingerprinter?: TokenFingerprinter;
   lockProvider?: LockProvider;
   tableDefinitions?: ReturnType<typeof createPlatformTableDefinitions>;
   tenantId?: string;
@@ -255,6 +260,8 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
     },
     repository: authRepository,
     passwordService,
+    loginRateLimiter: input.loginRateLimiter,
+    tokenFingerprinter: input.tokenFingerprinter,
   });
   const authorizationService = createAuthorizationService(
     createInMemoryAuthorizationRepository([]),
@@ -366,7 +373,18 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       kind: 'public',
       parsePayload: parseAuthLoginRequest,
       handler: (input) => {
-        return sessionService.login(input as AuthLoginRequest);
+        const login = sessionService.login(input as AuthLoginRequest);
+        if (!login.ok) return login;
+        const scopeStartedAt = Date.now();
+        const scope = administrationService.getCurrentScope(login.data.actor);
+        recordStage('login.currentScopeMs', Date.now() - scopeStartedAt);
+        return {
+          ok: true,
+          data: {
+            ...login.data,
+            currentScope: scope,
+          },
+        };
       },
     },
     {
@@ -397,6 +415,22 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
         idleExpiresAt: new Date(clock.now().getTime() + 60 * 60 * 1000).toISOString(),
         absoluteExpiresAt: new Date(clock.now().getTime() + 8 * 60 * 60 * 1000).toISOString(),
       }),
+    },
+    {
+      name: 'platform.session.bootstrap',
+      kind: 'query',
+      requiredAction: 'platform.session.view',
+      parsePayload: () => ({}),
+      handler: (_input, context) => {
+        const actor = requireActor(context.actor);
+        const scope = administrationService.getCurrentScope(actor);
+        return {
+          actor,
+          currentScope: scope,
+          idleExpiresAt: new Date(clock.now().getTime() + 60 * 60 * 1000).toISOString(),
+          absoluteExpiresAt: new Date(clock.now().getTime() + 8 * 60 * 60 * 1000).toISOString(),
+        };
+      },
     },
     {
       name: 'platform.command.getStatus',

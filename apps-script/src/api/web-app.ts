@@ -1,26 +1,45 @@
 import type { ApiResult } from '@shared/contracts/api';
 import { createAppsScriptProductionComposition } from '../bootstrap/create-apps-script-production-composition';
+import {
+  invokeFirstRunInstallForAppsScript_,
+  isFirstRunInstallOperation,
+} from '../bootstrap/first-run-install';
+import { readPerformanceSnapshot, recordStage, withPerformanceTracker } from './performance-tracker';
 
-export function doGet_(): GoogleAppsScript.HTML.HtmlOutput {
-  return HtmlService.createHtmlOutputFromFile('index');
+interface AppsScriptBootConfig {
+  debugApi?: boolean;
+}
+
+export function doGet_(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+  const html = HtmlService.createHtmlOutputFromFile('index');
+  return HtmlService.createHtmlOutput(injectBootConfig(html.getContent(), createBootConfig(event)));
 }
 
 export function invoke_(request: unknown): ApiResult<unknown> {
   const startedAt = new Date();
 
-  try {
-    const composition = createAppsScriptProductionComposition({
-      now: () => new Date(),
-    });
-    return composition.invoke(request);
-  } catch (error) {
-    return createEntrypointErrorResult(request, error, startedAt);
-  }
+  return withPerformanceTracker(() => {
+    try {
+      if (isFirstRunInstallOperation(request)) {
+        return invokeFirstRunInstallForAppsScript_(request);
+      }
+
+      const compositionStartedAt = Date.now();
+      const composition = createAppsScriptProductionComposition({
+        now: () => new Date(),
+      });
+      recordStage('compositionMs', Date.now() - compositionStartedAt);
+      return composition.invoke(request);
+    } catch (error) {
+      return createEntrypointErrorResult(request, error, startedAt);
+    }
+  });
 }
 
 function createEntrypointErrorResult(request: unknown, error: unknown, startedAt: Date): ApiResult<never> {
   const message = error instanceof Error ? error.message : String(error);
   const runtimeNotInstalled = message === 'Missing active runtime config.';
+  const performance = readPerformanceSnapshot();
 
   return {
     ok: false,
@@ -35,8 +54,8 @@ function createEntrypointErrorResult(request: unknown, error: unknown, startedAt
       operation: readOperation(request),
       serverTime: new Date().toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
-      stages: {},
-      io: {},
+      stages: performance.stages,
+      io: performance.io,
     },
   };
 }
@@ -59,4 +78,31 @@ function readOperation(request: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function createBootConfig(event?: GoogleAppsScript.Events.DoGet): AppsScriptBootConfig {
+  const debugApi = readDebugApiFlag(event?.parameter?.debugApi);
+  return debugApi === undefined ? {} : { debugApi };
+}
+
+function readDebugApiFlag(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') return true;
+  if (normalized === '0' || normalized === 'false') return false;
+  return undefined;
+}
+
+function injectBootConfig(html: string, config: AppsScriptBootConfig): string {
+  const script = `<script>window.__CENIO_BOOT__=${safeJsonForInlineScript(config)};</script>`;
+  if (html.includes('</head>')) {
+    return html.replace('</head>', `${script}</head>`);
+  }
+
+  return `${script}${html}`;
+}
+
+function safeJsonForInlineScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
 }

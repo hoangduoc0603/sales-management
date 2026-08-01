@@ -4,6 +4,12 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const requiredFiles = ['appsscript.json', 'code.js', 'index.html'];
+const requiredOauthScopes = [
+  'https://www.googleapis.com/auth/script.storage',
+  'https://www.googleapis.com/auth/script.scriptapp',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets',
+];
 
 export function verifyArtifact(artifactDirectory) {
   const files = readdirSync(artifactDirectory).sort();
@@ -39,6 +45,10 @@ export function verifyArtifact(artifactDirectory) {
 
   if (manifest.webapp?.executeAs !== 'USER_DEPLOYING' || manifest.webapp?.access !== 'ANYONE_ANONYMOUS') {
     throw new Error('appsscript.json không có cấu hình Web App public chạy bằng tài khoản triển khai.');
+  }
+
+  if (!Array.isArray(manifest.oauthScopes) || requiredOauthScopes.some((scope) => !manifest.oauthScopes.includes(scope))) {
+    throw new Error('appsscript.json thiếu OAuth scopes bắt buộc cho Properties/Drive/Sheets.');
   }
 
   for (const filename of requiredFiles) {

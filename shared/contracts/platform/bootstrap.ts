@@ -11,6 +11,7 @@ export interface BootstrapInstallRequest {
   tenantDisplayName?: string;
   adminLoginId?: string;
   temporaryPassword?: string;
+  adminPasswordChangeRequired?: boolean;
 }
 
 export interface BootstrapInstallResponse {

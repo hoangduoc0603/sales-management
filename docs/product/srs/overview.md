@@ -123,9 +123,9 @@ Lần triển khai đầu phải tạo một tài khoản admin mặc định v�
 
 ### SRS-OVR-007 — Mật khẩu và phiên
 
-Mật khẩu chỉ được truyền qua kết nối HTTPS và lưu dưới dạng PBKDF2 hash có salt riêng; không được lưu plaintext trong source, log, Google Sheets, tệp export hay giao diện. Credential verifier/pepper chỉ được giữ trong vùng cấu hình bảo mật Apps Script phù hợp quota, tách khỏi dữ liệu nghiệp vụ. Session token là opaque token chỉ giữ trong browser session; server chỉ lưu hash/fingerprint, user, scope snapshot, issued time, idle/absolute expiry và revoke state.
+Mật khẩu chỉ được truyền qua kết nối HTTPS và lưu dưới dạng credential verifier HMAC-SHA256 có salt riêng từng user và tenant pepper trong Script Properties; không được lưu plaintext trong source, log, Google Sheets, tệp export hay giao diện. Credential verifier/pepper chỉ được giữ trong vùng cấu hình bảo mật Apps Script phù hợp quota, tách khỏi dữ liệu nghiệp vụ. Session token là opaque token chỉ giữ trong browser session; server chỉ lưu HMAC fingerprint, user, scope snapshot, issued time, idle/absolute expiry và revoke state.
 
-Sau 5 lần đăng nhập sai liên tiếp, tài khoản phải bị khóa 15 phút. Login và API nhạy cảm phải có rate limit theo `loginId` hoặc session; audit/telemetry không được chứa mật khẩu hay token. Hệ thống phải tự kết thúc phiên sau 1 giờ không hoạt động và không cho bất kỳ phiên nào tồn tại quá 8 giờ kể từ lúc đăng nhập. Đổi mật khẩu, đặt lại mật khẩu, ngừng user và thay đổi quyền/scope phải thu hồi toàn bộ phiên đang hoạt động của user đó và invalidation permission/session cache ngay.
+Sau 5 lần đăng nhập sai liên tiếp, tài khoản phải bị khóa 15 phút. Login phải có rate limit theo `loginId` trước bước đọc user/credential; API nhạy cảm phải có rate limit theo session khi áp dụng. Audit/telemetry không được chứa mật khẩu hay token. Hệ thống phải tự kết thúc phiên sau 1 giờ không hoạt động và không cho bất kỳ phiên nào tồn tại quá 8 giờ kể từ lúc đăng nhập. Đổi mật khẩu, đặt lại mật khẩu, ngừng user và thay đổi quyền/scope phải thu hồi toàn bộ phiên đang hoạt động của user đó và invalidation permission/session cache ngay.
 
 **Tiêu chí nghiệm thu:** Lần đăng nhập sai thứ năm trả trạng thái bị khóa; thử lại trước 15 phút bị chặn; phiên không thao tác trong 60 phút bị yêu cầu đăng nhập; người dùng có phiên cũ không truy cập được sau khi admin đặt lại mật khẩu.
 

@@ -3,11 +3,11 @@ import type {
   AuthChangeOwnPasswordRequest,
   AuthChangeOwnPasswordResponse,
   AuthLoginRequest,
-  AuthLoginResponse,
   SessionMeResponse,
 } from '@shared/contracts/platform/auth';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { Clock } from '../../../api/api-context';
+import { recordStage } from '../../../api/performance-tracker';
 import {
   createInMemoryAuthRepository,
   toActorContext,
@@ -37,7 +37,7 @@ export interface IdGenerator {
 }
 
 export interface SessionService {
-  login(input: AuthLoginRequest): ServiceResult<AuthLoginResponse>;
+  login(input: AuthLoginRequest): ServiceResult<AuthLoginCoreResponse>;
   validateSession(sessionToken: string): ServiceResult<SessionMeResponse>;
   logout(sessionToken: string): ServiceResult<{ revoked: boolean }>;
   changeOwnPassword(
@@ -60,23 +60,62 @@ export interface SessionService {
   bumpAuthVersion(userId: string): void;
 }
 
+export interface AuthLoginCoreResponse {
+  sessionToken: string;
+  actor: ActorContextDTO;
+  idleExpiresAt: string;
+  absoluteExpiresAt: string;
+  passwordChangeRequired: boolean;
+}
+
 interface SessionServiceDependencies {
   clock: Clock;
   idGenerator: IdGenerator;
   repository: AuthRepository;
   passwordService: PasswordService;
+  loginRateLimiter?: LoginRateLimiter;
+  tokenFingerprinter?: TokenFingerprinter;
 }
 
 const idleTtlMs = 60 * 60 * 1000;
 const absoluteTtlMs = 8 * 60 * 60 * 1000;
 const lockoutMs = 15 * 60 * 1000;
 const maxFailedAttempts = 5;
+const idleRefreshThresholdMs = 15 * 60 * 1000;
+
+export interface LoginRateLimiter {
+  canAttempt(input: { loginId: string; now: Date }): boolean;
+}
+
+export interface TokenFingerprinter {
+  fingerprint(token: string): string;
+}
 
 export function createSessionService(deps: SessionServiceDependencies): SessionService {
+  const tokenFingerprinter = deps.tokenFingerprinter ?? {
+    fingerprint: fingerprintToken,
+  };
+
   return {
     login(input) {
+      const loginStartedAt = Date.now();
       const now = deps.clock.now();
+      const rateLimitStartedAt = Date.now();
+      if (deps.loginRateLimiter?.canAttempt({ loginId: input.loginId, now }) === false) {
+        recordStage('login.rateLimitMs', Date.now() - rateLimitStartedAt);
+        return {
+          ok: false,
+          error: {
+            code: 'AUTH_RATE_LIMITED',
+            message: 'Bạn đang đăng nhập quá nhanh. Vui lòng thử lại sau ít phút.',
+          },
+        };
+      }
+      recordStage('login.rateLimitMs', Date.now() - rateLimitStartedAt);
+
+      const findUserStartedAt = Date.now();
       const user = deps.repository.findUserByLoginId(input.loginId);
+      recordStage('login.findUserMs', Date.now() - findUserStartedAt);
 
       if (user === undefined || user.disabled) {
         return invalidCredentials();
@@ -89,10 +128,12 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
         };
       }
 
+      const passwordVerifyStartedAt = Date.now();
       const passwordOk = deps.passwordService.verifyPassword({
         password: input.password,
         verifier: user.passwordVerifier,
       });
+      recordStage('login.verifyMs', Date.now() - passwordVerifyStartedAt);
 
       if (!passwordOk) {
         const updatedUser = {
@@ -103,28 +144,37 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
               ? new Date(now.getTime() + lockoutMs).toISOString()
               : user.lockedUntil,
         };
+        const failedSaveStartedAt = Date.now();
         deps.repository.saveUser(updatedUser);
+        recordStage('login.saveFailedAttemptMs', Date.now() - failedSaveStartedAt);
 
         return invalidCredentials();
       }
 
       const resetUser = { ...user, failedLoginCount: 0, lockedUntil: undefined };
-      deps.repository.saveUser(resetUser);
+      if (user.failedLoginCount !== 0 || user.lockedUntil !== undefined) {
+        const resetUserStartedAt = Date.now();
+        deps.repository.saveUser(resetUser);
+        recordStage('login.resetUserMs', Date.now() - resetUserStartedAt);
+      }
 
       const sessionToken = deps.idGenerator.newId('session');
       const idleExpiresAt = new Date(now.getTime() + idleTtlMs).toISOString();
       const absoluteExpiresAt = new Date(now.getTime() + absoluteTtlMs).toISOString();
+      const saveSessionStartedAt = Date.now();
       deps.repository.saveSession({
         sessionId: deps.idGenerator.newId('sesrec'),
-        tokenFingerprint: fingerprintToken(sessionToken),
+        tokenFingerprint: tokenFingerprinter.fingerprint(sessionToken),
         userId: user.userId,
         authVersion: user.authVersion,
         issuedAt: now.toISOString(),
         idleExpiresAt,
         absoluteExpiresAt,
       });
+      recordStage('login.saveSessionMs', Date.now() - saveSessionStartedAt);
 
-      return {
+      const buildResponseStartedAt = Date.now();
+      const response: ServiceResult<AuthLoginCoreResponse> = {
         ok: true,
         data: {
           sessionToken,
@@ -134,16 +184,26 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
           passwordChangeRequired: user.passwordChangeRequired,
         },
       };
+      recordStage('login.buildResponseMs', Date.now() - buildResponseStartedAt);
+      recordStage('login.totalMs', Date.now() - loginStartedAt);
+      return response;
     },
     validateSession(sessionToken) {
       const now = deps.clock.now();
-      const session = deps.repository.findSessionByFingerprint(fingerprintToken(sessionToken));
+      const fingerprintStartedAt = Date.now();
+      const tokenFingerprint = tokenFingerprinter.fingerprint(sessionToken);
+      recordStage('session.fingerprintMs', Date.now() - fingerprintStartedAt);
+      const findSessionStartedAt = Date.now();
+      const session = deps.repository.findSessionByFingerprint(tokenFingerprint);
+      recordStage('session.findSessionMs', Date.now() - findSessionStartedAt);
 
       if (session === undefined || session.revokedAt !== undefined) {
         return sessionExpired();
       }
 
-      const user = deps.repository.findUserById(session.userId);
+      const findUserStartedAt = Date.now();
+      const user = deps.repository.findUserProfileById?.(session.userId) ?? deps.repository.findUserById(session.userId);
+      recordStage('session.findUserMs', Date.now() - findUserStartedAt);
 
       if (
         user === undefined ||
@@ -155,11 +215,19 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
         return sessionExpired();
       }
 
-      const updatedSession = {
-        ...session,
-        idleExpiresAt: new Date(now.getTime() + idleTtlMs).toISOString(),
-      };
-      deps.repository.saveUpdatedSession(updatedSession);
+      const shouldRefreshIdle =
+        new Date(session.idleExpiresAt).getTime() - now.getTime() <= idleRefreshThresholdMs;
+      const updatedSession = shouldRefreshIdle
+        ? {
+            ...session,
+            idleExpiresAt: new Date(now.getTime() + idleTtlMs).toISOString(),
+          }
+        : session;
+      if (shouldRefreshIdle) {
+        const refreshStartedAt = Date.now();
+        deps.repository.saveUpdatedSession(updatedSession);
+        recordStage('session.refreshIdleMs', Date.now() - refreshStartedAt);
+      }
 
       return {
         ok: true,
@@ -171,7 +239,7 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
       };
     },
     logout(sessionToken) {
-      const session = deps.repository.findSessionByFingerprint(fingerprintToken(sessionToken));
+      const session = deps.repository.findSessionByFingerprint(tokenFingerprinter.fingerprint(sessionToken));
 
       if (session === undefined || session.revokedAt !== undefined) {
         return { ok: true, data: { revoked: false } };

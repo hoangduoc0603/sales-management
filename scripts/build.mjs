@@ -1,4 +1,4 @@
-import { appendFileSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
@@ -8,6 +8,59 @@ import { verifyArtifact } from './verify-apps-script-artifact.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifactDirectory = path.join(repositoryRoot, 'dist');
+const appsScriptEntrypointWrappers = `function doGet(event) {
+  return SalesManagement.doGet_(event);
+}
+
+function invoke(request) {
+  return SalesManagement.invoke_(request);
+}
+
+function authorizeSetupScopes() {
+  return SalesManagement.authorizeSetupScopesForAppsScript_();
+}
+
+function authorizeSetupScopes_() {
+  return SalesManagement.authorizeSetupScopesForAppsScript_();
+}
+
+function installDefaultTenant_(request) {
+  return SalesManagement.installDefaultTenantForAppsScript_(request || {});
+}
+
+function warmRuntime() {
+  return SalesManagement.warmRuntimeForAppsScript_();
+}
+
+function warmRuntime_() {
+  return SalesManagement.warmRuntimeForAppsScript_();
+}
+
+function installWarmupTrigger() {
+  return SalesManagement.installWarmupTriggerForAppsScript_();
+}
+
+function installWarmupTrigger_() {
+  return SalesManagement.installWarmupTriggerForAppsScript_();
+}
+
+function removeWarmupTriggers() {
+  return SalesManagement.removeWarmupTriggersForAppsScript_();
+}
+
+function removeWarmupTriggers_() {
+  return SalesManagement.removeWarmupTriggersForAppsScript_();
+}
+
+function getWarmupTriggerStatus() {
+  return SalesManagement.getWarmupTriggerStatusForAppsScript_();
+}
+
+function getWarmupTriggerStatus_() {
+  return SalesManagement.getWarmupTriggerStatusForAppsScript_();
+}
+
+`;
 
 rmSync(artifactDirectory, { force: true, recursive: true });
 mkdirSync(artifactDirectory, { recursive: true });
@@ -23,11 +76,8 @@ await build({
   tsconfig: path.join(repositoryRoot, 'tsconfig.apps-script.json'),
 });
 
-appendFileSync(
-  path.join(artifactDirectory, 'code.js'),
-  `\nfunction doGet(event) {\n  return SalesManagement.doGet_(event);\n}\n\nfunction invoke(request) {\n  return SalesManagement.invoke_(request);\n}\n\nfunction installDefaultTenant_(request) {\n  return SalesManagement.installDefaultTenantForAppsScript_(request || {});\n}\n`,
-  'utf8',
-);
+const appsScriptBundlePath = path.join(artifactDirectory, 'code.js');
+writeFileSync(appsScriptBundlePath, `${appsScriptEntrypointWrappers}${readFileSync(appsScriptBundlePath, 'utf8')}`, 'utf8');
 
 const viteBin = path.join(repositoryRoot, 'node_modules/vite/bin/vite.js');
 const viteResult = await runProcess(process.execPath, [viteBin, 'build', '--config', 'vite.config.ts'], repositoryRoot);

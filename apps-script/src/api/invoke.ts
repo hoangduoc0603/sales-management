@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { createApiContext, createMeta, type Clock } from './api-context';
 import { createErrorResult, createSuccessResult } from './api-result';
 import type { OperationRegistry } from './operation-registry';
+import { recordStage } from './performance-tracker';
 
 export type { Clock } from './api-context';
 
@@ -23,8 +24,10 @@ export function createInvokeHandler(input: Clock | InvokeDependencies): (request
     const startedAt = deps.clock.now();
 
     try {
+      const parseStartedAt = deps.clock.now();
       const apiRequest = parseApiRequest(request);
       const entry = deps.registry?.get(apiRequest.operation);
+      recordStage('parseAndRegistryMs', deps.clock.now().getTime() - parseStartedAt.getTime());
 
       if (entry === undefined) {
         return createErrorResult(
@@ -39,10 +42,12 @@ export function createInvokeHandler(input: Clock | InvokeDependencies): (request
         );
       }
 
+      const authStartedAt = deps.clock.now();
       const actor =
         entry.kind === 'public'
           ? undefined
           : authenticateSession(apiRequest.sessionToken, deps.authenticate);
+      recordStage('authMs', deps.clock.now().getTime() - authStartedAt.getTime());
 
       if (entry.kind !== 'public' && actor === undefined) {
         return createErrorResult(
@@ -87,8 +92,10 @@ export function createInvokeHandler(input: Clock | InvokeDependencies): (request
         sessionToken: apiRequest.sessionToken,
         actor,
       });
+      const handlerStartedAt = deps.clock.now();
       const payload = entry.parsePayload(apiRequest.payload);
       const result = entry.handler(payload, context);
+      recordStage('handlerMs', deps.clock.now().getTime() - handlerStartedAt.getTime());
 
       if (isApiResult(result)) {
         return result;

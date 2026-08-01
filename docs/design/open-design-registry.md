@@ -14,6 +14,7 @@ Registry này ánh xạ màn hình trong sản phẩm với project/artifact tr�
 
 | Màn hình | Domain | Open Design project | Artifact chính | Local preview | Handoff repo | Trạng thái |
 | --- | --- | --- | --- | --- | --- | --- |
+| Auth và First-run setup | Platform / Auth / Install | `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` | `auth-first-run.html` | [Mở local](http://127.0.0.1:61609/api/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/raw/auth-first-run.html) | `docs/design/screens/auth-first-run.md` | `Approved` |
 | Sales Dashboard | Reporting / Operations | `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` | `app-shell-dashboard.html` | [Mở local](http://127.0.0.1:61609/api/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/raw/app-shell-dashboard.html) | `docs/design/screens/sales-dashboard.md` | `Approved` |
 | POS tại quầy — Checkout | Sales / POS | `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` | `app-pos-checkout.html` | [Mở local](http://127.0.0.1:61609/api/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/raw/app-pos-checkout.html) | `docs/design/screens/pos-checkout.md` | `Approved` |
 | Đơn bán, đơn nhập tay, trả/đổi và bảo hành | Sales / POS / Returns | `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` | `sales-orders-returns.html` | [Mở local](http://127.0.0.1:61609/api/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/raw/sales-orders-returns.html) | `docs/design/screens/sales-orders-returns.md` | `Approved` |

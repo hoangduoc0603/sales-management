@@ -33,7 +33,7 @@ describe('deploy test tooling', () => {
     };
 
     expect(packageJson.scripts['deploy:test']).toBe('node scripts/deploy-test.mjs');
-    expect(deployScript).toContain("'clasp', 'push'");
+    expect(deployScript).toContain("'clasp', 'push', '--force'");
     expect(deployScript).toContain("'clasp', 'deployments', '--json'");
     expect(deployScript).not.toContain("'clasp', 'version'");
     expect(deployScript).not.toContain("'clasp', 'deploy'");

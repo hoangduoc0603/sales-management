@@ -19,13 +19,20 @@ export interface AuthFlowProps {
   mode: AuthFlowMode;
   isSubmitting: boolean;
   errorMessage?: string;
+  installWarning?: AuthInstallWarning;
   notice?: string;
   onLogin(input: LoginInput): Promise<void> | void;
   onChangePassword(input: ChangePasswordInput): Promise<void> | void;
 }
 
+export interface AuthInstallWarning {
+  message: string;
+  onRetry(): void;
+}
+
 export function AuthFlow({
   errorMessage,
+  installWarning,
   isSubmitting,
   mode,
   notice,
@@ -45,6 +52,7 @@ export function AuthFlow({
         {mode === 'login' ? (
           <LoginForm
             errorMessage={errorMessage}
+            installWarning={installWarning}
             isSubmitting={isSubmitting}
             notice={notice}
             onLogin={onLogin}
@@ -65,11 +73,12 @@ export function AuthFlow({
 interface LoginFormProps {
   isSubmitting: boolean;
   errorMessage?: string;
+  installWarning?: AuthInstallWarning;
   notice?: string;
   onLogin(input: LoginInput): Promise<void> | void;
 }
 
-function LoginForm({ errorMessage, isSubmitting, notice, onLogin }: LoginFormProps) {
+function LoginForm({ errorMessage, installWarning, isSubmitting, notice, onLogin }: LoginFormProps) {
   const [loginId, setLoginId] = useState('admin');
   const [password, setPassword] = useState('admin123');
 
@@ -88,6 +97,7 @@ function LoginForm({ errorMessage, isSubmitting, notice, onLogin }: LoginFormPro
           loginId và mật khẩu nội bộ.
         </p>
       </div>
+      {installWarning ? <InstallWarning warning={installWarning} /> : null}
       <AuthMessage errorMessage={errorMessage} notice={notice} />
       <label className="cn-field">
         <span>loginId</span>
@@ -112,6 +122,17 @@ function LoginForm({ errorMessage, isSubmitting, notice, onLogin }: LoginFormPro
         Đăng nhập
       </Button>
     </form>
+  );
+}
+
+function InstallWarning({ warning }: { warning: AuthInstallWarning }) {
+  return (
+    <div className="cn-auth-message cn-auth-notice">
+      <span>{warning.message}</span>
+      <button className="cn-auth-inline-action" onClick={warning.onRetry} type="button">
+        Thử lại
+      </button>
+    </div>
   );
 }
 

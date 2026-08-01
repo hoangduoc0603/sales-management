@@ -34,7 +34,7 @@ describe('Google Workspace adapter seams', () => {
       ],
     });
 
-    expect(spreadsheetApp.openedIds).toEqual(['spreadsheet-core', 'spreadsheet-core']);
+    expect(spreadsheetApp.openedIds).toEqual(['spreadsheet-core']);
     expect(rows).toEqual([
       {
         status: 'Active',
@@ -75,6 +75,70 @@ describe('Google Workspace adapter seams', () => {
         status: 'Active',
         detailsJson: { displayName: 'Admin' },
       },
+    ]);
+  });
+
+  it('uses full table scan instead of per-row reads when a column lookup returns many versioned matches', () => {
+    const rows = [
+      ['id', 'status', 'detailsJson'],
+      ...Array.from({ length: 8 }, (_, index) => [
+        `user-admin:v${index + 1}`,
+        'Active',
+        JSON.stringify({ loginIdNormalized: 'admin', version: index + 1 }),
+      ]),
+    ];
+    const sheet = new FakeSheet('UserAccount', rows, { supportsRangeLookup: true });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    const result = gateway.findRowsByColumn({
+      table: userAccountTable,
+      columnName: 'status',
+      value: 'Active',
+    });
+
+    expect(result).toHaveLength(8);
+    expect(sheet.dataRangeReadCount).toBe(1);
+    expect(sheet.rowRangeReadCount).toBe(0);
+  });
+
+  it('does not read the full existing sheet only to verify headers before append', () => {
+    const sheet = new FakeSheet('UserAccount', [['id', 'status', 'detailsJson']], {
+      supportsRangeLookup: true,
+    });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [
+        {
+          id: 'user-2',
+          status: 'Active',
+          detailsJson: { displayName: 'Admin' },
+        },
+      ],
+    });
+
+    expect(sheet.dataRangeReadCount).toBe(0);
+    expect(sheet.appendedRows).toEqual([
+      ['user-2', 'Active', '{"displayName":"Admin"}'],
     ]);
   });
 
@@ -185,15 +249,69 @@ class FakeSpreadsheet {
 
 class FakeSheet {
   readonly appendedRows: unknown[][] = [];
+  dataRangeReadCount = 0;
+  rowRangeReadCount = 0;
 
   constructor(
     readonly name: string,
     private readonly values: unknown[][],
+    private readonly options: { supportsRangeLookup?: boolean } = { supportsRangeLookup: true },
   ) {}
 
   getDataRange() {
     return {
-      getValues: () => this.values,
+      getValues: () => {
+        this.dataRangeReadCount += 1;
+        return this.values;
+      },
+    };
+  }
+
+  getLastRow(): number {
+    return this.values.length;
+  }
+
+  getLastColumn(): number {
+    return this.values[0]?.length ?? 0;
+  }
+
+  getRange(row: number, column: number, numRows = 1, numColumns = 1) {
+    if (!this.options.supportsRangeLookup) {
+      throw new Error('Range lookup is disabled for this fake sheet.');
+    }
+
+    const getValues = () => {
+      if (row > 1 && numColumns > 1) {
+        this.rowRangeReadCount += 1;
+      }
+      return this.values
+        .slice(row - 1, row - 1 + numRows)
+        .map((currentRow) => currentRow.slice(column - 1, column - 1 + numColumns));
+    };
+
+    return {
+      getValues,
+      setValues: (rows: unknown[][]) => {
+        rows.forEach((currentRow, rowIndex) => {
+          const targetRowIndex = row - 1 + rowIndex;
+          this.values[targetRowIndex] = currentRow;
+          this.appendedRows.push(currentRow);
+        });
+      },
+      createTextFinder: (text: string) => ({
+        matchEntireCell: () => ({
+          findAll: () => {
+            const matched: Array<{ getRow(): number }> = [];
+            for (let rowIndex = row - 1; rowIndex < row - 1 + numRows; rowIndex += 1) {
+              const cellValue = this.values[rowIndex]?.[column - 1];
+              if (String(cellValue ?? '') === text) {
+                matched.push({ getRow: () => rowIndex + 1 });
+              }
+            }
+            return matched;
+          },
+        }),
+      }),
     };
   }
 

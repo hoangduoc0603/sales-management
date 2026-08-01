@@ -13,6 +13,10 @@ import { PosCheckoutShell } from '../../web/src/features/pos/pos-checkout-shell'
 const repositoryRoot = process.cwd();
 
 const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: readonly string[] }> = {
+  'Auth và First-run setup': {
+    sourcePath: 'web/src/app/install/install-flow.tsx',
+    routeEvidence: ['stage === \'install-check-failed\'', '<InstallCheckingScreen', '<AuthFlow'],
+  },
   'Sales Dashboard': {
     sourcePath: 'web/src/features/dashboard/dashboard-home.tsx',
     routeEvidence: ['route === \'dashboard\'', '<DashboardHome'],

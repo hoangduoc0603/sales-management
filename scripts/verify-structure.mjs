@@ -107,6 +107,17 @@ if (manifest.webapp?.executeAs !== 'USER_DEPLOYING' || manifest.webapp?.access !
   process.exit(1);
 }
 
+const requiredOauthScopes = [
+  'https://www.googleapis.com/auth/script.storage',
+  'https://www.googleapis.com/auth/script.scriptapp',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets',
+];
+if (!Array.isArray(manifest.oauthScopes) || requiredOauthScopes.some((scope) => !manifest.oauthScopes.includes(scope))) {
+  console.error('Manifest Apps Script phải khai báo OAuth scopes cho Properties/Drive/Sheets.');
+  process.exit(1);
+}
+
 const claspExamplePath = path.join(repositoryRoot, '.clasp.json.example');
 let claspExample;
 

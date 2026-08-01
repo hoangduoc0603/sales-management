@@ -49,7 +49,7 @@ export function createBootstrapService(deps: BootstrapServiceDependencies): Boot
         tenantId: tenant.tenantId,
         authVersion: 1,
         disabled: false,
-        passwordChangeRequired: true,
+        passwordChangeRequired: input.adminPasswordChangeRequired ?? true,
         passwordVerifier: passwordService.createVerifier(input.temporaryPassword ?? 'admin123'),
         failedLoginCount: 0,
         actions: [

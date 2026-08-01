@@ -4,9 +4,14 @@ import type { CurrentScopeResponse } from '@shared/contracts/platform/administra
 import type {
   AuthChangeOwnPasswordResponse,
   AuthLoginResponse,
+  SessionBootstrapResponse,
 } from '@shared/contracts/platform/auth';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { BootstrapStatusResponse } from '@shared/contracts/platform/bootstrap';
+import type {
+  InstallRunResponse,
+  InstallStatusResponse,
+} from '@shared/contracts/platform/install';
 import type {
   CatalogPosProjectionResponse,
   CatalogQuoteRequest,
@@ -90,6 +95,7 @@ import { parseDisableWarehouseRequest } from '@shared/schemas/platform/administr
 import { parseAuthChangeOwnPasswordRequest, parseAuthLoginRequest } from '@shared/schemas/platform/auth';
 import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap';
 import { parseCommandStatusRequest } from '@shared/schemas/platform/command';
+import { parseInstallRunRequest } from '@shared/schemas/platform/install';
 import {
   parsePurchasingGoodsReceiptApproveRequest,
   parsePurchasingGoodsReceiptCreateRequest,
@@ -241,6 +247,22 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
       const meta = createMeta(apiRequest, startedAt, now());
 
       switch (apiRequest.operation) {
+        case 'platform.install.getStatus':
+          return successResult(createLocalInstallStatus() as T, meta);
+        case 'platform.install.run':
+          try {
+            parseInstallRunRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return successResult(
+            createLocalInstallRunResponse(apiRequest.payload as {
+              tenantDisplayName: string;
+              adminLoginId: string;
+            }) as T,
+            meta,
+          );
         case 'platform.bootstrap.install':
           try {
             parseBootstrapInstallRequest(apiRequest.payload);
@@ -292,6 +314,20 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             idleExpiresAt: new Date(session.idleExpiresAtMs).toISOString(),
             absoluteExpiresAt: new Date(session.absoluteExpiresAtMs).toISOString(),
           }));
+        case 'platform.session.bootstrap':
+          return withSession<T, SessionBootstrapResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            (session) => ({
+              actor: session.actor,
+              currentScope: createLocalCurrentScope(warehouseStatus),
+              idleExpiresAt: new Date(session.idleExpiresAtMs).toISOString(),
+              absoluteExpiresAt: new Date(session.absoluteExpiresAtMs).toISOString(),
+            }),
+          );
         case 'platform.command.getStatus':
           try {
             parseCommandStatusRequest(apiRequest.payload);
@@ -975,6 +1011,7 @@ function handleLogin<T>(
   const response: AuthLoginResponse = {
     sessionToken,
     actor,
+    currentScope: createLocalCurrentScope('Active'),
     idleExpiresAt: new Date(session.idleExpiresAtMs).toISOString(),
     absoluteExpiresAt: new Date(session.absoluteExpiresAtMs).toISOString(),
     passwordChangeRequired: user.passwordChangeRequired,
@@ -2752,6 +2789,31 @@ function createLocalBootstrapStatus(warehouseStatus: 'Active' | 'Disabled'): Boo
   return {
     installed: true,
     ...createLocalBootstrapBaseline(warehouseStatus),
+  };
+}
+
+function createLocalInstallStatus(): InstallStatusResponse {
+  return {
+    status: 'Installed',
+    installed: true,
+    canRetry: false,
+    appVersion: '0.1.0',
+    schemaVersion: 1,
+    tenantDisplayName: 'Cửa hàng mặc định',
+  };
+}
+
+function createLocalInstallRunResponse(input: {
+  tenantDisplayName: string;
+  adminLoginId: string;
+}): InstallRunResponse {
+  return {
+    status: 'Installed',
+    installed: true,
+    tenantDisplayName: input.tenantDisplayName,
+    adminLoginId: input.adminLoginId,
+    branchName: 'Chi nhánh mặc định',
+    warehouseName: 'Kho mặc định',
   };
 }
 

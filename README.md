@@ -49,7 +49,7 @@ Khi chạy trong Apps Script Web App có `google.script.run`, client sẽ ưu ti
 
 `npm run build` tạo artifact trong `dist/`; lệnh không gọi Google Workspace. Để push lên test tenant, người triển khai tự sao chép `.clasp.json.example` thành `.clasp.json`, thêm `scriptId` cục bộ, rồi chạy `npm run deploy:push`. Không đưa `scriptId`, token hay `.clasp.json` vào source, log hoặc Git.
 
-Trong giai đoạn debug Web App, dùng lệnh dưới đây để verify, push code mới nhất lên Apps Script, đọc HEAD/test deployment ID từ `clasp deployments --json` rồi in test deployment `/dev` mà không tạo Apps Script version mới:
+Trong giai đoạn debug Web App, dùng lệnh dưới đây để verify, force-push code mới nhất lên Apps Script, đọc HEAD/test deployment ID từ `clasp deployments --json` rồi in test deployment `/dev` mà không tạo Apps Script version mới:
 
 ```bash
 npm run deploy:test
@@ -69,10 +69,14 @@ Lần đầu lệnh này tạo deployment mới và in `Web App URL` nếu `clas
 npm run deploy:webapp -- --deploymentId <DEPLOYMENT_ID>
 ```
 
-Sau deploy lần đầu, chạy bootstrap tenant mặc định một lần trên Apps Script project đích:
+Sau deploy lần đầu, mở Web App URL. Nếu hệ thống chưa có runtime config, app sẽ tự hiển thị màn **Khởi tạo hệ thống lần đầu** để người sở hữu Google account nhập tên cửa hàng, `loginId` admin và mật khẩu admin nội bộ. Đây là luồng cài đặt chuẩn cho khách tự triển khai: Web App sẽ tạo Drive folder, các Spreadsheet dữ liệu, runtime config và tài khoản admin.
+
+Sau khi first-run setup thành công, trong Apps Script editor chạy `installWarmupTrigger` một lần để tạo trigger nhẹ gọi `warmRuntime_` mỗi 5 phút. Trigger này giúp giảm cold start khi dùng `/dev` hoặc Web App thật trong giai đoạn vận hành/debug; có thể kiểm tra bằng `getWarmupTriggerStatus` và xoá bằng `removeWarmupTriggers`. Các alias có hậu tố `_` vẫn được giữ cho trigger/internal compatibility nhưng thường không hiện trong function picker.
+
+`bootstrap:default` chỉ còn là fallback kỹ thuật cho test tenant/debug:
 
 ```bash
 npm run bootstrap:default
 ```
 
-Lệnh này chạy function owner-only `installDefaultTenant_` qua clasp để tạo Drive folder, các Spreadsheet dữ liệu, runtime config và tài khoản admin tạm `admin/admin123`. Nếu `clasp run` báo project chưa có API executable deployment, mở Apps Script editor bằng `npx clasp open-script`, chọn function `installDefaultTenant_`, bấm Run và duyệt quyền Google. Sau khi bootstrap xong, mở Web App URL và đăng nhập.
+Lệnh này chạy function owner-only `installDefaultTenant_` qua clasp để tạo dữ liệu test và tài khoản `admin/admin123`. Không dùng lệnh này làm luồng bàn giao chuẩn cho khách.

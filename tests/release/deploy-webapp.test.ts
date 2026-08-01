@@ -27,6 +27,21 @@ describe('deploy webapp tooling', () => {
     });
   });
 
+  it('declares explicit OAuth scopes required by first-run setup and runtime storage', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(repositoryRoot, 'apps-script/appsscript.json'), 'utf8'),
+    ) as {
+      oauthScopes?: string[];
+    };
+
+    expect(manifest.oauthScopes).toEqual([
+      'https://www.googleapis.com/auth/script.storage',
+      'https://www.googleapis.com/auth/script.scriptapp',
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/spreadsheets',
+    ]);
+  });
+
   it('builds clasp deploy args for a new deployment and an existing deployment', () => {
     expect(buildClaspDeployArgs({ description: 'sales-management test' })).toEqual([
       'clasp',
@@ -86,5 +101,43 @@ describe('deploy webapp tooling', () => {
 
     expect(buildScript).toContain('function installDefaultTenant_(request)');
     expect(buildScript).toContain('SalesManagement.installDefaultTenantForAppsScript_(request || {})');
+  });
+
+  it('exposes a harmless public authorization helper for newly added setup scopes', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript).toContain('function authorizeSetupScopes()');
+    expect(buildScript).toContain('SalesManagement.authorizeSetupScopesForAppsScript_()');
+  });
+
+  it('exposes owner-managed runtime warm-up helpers in the Apps Script artifact', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript).toContain('function warmRuntime()');
+    expect(buildScript).toContain('function installWarmupTrigger()');
+    expect(buildScript).toContain('function removeWarmupTriggers()');
+    expect(buildScript).toContain('function getWarmupTriggerStatus()');
+    expect(buildScript).toContain('function warmRuntime_()');
+    expect(buildScript).toContain('SalesManagement.warmRuntimeForAppsScript_()');
+    expect(buildScript).toContain('function installWarmupTrigger_()');
+    expect(buildScript).toContain('SalesManagement.installWarmupTriggerForAppsScript_()');
+    expect(buildScript).toContain('function removeWarmupTriggers_()');
+    expect(buildScript).toContain('SalesManagement.removeWarmupTriggersForAppsScript_()');
+    expect(buildScript).toContain('function getWarmupTriggerStatus_()');
+    expect(buildScript).toContain('SalesManagement.getWarmupTriggerStatusForAppsScript_()');
+  });
+
+  it('places Apps Script entrypoint wrappers before the bundled code so the editor function picker can detect them', () => {
+    const buildScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/build.mjs'), 'utf8');
+
+    expect(buildScript.indexOf('function authorizeSetupScopes()')).toBeLessThan(
+      buildScript.indexOf('await build({'),
+    );
+  });
+
+  it('force-pushes the artifact before creating a versioned Web App deployment', () => {
+    const deployScript = fs.readFileSync(path.join(repositoryRoot, 'scripts/deploy-webapp.mjs'), 'utf8');
+
+    expect(deployScript).toContain("'clasp', 'push', '--force'");
   });
 });

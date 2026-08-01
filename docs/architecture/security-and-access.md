@@ -10,9 +10,9 @@ Google identity không được dùng để suy ra actor ứng dụng. `loginId`
 
 ## 2. Credential và session
 
-- User business profile lưu tại Core Data, nhưng credential verifier không lưu trong Spreadsheet/source/log/export. Mỗi credential dùng PBKDF2 hash với salt riêng; verifier và pepper nằm trong Script Properties theo key user, có capacity guard.
+- User business profile lưu tại Core Data, nhưng credential verifier không lưu trong Spreadsheet/source/log/export. Mỗi credential dùng verifier `hmac-sha256-v1` với salt riêng từng user; tenant credential pepper nằm trong Script Properties và không xuất hiện trong Sheet, source, log hoặc export.
 - Mật khẩu tạm admin được sinh/cấp một lần trong bootstrap, buộc đổi khi login thành công đầu tiên và không persisted ở dạng plaintext.
-- Session token là opaque random secret; browser chỉ giữ trong `sessionStorage`/memory, server chỉ lưu fingerprint/hash, user ID, issued time, idle expiry, absolute expiry, auth version và revoke status.
+- Session token là opaque random secret; browser chỉ giữ trong `sessionStorage`/memory, server chỉ lưu HMAC fingerprint theo tenant session pepper, user ID, issued time, idle expiry, absolute expiry, auth version và revoke status.
 - Session idle tối đa 1 giờ và absolute lifetime 8 giờ. Bất cứ reset password, disable user hoặc thay đổi role/scope nào đều tăng auth version và revoke session hiện có.
 - Login sai năm lần liên tiếp khóa account 15 phút. Login, lock, reset, revoke và bất thường auth đều audit; log không chứa password/token.
 
@@ -30,4 +30,4 @@ Data spreadsheets/Drive folder không chia quyền edit cho nhân viên ứng d�
 
 React không render raw HTML không kiểm soát; API validate schema server-side và error mapping không trả stack trace, raw Google error, resource ID nhạy cảm hoặc dữ liệu ngoài scope. Audit/telemetry sanitize trước khi persist.
 
-Login và API nhạy cảm có rate limiting theo login/session và retry policy rõ ràng. Rate limiting không dựa vào IP vì public Apps Script Web App không cung cấp một IP client đáng tin cậy cho nghiệp vụ.
+Login có rate limiting theo `loginId` trước bước đọc user/credential để giảm chi phí brute-force trên Apps Script. API nhạy cảm có rate limiting theo login/session và retry policy rõ ràng. Rate limiting không dựa vào IP vì public Apps Script Web App không cung cấp một IP client đáng tin cậy cho nghiệp vụ.

@@ -54,7 +54,10 @@ export function createReportingService(deps: ReportingServiceDependencies): Repo
         dateBucket: input.request.dateRange.to,
       });
       if (projection === undefined) {
-        return failure('INVALID_INPUT', 'Dashboard projection chưa sẵn sàng cho phạm vi này.');
+        return failure(
+          'DASHBOARD_NOT_READY',
+          'Dashboard chưa có dữ liệu tổng hợp cho phạm vi này. Vui lòng thử lại sau khi hệ thống tạo projection.',
+        );
       }
 
       const hasSensitivePermission = input.actor.actions.includes('reporting.sensitive.view');

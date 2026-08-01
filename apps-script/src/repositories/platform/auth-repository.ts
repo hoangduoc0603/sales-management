@@ -1,5 +1,6 @@
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from './sheet-record-repository';
 
 export interface UserAccountRecord {
@@ -32,6 +33,7 @@ export interface SessionRecord {
 export interface AuthRepository {
   findUserByLoginId(loginId: string): UserAccountRecord | undefined;
   findUserById(userId: string): UserAccountRecord | undefined;
+  findUserProfileById?(userId: string): UserAccountRecord | undefined;
   saveUser(user: UserAccountRecord): void;
   saveSession(session: SessionRecord): void;
   findSessionByFingerprint(tokenFingerprint: string): SessionRecord | undefined;
@@ -47,6 +49,8 @@ export interface SheetAuthRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
   credentialVerifierStore: CredentialVerifierStore;
+  cacheStore?: PlatformCacheStore;
+  userProfileCacheTtlSeconds?: number;
 }
 
 export function toActorContext(user: UserAccountRecord): ActorContextDTO {
@@ -76,6 +80,9 @@ export function createInMemoryAuthRepository(seedUsers: readonly UserAccountReco
     findUserById(userId) {
       return usersById.get(userId);
     },
+    findUserProfileById(userId) {
+      return usersById.get(userId);
+    },
     saveUser(user) {
       usersById.set(user.userId, { ...user });
     },
@@ -94,24 +101,42 @@ export function createInMemoryAuthRepository(seedUsers: readonly UserAccountReco
 export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies): AuthRepository {
   const userTable = findTable(deps.tableDefinitions, 'UserAccount');
   const sessionTable = findTable(deps.tableDefinitions, 'Session');
-
-  function listLatestUsers(): UserAccountRecord[] {
-    return latestRows(readRows(deps.gateway, userTable), 'userId').map((row) =>
-      userFromRow(row, deps.credentialVerifierStore),
-    );
-  }
-
-  function listLatestSessions(): SessionRecord[] {
-    return latestRows(readRows(deps.gateway, sessionTable), 'sessionId').map(sessionFromRow);
-  }
+  const cacheTtlSeconds = deps.userProfileCacheTtlSeconds ?? 21600;
 
   return {
     findUserByLoginId(loginId) {
       const normalized = normalizeLoginId(loginId);
-      return listLatestUsers().find((user) => normalizeLoginId(user.loginId) === normalized);
+      const cached = readCachedUserProfile(deps.cacheStore, userLoginCacheKey(normalized));
+      if (cached !== undefined && normalizeLoginId(cached.loginId) === normalized) {
+        return attachVerifier(cached, deps.credentialVerifierStore);
+      }
+
+      return latestRows(readRowsByColumn(deps.gateway, userTable, 'loginIdNormalized', normalized), 'userId')
+        .map((row) => userFromRow(row, deps.credentialVerifierStore))
+        .map((user) => cacheUserProfile(deps.cacheStore, user, cacheTtlSeconds))
+        .find((user) => normalizeLoginId(user.loginId) === normalized);
     },
     findUserById(userId) {
-      return listLatestUsers().find((user) => user.userId === userId);
+      const cached = readCachedUserProfile(deps.cacheStore, userIdCacheKey(userId));
+      if (cached !== undefined && cached.userId === userId) {
+        return attachVerifier(cached, deps.credentialVerifierStore);
+      }
+
+      return latestRows(readRowsByColumn(deps.gateway, userTable, 'userId', userId), 'userId')
+        .map((row) => userFromRow(row, deps.credentialVerifierStore))
+        .map((user) => cacheUserProfile(deps.cacheStore, user, cacheTtlSeconds))
+        .find((user) => user.userId === userId);
+    },
+    findUserProfileById(userId) {
+      const cached = readCachedUserProfile(deps.cacheStore, userIdCacheKey(userId));
+      if (cached !== undefined && cached.userId === userId) {
+        return cached;
+      }
+
+      return latestRows(readRowsByColumn(deps.gateway, userTable, 'userId', userId), 'userId')
+        .map((row) => userFromRow(row))
+        .map((user) => cacheUserProfile(deps.cacheStore, user, cacheTtlSeconds))
+        .find((user) => user.userId === userId);
     },
     saveUser(user) {
       deps.credentialVerifierStore.saveVerifier(user.userId, user.passwordVerifier);
@@ -122,18 +147,23 @@ export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies)
         recordId: user.userId,
         row: userToRow(user),
       });
+      cacheUserProfile(deps.cacheStore, user, cacheTtlSeconds);
     },
     saveSession(session) {
-      appendVersionedRow({
+      appendNewVersionedRow({
         gateway: deps.gateway,
         table: sessionTable,
-        idField: 'sessionId',
         recordId: session.sessionId,
         row: sessionToRow(session),
       });
     },
     findSessionByFingerprint(tokenFingerprint) {
-      return listLatestSessions().find((session) => session.tokenFingerprint === tokenFingerprint);
+      return latestRows(
+        readRowsByColumn(deps.gateway, sessionTable, 'tokenFingerprint', tokenFingerprint),
+        'sessionId',
+      )
+        .map(sessionFromRow)
+        .find((session) => session.tokenFingerprint === tokenFingerprint);
     },
     saveUpdatedSession(session) {
       appendVersionedRow({
@@ -144,6 +174,59 @@ export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies)
         row: sessionToRow(session),
       });
     },
+  };
+}
+
+function userLoginCacheKey(normalizedLoginId: string): string {
+  return `salesManagement.auth.user.login.${normalizedLoginId}`;
+}
+
+function userIdCacheKey(userId: string): string {
+  return `salesManagement.auth.user.id.${userId}`;
+}
+
+function cacheUserProfile(
+  cacheStore: PlatformCacheStore | undefined,
+  user: UserAccountRecord,
+  ttlSeconds: number,
+): UserAccountRecord {
+  if (cacheStore === undefined) return user;
+  const profile = userWithoutVerifier(user);
+  const payload = JSON.stringify(profile);
+  cacheStore.put(userLoginCacheKey(normalizeLoginId(user.loginId)), payload, ttlSeconds);
+  cacheStore.put(userIdCacheKey(user.userId), payload, ttlSeconds);
+  return user;
+}
+
+function readCachedUserProfile(
+  cacheStore: PlatformCacheStore | undefined,
+  key: string,
+): UserAccountRecord | undefined {
+  if (cacheStore === undefined) return undefined;
+  const raw = cacheStore.get(key);
+  if (raw === undefined) return undefined;
+  try {
+    return userWithoutVerifier(JSON.parse(raw) as UserAccountRecord);
+  } catch {
+    cacheStore.remove(key);
+    return undefined;
+  }
+}
+
+function attachVerifier(user: UserAccountRecord, credentialVerifierStore: CredentialVerifierStore): UserAccountRecord {
+  return {
+    ...user,
+    passwordVerifier: credentialVerifierStore.getVerifier(user.userId) ?? '',
+  };
+}
+
+function userWithoutVerifier(user: UserAccountRecord): UserAccountRecord {
+  return {
+    ...user,
+    passwordVerifier: '',
+    actions: [...user.actions],
+    branchIds: [...user.branchIds],
+    warehouseIds: [...user.warehouseIds],
   };
 }
 
@@ -202,7 +285,7 @@ function userToRow(user: UserAccountRecord): Omit<UserAccountSheetRow, 'id' | 's
 
 function userFromRow(
   row: VersionedSheetRow,
-  credentialVerifierStore: CredentialVerifierStore,
+  credentialVerifierStore?: CredentialVerifierStore,
 ): UserAccountRecord {
   const user = row as UserAccountSheetRow;
   return {
@@ -213,7 +296,7 @@ function userFromRow(
     authVersion: numberValue(user.authVersion),
     disabled: booleanValue(user.disabled),
     passwordChangeRequired: booleanValue(user.passwordChangeRequired),
-    passwordVerifier: credentialVerifierStore.getVerifier(user.userId) ?? '',
+    passwordVerifier: credentialVerifierStore?.getVerifier(user.userId) ?? '',
     failedLoginCount: numberValue(user.failedLoginCount),
     lockedUntil: stringOptional(user.lockedUntil),
     actions: arrayValue(user.actionsJson),
@@ -258,7 +341,7 @@ function appendVersionedRow(input: {
   recordId: string;
   row: Record<string, unknown>;
 }): void {
-  const rows = readRows(input.gateway, input.table);
+  const rows = readRowsByColumn(input.gateway, input.table, input.idField, input.recordId);
   const nextVersion =
     rows
       .filter((row) => String(row[input.idField] ?? '') === input.recordId)
@@ -277,6 +360,25 @@ function appendVersionedRow(input: {
   });
 }
 
+function appendNewVersionedRow(input: {
+  gateway: AppendOnlySheetRecordGateway;
+  table: TableDefinitionDTO;
+  recordId: string;
+  row: Record<string, unknown>;
+}): void {
+  input.gateway.appendRows({
+    table: input.table,
+    rows: [
+      {
+        ...deepClone(input.row),
+        id: `${input.recordId}:v1`,
+        schemaVersion: input.table.schemaVersion,
+        recordVersion: 1,
+      },
+    ],
+  });
+}
+
 function latestRows(rows: readonly VersionedSheetRow[], idField: string): VersionedSheetRow[] {
   const latestById = new Map<string, VersionedSheetRow>();
   for (const row of rows) {
@@ -290,8 +392,14 @@ function latestRows(rows: readonly VersionedSheetRow[], idField: string): Versio
   return [...latestById.values()].map(deepClone);
 }
 
-function readRows(gateway: AppendOnlySheetRecordGateway, table: TableDefinitionDTO): VersionedSheetRow[] {
-  return gateway.readTable({ table }).map((row) => deepClone(row) as VersionedSheetRow);
+function readRowsByColumn(
+  gateway: AppendOnlySheetRecordGateway,
+  table: TableDefinitionDTO,
+  columnName: string,
+  value: string,
+): VersionedSheetRow[] {
+  const rows = gateway.findRowsByColumn?.({ table, columnName, value }) ?? gateway.readTable({ table });
+  return rows.map((row) => deepClone(row) as VersionedSheetRow);
 }
 
 function findTable(definitions: readonly TableDefinitionDTO[], tableName: string): TableDefinitionDTO {
