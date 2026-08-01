@@ -76,10 +76,20 @@ describe('createApiClient', () => {
 
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toBe('[api] platform.auth.login req-login');
-    expect(JSON.stringify(log.mock.calls[0])).toContain('"clientDurationMs":0');
-    expect(JSON.stringify(log.mock.calls[0])).toContain('<redacted>');
-    expect(JSON.stringify(log.mock.calls[0])).not.toContain('raw-session-token');
-    expect(JSON.stringify(log.mock.calls[0])).not.toContain('secret');
+    expect(typeof log.mock.calls[0][1]).toBe('string');
+    const payload = JSON.parse(log.mock.calls[0][1] as string) as unknown;
+    expect(payload).toMatchObject({
+      clientDurationMs: 0,
+      response: {
+        ok: true,
+        data: {
+          sessionToken: '<redacted>',
+          nested: { token: '<redacted>', value: 1 },
+        },
+      },
+    });
+    expect(log.mock.calls[0][1]).not.toContain('raw-session-token');
+    expect(log.mock.calls[0][1]).not.toContain('secret');
   });
 
   it('default debug logger dùng console.warn để hiện rõ ở Chrome Default levels', async () => {

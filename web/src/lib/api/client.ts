@@ -65,7 +65,7 @@ export function createApiClient(invoker: ApiInvoker, options: ApiClientOptions =
         };
         appendApiDebugLog(debugEntry);
         const log = options.debug?.log ?? console.warn.bind(console);
-        log(`[api] ${request.operation} ${request.requestId}`, debugEntry);
+        log(`[api] ${request.operation} ${request.requestId}`, JSON.stringify(debugEntry));
       }
       return response;
     },

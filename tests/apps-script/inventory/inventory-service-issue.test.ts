@@ -51,6 +51,28 @@ describe('InventoryService issueForSale', () => {
     });
   });
 
+  it('checks sellable availability by aggregated requested quantity per variant', () => {
+    const { service } = createService();
+    service.receive(receiveInput({ quantityMilli: 3_000, unitCostVnd: 100_000 }));
+
+    expect(
+      service.checkAvailability({
+        warehouseId: 'warehouse-1',
+        lines: [
+          { lineId: 'line-1', variantId: 'variant-1', quantityMilli: 2_000 },
+          { lineId: 'line-2', variantId: 'variant-1', quantityMilli: 2_000 },
+        ],
+      }),
+    ).toEqual([
+      {
+        variantId: 'variant-1',
+        lineIds: ['line-1', 'line-2'],
+        requestedMilli: 4_000,
+        availableMilli: 3_000,
+      },
+    ]);
+  });
+
   it('requires temporary cost when approved negative stock has no valid cost', () => {
     const { service } = createService();
 

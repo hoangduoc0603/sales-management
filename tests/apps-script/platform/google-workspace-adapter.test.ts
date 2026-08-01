@@ -193,6 +193,57 @@ describe('Google Workspace adapter seams', () => {
     ]);
   });
 
+  it('defers multiple append calls and flushes them through one Advanced Sheets batch update', () => {
+    const sheet = new FakeSheet('UserAccount', [['id', 'status', 'detailsJson']], {
+      supportsRangeLookup: true,
+    });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const sheetsAdvancedService = new FakeSheetsAdvancedService();
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      sheetsAdvancedService,
+      deferAppends: true,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-2', status: 'Active', detailsJson: { displayName: 'Admin' } }],
+    });
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-3', status: 'Disabled', detailsJson: { displayName: 'Disabled' } }],
+    });
+
+    expect(sheet.appendedRows).toEqual([]);
+
+    gateway.flushPendingAppends?.();
+
+    expect(sheetsAdvancedService.batchUpdates).toEqual([
+      {
+        spreadsheetId: 'spreadsheet-core',
+        resource: {
+          valueInputOption: 'RAW',
+          data: [
+            {
+              range: "'UserAccount'!A2:C3",
+              majorDimension: 'ROWS',
+              values: [
+                ['user-2', 'Active', '{"displayName":"Admin"}'],
+                ['user-3', 'Disabled', '{"displayName":"Disabled"}'],
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('creates private tenant Drive folders without public URLs', () => {
     const driveApp = new FakeDriveApp();
     const gateway = createDriveGateway({ driveApp });
@@ -382,6 +433,18 @@ class FakeSheet {
     this.appendedRows.push(row);
     this.values.push(row);
   }
+}
+
+class FakeSheetsAdvancedService {
+  readonly batchUpdates: Array<{ resource: unknown; spreadsheetId: string }> = [];
+
+  readonly Spreadsheets = {
+    Values: {
+      batchUpdate: (resource: unknown, spreadsheetId: string) => {
+        this.batchUpdates.push({ resource, spreadsheetId });
+      },
+    },
+  };
 }
 
 class FakeDriveApp {

@@ -186,6 +186,61 @@ describe('SheetAuthRepository', () => {
     ]);
   });
 
+  it('caches session metadata for repeated authenticated API calls without reading Session sheet', () => {
+    const gateway = new FakeSheetGateway();
+    const cacheStore = new FakePlatformCacheStore();
+    const repository = createSheetAuthRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      credentialVerifierStore: new FakeCredentialVerifierStore(),
+      cacheStore,
+    });
+
+    repository.saveSession({
+      sessionId: 'session-hot',
+      tokenFingerprint: 'fingerprint-hot',
+      userId: 'user-admin',
+      authVersion: 1,
+      issuedAt: '2026-07-27T09:00:00.000Z',
+      idleExpiresAt: '2026-07-27T10:00:00.000Z',
+      absoluteExpiresAt: '2026-07-27T17:00:00.000Z',
+    });
+
+    gateway.readRequests = [];
+    gateway.findRequests = [];
+
+    expect(repository.findSessionByFingerprint('fingerprint-hot')).toMatchObject({
+      sessionId: 'session-hot',
+      userId: 'user-admin',
+      authVersion: 1,
+    });
+
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([]);
+    expect(JSON.stringify(cacheStore.dump())).not.toContain('session-token');
+
+    repository.saveUpdatedSession({
+      sessionId: 'session-hot',
+      tokenFingerprint: 'fingerprint-hot',
+      userId: 'user-admin',
+      authVersion: 1,
+      issuedAt: '2026-07-27T09:00:00.000Z',
+      idleExpiresAt: '2026-07-27T10:30:00.000Z',
+      absoluteExpiresAt: '2026-07-27T17:00:00.000Z',
+      revokedAt: '2026-07-27T09:30:00.000Z',
+    });
+
+    gateway.readRequests = [];
+    gateway.findRequests = [];
+
+    expect(repository.findSessionByFingerprint('fingerprint-hot')).toMatchObject({
+      sessionId: 'session-hot',
+      revokedAt: '2026-07-27T09:30:00.000Z',
+    });
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([]);
+  });
+
   it('caches non-secret user profile for repeated login lookup while reading verifier from secure store', () => {
     const gateway = new FakeSheetGateway();
     const credentialStore = new FakeCredentialVerifierStore();

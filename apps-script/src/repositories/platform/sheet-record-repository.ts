@@ -13,6 +13,7 @@ export interface AppendOnlySheetRecordGateway {
     partitionKey?: string;
     rows: readonly Record<string, unknown>[];
   }): { appendedRowCount: number };
+  flushPendingAppends?(): void;
 }
 
 export interface AppendOnlySheetRecordRepository<TRecord extends Record<string, unknown>> {

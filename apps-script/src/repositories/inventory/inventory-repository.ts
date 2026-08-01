@@ -10,6 +10,7 @@ import {
 
 export interface InventoryRepository {
   appendMovement(movement: InventoryMovementDTO): void;
+  appendNewMovement(movement: InventoryMovementDTO): void;
   listMovements(): InventoryMovementDTO[];
   getBalance(warehouseId: string, variantId: string): InventoryBalanceDTO | undefined;
   listBalances(warehouseId?: string): InventoryBalanceDTO[];
@@ -26,6 +27,9 @@ export function createInMemoryInventoryRepository(): InventoryRepository {
         throw new Error(`InventoryMovement is append-only: duplicate ${movement.movementId}.`);
       }
 
+      movements.set(movement.movementId, clone(movement));
+    },
+    appendNewMovement(movement) {
       movements.set(movement.movementId, clone(movement));
     },
     listMovements() {
@@ -61,12 +65,20 @@ export interface SheetInventoryRepositoryDependencies {
 }
 
 export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDependencies): InventoryRepository {
+  const movementTable = findTable(deps.tableDefinitions, 'InventoryMovement');
   const movementRepository = createAppendOnlySheetRecordRepository<InventoryMovementSheetRow>({
     gateway: deps.gateway,
-    table: findTable(deps.tableDefinitions, 'InventoryMovement'),
+    table: movementTable,
     partitionKey: deps.transactionPartitionKey,
   });
   const balanceTable = findTable(deps.tableDefinitions, 'InventoryBalance');
+  const latestBalanceVersionCache = new Map<string, number>();
+
+  function rememberLatestBalanceVersion(row: InventoryBalanceSheetRow): void {
+    const version = getRecordVersion(row);
+    const current = latestBalanceVersionCache.get(row.balanceId) ?? 0;
+    if (version > current) latestBalanceVersionCache.set(row.balanceId, version);
+  }
 
   function readBalanceRows(): InventoryBalanceSheetRow[] {
     return deps.gateway.readTable({ table: balanceTable }).map((row) => deepClone(row) as InventoryBalanceSheetRow);
@@ -94,12 +106,22 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
         latestByBalanceId.set(row.balanceId, row);
       }
     }
-    return [...latestByBalanceId.values()].map(fromBalanceRow);
+    return [...latestByBalanceId.values()].map((row) => {
+      rememberLatestBalanceVersion(row);
+      return fromBalanceRow(row);
+    });
   }
 
   return {
     appendMovement(movement) {
       movementRepository.append(toMovementRow(movement));
+    },
+    appendNewMovement(movement) {
+      deps.gateway.appendRows({
+        table: movementTable,
+        partitionKey: deps.transactionPartitionKey,
+        rows: [toMovementRow(movement)],
+      });
     },
     listMovements() {
       return movementRepository.list().map(fromMovementRow);
@@ -110,18 +132,24 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
         (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
         undefined,
       );
-      if (latest !== undefined) return fromBalanceRow(latest);
+      if (latest !== undefined) {
+        rememberLatestBalanceVersion(latest);
+        return fromBalanceRow(latest);
+      }
       return listLatestBalances(warehouseId).find((balance) => balance.variantId === variantId);
     },
     listBalances(warehouseId) {
       return listLatestBalances(warehouseId);
     },
     applyProjection(balance) {
+      const cachedLatestVersion = latestBalanceVersionCache.get(balance.balanceId);
       const nextVersion =
-        findBalanceRowsByColumn('balanceId', balance.balanceId).reduce(
-          (max, row) => Math.max(max, getRecordVersion(row)),
-          0,
-        ) + 1;
+        cachedLatestVersion !== undefined
+          ? cachedLatestVersion + 1
+          : findBalanceRowsByColumn('balanceId', balance.balanceId).reduce(
+              (max, row) => Math.max(max, getRecordVersion(row)),
+              0,
+            ) + 1;
       deps.gateway.appendRows({
         table: balanceTable,
         rows: [
@@ -133,6 +161,7 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
           },
         ],
       });
+      latestBalanceVersionCache.set(balance.balanceId, nextVersion);
     },
   };
 }

@@ -4,10 +4,15 @@
 
 - Status: `Approved`
 - Ngày chốt: 2026-07-26
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `app-shell-dashboard.html`
 - Handoff trong Open Design: `brand-spec.md`
+
+## Hash/state cần verify
+
+- State chính: overview/dashboard mặc định.
+- Panel/state bắt buộc kiểm khi implement: action queue, manual orders, collections, restricted/scope invalid/stale/retry và command-in-progress nếu xuất hiện trong artifact hoặc SRS.
 
 ## Tài liệu nghiệp vụ/kỹ thuật liên quan
 

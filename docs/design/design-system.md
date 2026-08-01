@@ -2,7 +2,7 @@
 
 ## Nguồn chuẩn
 
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209`
 - Canonical references trong Open Design:
   - `DESIGN.md`
@@ -14,6 +14,7 @@
 ## Nguyên tắc áp dụng
 
 - Dùng token Cenio Core làm nguồn chuẩn cho màu, typography, spacing, radius, shadow và focus state.
+- Cenio Core v0.7 theo hướng TailAdmin-inspired: dense dashboard, border/subtle shadow, icon button rõ, custom listbox, theme light/dark và primary indigo Cenio.
 - Không tạo palette, font, radius, shadow hoặc spacing system cục bộ nếu Cenio Core đã có token tương ứng.
 - Component phải ưu tiên mapping sang shadcn/ui/Tailwind nhưng visual output phải bám theo Cenio Core.
 - Tất cả màn hình nghiệp vụ phải hỗ trợ light/dark theme.

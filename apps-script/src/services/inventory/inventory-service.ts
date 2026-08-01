@@ -30,6 +30,22 @@ type InventoryServiceResult<T> =
       };
     };
 
+export interface InventoryAvailabilityCheckInput {
+  warehouseId: string;
+  lines: readonly {
+    lineId?: string;
+    variantId: string;
+    quantityMilli: number;
+  }[];
+}
+
+export interface InventoryAvailabilityConflict {
+  variantId: string;
+  lineIds: readonly string[];
+  requestedMilli: number;
+  availableMilli: number;
+}
+
 export interface InventoryService {
   receive(input: InventoryReceiveRequest): InventoryServiceResult<InventoryMovementResponse>;
   purchaseReturn(input: InventoryPurchaseReturnRequest): InventoryServiceResult<InventoryMovementResponse>;
@@ -42,6 +58,7 @@ export interface InventoryService {
   restockReturn(input: InventoryReturnRestockRequest): InventoryServiceResult<InventoryMovementResponse>;
   scrapReturn(input: InventoryReturnScrapRequest): InventoryServiceResult<InventoryMovementResponse>;
   adjustInventoryValue(input: InventoryValueAdjustmentRequest): InventoryServiceResult<InventoryMovementResponse>;
+  checkAvailability(input: InventoryAvailabilityCheckInput): readonly InventoryAvailabilityConflict[];
   getAverageUnitCostVnd(warehouseId: string, variantId: string): number;
   getBalanceSummary(input: InventoryBalanceSummaryRequest): InventoryBalanceSummaryResponse;
 }
@@ -72,7 +89,7 @@ export function createInventoryService(deps: InventoryServiceDependencies): Inve
     movement: InventoryMovementDTO,
     balance: InventoryBalanceDTO,
   ): InventoryMovementResponse => {
-    deps.repository.appendMovement(movement);
+    deps.repository.appendNewMovement(movement);
     deps.repository.applyProjection(balance);
     return {
       movement,
@@ -81,6 +98,29 @@ export function createInventoryService(deps: InventoryServiceDependencies): Inve
   };
 
   return {
+    checkAvailability(input) {
+      const requiredByVariantId = new Map<string, { quantityMilli: number; lineIds: string[] }>();
+      for (const line of input.lines) {
+        const current = requiredByVariantId.get(line.variantId) ?? { quantityMilli: 0, lineIds: [] };
+        current.quantityMilli += line.quantityMilli;
+        if (line.lineId !== undefined) current.lineIds.push(line.lineId);
+        requiredByVariantId.set(line.variantId, current);
+      }
+
+      const conflicts: InventoryAvailabilityConflict[] = [];
+      for (const [variantId, required] of requiredByVariantId.entries()) {
+        const availableMilli = deps.repository.getBalance(input.warehouseId, variantId)?.availableMilli ?? 0;
+        if (availableMilli < required.quantityMilli) {
+          conflicts.push({
+            variantId,
+            lineIds: required.lineIds,
+            requestedMilli: required.quantityMilli,
+            availableMilli,
+          });
+        }
+      }
+      return conflicts;
+    },
     receive(input) {
       const current = getOrCreateBalance(input.warehouseId, input.variantId);
       const totalCostVnd = calculateLineValue(input.quantityMilli, input.unitCostVnd);

@@ -90,6 +90,7 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
     catalogRepository: createSheetCatalogRepository({
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
+      cacheStore: deps.platformCacheStore,
     }),
     customerRepository: createSheetCustomerRepository({
       gateway: deps.sheetGateway,

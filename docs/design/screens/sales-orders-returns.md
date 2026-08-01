@@ -4,9 +4,17 @@
 
 - Status: `Approved` — đã được người dùng duyệt, được dùng làm nguồn triển khai UI.
 - Ngày thiết kế: 2026-07-26
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact: `sales-orders-returns.html`
+
+## Hash/state cần verify
+
+- `#orders`
+- `#manual`
+- `#returns`
+- `#warranty`
+- `#posflow`
 
 ## Phạm vi artifact
 
@@ -21,7 +29,7 @@
 
 - Đọc SRS `sales-orders.md`, `customers-promotions.md`, `inventory.md`, `finance.md`; LLD `sales-pos-returns.md`, `catalog-crm.md`, `inventory.md`, `finance-shifts.md` và ADR được POS handoff dẫn chiếu.
 - Không sửa trực tiếp chứng từ `Completed`/`Shipped`, Payment hay ledger; return/reversal là chứng từ đối ứng.
-- Không dùng native `<select>`; dùng custom listbox theo Cenio Core. Theme icon ở header và các cặp semantic token light/dark phải giữ đúng contract v0.6.
+- Không dùng native `<select>`; dùng custom listbox theo Cenio Core. Theme icon ở header và các cặp semantic token light/dark phải giữ đúng contract v0.7.
 - Loading command giữ nhãn action và chỉ hiển thị icon loading. UI không được suy diễn quyền, scope, tồn, giá, promotion hay kết quả command.
 - Không thêm kênh/integration ngoài phạm vi; nguồn đơn nhập tay chỉ gồm Điện thoại, Tin nhắn khách hàng, Khách đặt trước và Nhân viên tạo.
 

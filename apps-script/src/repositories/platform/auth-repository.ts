@@ -51,6 +51,7 @@ export interface SheetAuthRepositoryDependencies {
   credentialVerifierStore: CredentialVerifierStore;
   cacheStore?: PlatformCacheStore;
   userProfileCacheTtlSeconds?: number;
+  sessionCacheTtlSeconds?: number;
 }
 
 export function toActorContext(user: UserAccountRecord): ActorContextDTO {
@@ -102,6 +103,7 @@ export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies)
   const userTable = findTable(deps.tableDefinitions, 'UserAccount');
   const sessionTable = findTable(deps.tableDefinitions, 'Session');
   const cacheTtlSeconds = deps.userProfileCacheTtlSeconds ?? 21600;
+  const sessionCacheTtlSeconds = deps.sessionCacheTtlSeconds ?? 21600;
 
   return {
     findUserByLoginId(loginId) {
@@ -156,13 +158,20 @@ export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies)
         recordId: session.sessionId,
         row: sessionToRow(session),
       });
+      cacheSession(deps.cacheStore, session, sessionCacheTtlSeconds);
     },
     findSessionByFingerprint(tokenFingerprint) {
+      const cached = readCachedSession(deps.cacheStore, sessionCacheKey(tokenFingerprint));
+      if (cached !== undefined && cached.tokenFingerprint === tokenFingerprint) {
+        return cached;
+      }
+
       return latestRows(
         readRowsByColumn(deps.gateway, sessionTable, 'tokenFingerprint', tokenFingerprint),
         'sessionId',
       )
         .map(sessionFromRow)
+        .map((session) => cacheSession(deps.cacheStore, session, sessionCacheTtlSeconds))
         .find((session) => session.tokenFingerprint === tokenFingerprint);
     },
     saveUpdatedSession(session) {
@@ -173,6 +182,7 @@ export function createSheetAuthRepository(deps: SheetAuthRepositoryDependencies)
         recordId: session.sessionId,
         row: sessionToRow(session),
       });
+      cacheSession(deps.cacheStore, session, sessionCacheTtlSeconds);
     },
   };
 }
@@ -218,6 +228,39 @@ function attachVerifier(user: UserAccountRecord, credentialVerifierStore: Creden
     ...user,
     passwordVerifier: credentialVerifierStore.getVerifier(user.userId) ?? '',
   };
+}
+
+function sessionCacheKey(tokenFingerprint: string): string {
+  return `salesManagement.auth.session.${tokenFingerprint}`;
+}
+
+function cacheSession(
+  cacheStore: PlatformCacheStore | undefined,
+  session: SessionRecord,
+  ttlSeconds: number,
+): SessionRecord {
+  if (cacheStore === undefined) return session;
+  const payload = JSON.stringify(session);
+  cacheStore.put(sessionCacheKey(session.tokenFingerprint), payload, ttlSeconds);
+  return session;
+}
+
+function readCachedSession(
+  cacheStore: PlatformCacheStore | undefined,
+  key: string,
+): SessionRecord | undefined {
+  if (cacheStore === undefined) return undefined;
+  const raw = cacheStore.get(key);
+  if (raw === undefined) return undefined;
+  try {
+    const session = JSON.parse(raw) as SessionRecord;
+    return {
+      ...session,
+    };
+  } catch {
+    cacheStore.remove(key);
+    return undefined;
+  }
 }
 
 function userWithoutVerifier(user: UserAccountRecord): UserAccountRecord {

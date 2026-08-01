@@ -4,9 +4,15 @@
 
 - Status: `Approved` — đã được người dùng duyệt, được dùng làm nguồn triển khai UI.
 - Ngày thiết kế: 2026-07-26
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact: `inventory-purchasing.html`
+
+## Hash/state cần verify
+
+- `#inventory`
+- `#transfer`
+- `#purchase`
 
 ## Phạm vi artifact
 
@@ -18,7 +24,7 @@
 
 - Theo `SRS-INV-001..017`, `SRS-PUR-001..011`, `SRS-FIN-004..006` cùng LLD Inventory/Purchasing/Finance.
 - `InventoryMovement` và Cash/Payable ledger là bất biến; approval mới tạo movement/balance/payable. Không sửa trực tiếp số tồn, giá vốn hoặc công nợ.
-- Cost/payable chỉ render từ projection backend đã lọc quyền. Custom listbox, theme icon, semantic tokens Core v0.6 và loading icon-only theo rule chung.
+- Cost/payable chỉ render từ projection backend đã lọc quyền. Custom listbox, theme icon, semantic tokens Core v0.7 và loading icon-only theo rule chung.
 
 ## Kiểm tra thiết kế đã thực hiện
 

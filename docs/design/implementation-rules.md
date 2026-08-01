@@ -14,8 +14,22 @@ Tài liệu này quy định cách AI Agent triển khai UI từ design đã duy
 8. Xác nhận registry và handoff của màn hình đều là `Approved`; nếu không, không implement UI.
 9. Dùng `Open Design project` + `Artifact chính` trong registry để lấy artifact hiện hành qua Open Design.
 10. Mở `Local preview` của artifact để đối chiếu trực quan trước khi code và sau khi hoàn tất: layout, hierarchy, component behavior, state, responsive, light theme và dark theme.
+11. Sau khi code UI, chụp screenshot implementation ở desktop và các viewport/state handoff yêu cầu; đối chiếu ảnh với artifact/Local Preview trước khi báo hoàn tất.
 
 Không code UI chỉ từ screenshot. Local Preview là shortcut trên máy local, không phải định danh chuẩn. Nếu link local không mở được, lấy artifact bằng project + filename qua Open Design. Nếu cả artifact lẫn handoff không đủ để xác định thay đổi visual, dừng lại và nêu rõ khoảng trống; không tự suy diễn UI.
+
+## Quy tắc screenshot sau code
+
+- Screenshot sau code là bằng chứng QA bắt buộc, không phải source of truth.
+- Tối thiểu chụp state chính ở desktop. Nếu handoff có nhiều `Hash/state cần verify`, phải chụp hoặc kiểm trực quan các state đó; với màn responsive phải có thêm mobile.
+- Khi có khác biệt so với artifact, chỉ sửa implementation nếu artifact/handoff/SRS ủng hộ. Nếu phải đổi design, cập nhật Open Design + handoff/registry trước hoặc dừng để xin quyết định.
+- Không commit screenshot vào repo theo mặc định. Agent phải báo trong final các viewport/state đã kiểm và đường dẫn ảnh tạm nếu cần review nhanh.
+
+## Quy tắc hash/state handoff
+
+- Màn nhiều view/state phải ghi rõ `Hash/state cần verify` trong file handoff.
+- Agent code phải mở đúng hash/state từ artifact trước khi implement state tương ứng.
+- Nếu handoff thiếu hash/state cho luồng đang code, dừng và cập nhật handoff/design trước khi implement.
 
 ## Thứ tự ưu tiên khi có mâu thuẫn UI
 
@@ -53,6 +67,7 @@ Design handoff quyết định layout, hierarchy, visual treatment và component
 
 - [ ] Đúng màn hình/artifact `Approved` trong registry.
 - [ ] Đã lấy artifact theo `Open Design project` + `Artifact chính`, và đã đối chiếu Local Preview trước khi code.
+- [ ] Handoff có `Hash/state cần verify` hoặc danh sách state cần kiểm; đã mở đúng các state liên quan trên artifact.
 - [ ] Layout, hierarchy, nội dung chính và CTA bám theo handoff.
 - [ ] Light/dark theme hoạt động.
 - [ ] Không dùng native `<select>` nếu handoff yêu cầu custom select/listbox.
@@ -61,6 +76,7 @@ Design handoff quyết định layout, hierarchy, visual treatment và component
 - [ ] Report/dashboard hiển thị đúng metadata freshness và coverage từ backend; không ngụ ý có offline write/sync.
 - [ ] Không hiển thị dữ liệu sensitive nếu thiếu quyền.
 - [ ] Responsive desktop/tablet/mobile không vỡ layout.
+- [ ] Đã chụp screenshot implementation sau code ở desktop và các viewport/state handoff yêu cầu; đã đối chiếu với artifact/Local Preview.
 - [ ] Không thêm nguồn dữ liệu, kênh bán, tích hợp hoặc nội dung ngoài requirement.
 - [ ] Nếu thay đổi UI khác handoff, cập nhật handoff hoặc dừng để xin duyệt.
 - [ ] Đã đối chiếu implementation với artifact/Local Preview ở light và dark theme trước khi hoàn tất.

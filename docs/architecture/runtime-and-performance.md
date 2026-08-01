@@ -22,7 +22,7 @@ Browser dùng memory cache cho tab hiện tại và IndexedDB cho catalog/read m
 
 Cache client có key gồm installation, user, permission/auth version, app/schema version, scope và resource version. Cache cũ chỉ là stale read-only fallback; logout, auth/permission error hoặc deployment mới phải xóa namespace tương ứng.
 
-Apps Script `CacheService` dùng cache-aside cho config, permission summary ngắn hạn và master data ít đổi. Cache miss là trạng thái bình thường; cache không được làm một operation sai hoặc không dùng được. Ledger, command state và số dư quyết định checkout không được cache persistent.
+Apps Script `CacheService` dùng cache-aside cho config, permission summary ngắn hạn, session metadata đã fingerprint và master data ít đổi. Catalog master tables được cache theo table/schema version khi payload nằm dưới ngưỡng an toàn của CacheService; mọi mutation catalog phải invalidate table cache tương ứng. Session cache chỉ lưu token fingerprint, user/authVersion và expiry metadata; không lưu raw token, password hoặc verifier, và cache miss phải fallback Sheets. Cache miss hoặc payload quá lớn là trạng thái bình thường; cache không được làm một operation sai hoặc không dùng được. Ledger, command state và số dư quyết định checkout không được cache persistent.
 
 Khi Catalog/price/promotion thay đổi, mutation tăng resource version hoặc invalidate tag. Browser tải delta; không tải lại toàn bộ catalog nếu không cần. Server luôn revalidate ở `completeSale`; kết quả khác cached cart trả conflict chi tiết, không tự đổi giá.
 
@@ -41,7 +41,7 @@ Không mở Drive, sinh PDF, export, gửi notification, load catalog, refresh b
 
 ## 4. I/O, quota và worker
 
-Gateway batch read/write theo header mapping, chỉ đọc cột/row cần thiết và reuse spreadsheet/sheet handle trong một execution. Không xen kẽ read/write trong vòng lặp; không dùng Sheet formula, `IMPORTRANGE`, format hoặc pivot nặng để xử lý nghiệp vụ.
+Gateway batch read/write theo header mapping, chỉ đọc cột/row cần thiết và reuse spreadsheet/sheet handle trong một execution. Production write path ưu tiên defer append trong request và flush cuối request bằng Google Sheets Advanced Service `spreadsheets.values.batchUpdate` để gom nhiều range cùng spreadsheet vào một API call; khi advanced service không có thì fallback ghi đồng bộ bằng SpreadsheetApp. Nếu trong cùng request cần đọc Sheet thật trong khi còn pending append, gateway phải flush trước khi đọc để không trả dữ liệu cũ. Repository/service được phép dùng execution-local cache cho record/version vừa đọc để tránh lookup lại trước projection append trong cùng command. POS stock precheck phải aggregate quantity theo `variantId` trong giỏ và lookup đúng các balance liên quan; không đọc toàn bộ warehouse balance để kiểm tra một giỏ nhỏ. Không xen kẽ read/write trong vòng lặp; không dùng Sheet formula, `IMPORTRANGE`, format hoặc pivot nặng để xử lý nghiệp vụ.
 
 Worker có một scheduled trigger chung, `runId`, checkpoint, execution budget và retry có backoff/jitter. Worker chỉ làm backup, export lớn, archive, import batch, reconciliation, cleanup runtime và cảnh báo quota/capacity. Worker không complete POS hoặc tạo ledger cốt lõi thay command đồng bộ.
 

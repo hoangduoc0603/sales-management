@@ -221,6 +221,7 @@ export interface ApiCompositionDependencies {
   tenantId?: string;
   bootstrapOnStart?: boolean;
   seedDemoReadModels?: boolean;
+  afterInvoke?: () => void;
 }
 
 export function createApiComposition(clock: Clock) {
@@ -1012,6 +1013,7 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       registry,
       authenticate: (sessionToken) => actorFromSessionResult(sessionService.validateSession(sessionToken)),
       authorize: (actor, action) => authorizationService.requireAction(actor, action).ok,
+      afterInvoke: input.afterInvoke,
     }),
   };
 }

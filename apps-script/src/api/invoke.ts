@@ -15,6 +15,7 @@ export interface InvokeDependencies {
   registry?: OperationRegistry;
   authenticate?: (sessionToken: string) => ActorContextDTO | undefined;
   authorize?: (actor: ActorContextDTO, action: ApiAction) => boolean;
+  afterInvoke?: () => void;
 }
 
 export function createInvokeHandler(input: Clock | InvokeDependencies): (request: unknown) => ApiResult<unknown> {
@@ -97,6 +98,8 @@ export function createInvokeHandler(input: Clock | InvokeDependencies): (request
       const result = entry.handler(payload, context);
       recordStage('handlerMs', deps.clock.now().getTime() - handlerStartedAt.getTime());
 
+      deps.afterInvoke?.();
+
       if (isApiResult(result)) {
         return result;
       }
@@ -109,6 +112,8 @@ export function createInvokeHandler(input: Clock | InvokeDependencies): (request
 
       return createSuccessResult(result, createMeta(context));
     } catch (error) {
+      deps.afterInvoke?.();
+
       if (error instanceof ZodError) {
         return createErrorResult(
           'INVALID_REQUEST',

@@ -122,8 +122,33 @@ describe('Sheet-backed InventoryRepository', () => {
     expect(gateway.readCount).toBe(0);
     expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
       ['InventoryBalance', 'balanceId', 'balance-warehouse-1-variant-1'],
-      ['InventoryBalance', 'balanceId', 'balance-warehouse-1-variant-1'],
       ['InventoryMovement', 'id', 'movement-2'],
+    ]);
+  });
+
+  it('appends service-generated new movements without duplicate preflight lookup', () => {
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+    });
+
+    repository.appendNewMovement(movementFixture);
+
+    expect(gateway.readCount).toBe(0);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.appendRequests).toEqual([
+      {
+        tableName: 'InventoryMovement',
+        partitionKey: 'FY2026-P01',
+        rows: [
+          expect.objectContaining({
+            id: 'movement-1',
+            movementId: 'movement-1',
+          }),
+        ],
+      },
     ]);
   });
 });

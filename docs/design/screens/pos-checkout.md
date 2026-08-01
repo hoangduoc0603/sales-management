@@ -5,10 +5,15 @@
 - Status: `Approved`
 - Ngày chốt: 2026-07-26
 - Cập nhật triển khai: 2026-07-28 — POS chạy trong AppShell/Header chung khi truy cập từ ứng dụng chính.
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `app-pos-checkout.html`
 - Handoff trong Open Design: `brand-spec.md`
+
+## Hash/state cần verify
+
+- State chính: checkout ready/default.
+- Recovery/state bắt buộc kiểm khi implement: empty cart, scan no result/multiple result, lot/serial required, permission restricted, stale cache, checkout timeout, complete success và receipt preview nếu state nằm trong artifact liên quan.
 
 ## Tài liệu nghiệp vụ/kỹ thuật liên quan
 
@@ -95,7 +100,7 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 
 ## Rule UI cần giữ khi code
 
-- Bám AppShell, component, token, typography và semantic color của Cenio Core v0.6; không tạo palette, radius, shadow hay spacing system cục bộ.
+- Bám AppShell, component, token, typography và semantic color của Cenio Core v0.7; không tạo palette, radius, shadow hay spacing system cục bộ.
 - Desktop-first, ưu tiên vùng scan/tìm và checkout dễ thao tác; responsive không được làm mất CTA hay che giỏ/tổng tiền.
 - Không dùng native `<select>`; dùng custom select/listbox hoặc shadcn Select style theo Cenio Core.
 - Theme toggle là icon button ở AppShell header chung; light/dark theme phải hoạt động.

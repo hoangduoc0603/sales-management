@@ -15,6 +15,8 @@ export interface SheetGatewayDependencies {
     openById(spreadsheetId: string): SpreadsheetLike;
   };
   tableLocator: SheetGatewayTableLocator;
+  sheetsAdvancedService?: GoogleSheetsAdvancedService;
+  deferAppends?: boolean;
 }
 
 export interface SheetGatewayReadRequest {
@@ -39,6 +41,33 @@ export interface SheetGateway {
   readTable(request: SheetGatewayReadRequest): Record<string, unknown>[];
   findRowsByColumn(request: SheetGatewayFindByColumnRequest): Record<string, unknown>[];
   appendRows(request: SheetGatewayAppendRequest): { appendedRowCount: number };
+  flushPendingAppends?(): void;
+}
+
+export interface GoogleSheetsAdvancedService {
+  Spreadsheets: {
+    Values: {
+      batchUpdate(
+        resource: {
+          valueInputOption: 'RAW';
+          data: Array<{
+            range: string;
+            majorDimension: 'ROWS';
+            values: unknown[][];
+          }>;
+        },
+        spreadsheetId: string,
+      ): unknown;
+    };
+  };
+}
+
+interface PendingAppendGroup {
+  spreadsheetId: string;
+  sheetName: string;
+  startRow: number;
+  columnCount: number;
+  rows: unknown[][];
 }
 
 interface SpreadsheetLike {
@@ -69,6 +98,44 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
   const spreadsheetCache = new Map<string, SpreadsheetLike>();
   const sheetCache = new Map<string, SheetLike | null>();
   const tableRecordCache = new Map<string, Record<string, unknown>[]>();
+  const pendingAppends = new Map<string, PendingAppendGroup>();
+
+  const flushPendingAppends = () => {
+    if (pendingAppends.size === 0) return;
+
+    const startedAt = Date.now();
+    const groups = [...pendingAppends.values()];
+    pendingAppends.clear();
+
+    const groupsBySpreadsheet = new Map<string, PendingAppendGroup[]>();
+    for (const group of groups) {
+      const existing = groupsBySpreadsheet.get(group.spreadsheetId) ?? [];
+      existing.push(group);
+      groupsBySpreadsheet.set(group.spreadsheetId, existing);
+    }
+
+    for (const [spreadsheetId, spreadsheetGroups] of groupsBySpreadsheet) {
+      deps.sheetsAdvancedService?.Spreadsheets.Values.batchUpdate(
+        {
+          valueInputOption: 'RAW',
+          data: spreadsheetGroups.map((group) => ({
+            range: buildA1Range(group.sheetName, group.startRow, group.columnCount, group.rows.length),
+            majorDimension: 'ROWS',
+            values: group.rows,
+          })),
+        },
+        spreadsheetId,
+      );
+      recordIo('sheetBatchAppendFlushCount');
+      recordIo(
+        'sheetBatchAppendFlushRows',
+        spreadsheetGroups.reduce((total, group) => total + group.rows.length, 0),
+      );
+      recordIo('sheetBatchAppendFlushRanges', spreadsheetGroups.length);
+    }
+
+    recordStage('sheet.flushAppendsMs', Date.now() - startedAt);
+  };
 
   return {
     readTable(request) {
@@ -80,6 +147,8 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         recordStage('sheet.readTableMs', Date.now() - startedAt);
         return cachedRows.map(deepCloneRecord);
       }
+
+      flushPendingAppends();
 
       const { sheet } = openLocatedSheet(
         deps,
@@ -114,6 +183,8 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
         return result;
       }
+
+      flushPendingAppends();
 
       const { sheet } = openLocatedSheet(
         deps,
@@ -211,6 +282,28 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
       if (
         serializedRows.length > 0 &&
         sheet.getLastRow !== undefined &&
+        deps.deferAppends === true &&
+        deps.sheetsAdvancedService !== undefined
+      ) {
+        const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
+        const sheetKey = `${location.spreadsheetId}:${location.sheetName}`;
+        const existingGroup = pendingAppends.get(sheetKey);
+        if (existingGroup === undefined) {
+          pendingAppends.set(sheetKey, {
+            spreadsheetId: location.spreadsheetId,
+            sheetName: location.sheetName,
+            startRow: sheet.getLastRow() + 1,
+            columnCount: request.table.headers.length,
+            rows: serializedRows,
+          });
+        } else {
+          existingGroup.rows.push(...serializedRows);
+        }
+        recordIo('sheetAppendDeferredCount');
+        recordIo('sheetAppendDeferredRows', serializedRows.length);
+      } else if (
+        serializedRows.length > 0 &&
+        sheet.getLastRow !== undefined &&
         sheet.getRange !== undefined
       ) {
         const targetRange = sheet.getRange(
@@ -241,6 +334,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
       recordStage('sheet.appendRowsMs', Date.now() - startedAt);
       return { appendedRowCount: request.rows.length };
     },
+    flushPendingAppends,
   };
 }
 
@@ -349,6 +443,22 @@ function filterRecordsByColumn(
 
 function deepCloneRecord(record: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
+}
+
+function buildA1Range(sheetName: string, startRow: number, columnCount: number, rowCount: number): string {
+  const endRow = startRow + rowCount - 1;
+  return `'${sheetName.replace(/'/g, "''")}'!A${startRow}:${columnIndexToLetters(columnCount)}${endRow}`;
+}
+
+function columnIndexToLetters(columnIndex: number): string {
+  let remaining = columnIndex;
+  let result = '';
+  while (remaining > 0) {
+    const mod = (remaining - 1) % 26;
+    result = String.fromCharCode(65 + mod) + result;
+    remaining = Math.floor((remaining - mod) / 26);
+  }
+  return result;
 }
 
 function rowToRecord(

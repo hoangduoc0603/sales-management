@@ -25,7 +25,19 @@ const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: 
     sourcePath: 'web/src/features/pos/pos-checkout-shell.tsx',
     routeEvidence: ['route === \'pos\'', '<PosCheckoutShell'],
   },
+  'POS cache, conflict, receipt và print': {
+    sourcePath: 'web/src/features/pos/pos-checkout-shell.tsx',
+    routeEvidence: ['route === \'pos\'', '<PosCheckoutShell'],
+  },
   'Đơn bán, đơn nhập tay, trả/đổi và bảo hành': {
+    sourcePath: 'web/src/features/sales/sales-orders-returns-home.tsx',
+    routeEvidence: ['route === \'orders\'', '<SalesOrdersReturnsHome'],
+  },
+  'Manual order fulfillment detail': {
+    sourcePath: 'web/src/features/sales/sales-orders-returns-home.tsx',
+    routeEvidence: ['route === \'orders\'', '<SalesOrdersReturnsHome'],
+  },
+  'Return inspection, refund và exchange': {
     sourcePath: 'web/src/features/sales/sales-orders-returns-home.tsx',
     routeEvidence: ['route === \'orders\'', '<SalesOrdersReturnsHome'],
   },
@@ -33,7 +45,19 @@ const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: 
     sourcePath: 'web/src/features/catalog/catalog-crm-home.tsx',
     routeEvidence: ['route === \'catalog\' || route === \'customers\'', '<CatalogCrmHome'],
   },
+  'Catalog product editor và policy builder': {
+    sourcePath: 'web/src/features/catalog/catalog-crm-home.tsx',
+    routeEvidence: ['route === \'catalog\' || route === \'customers\'', '<CatalogCrmHome'],
+  },
   'Tồn kho và mua hàng': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Inventory stocktake, transfer và adjustment workbench': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Purchasing receipt, costing và supplier return': {
     sourcePath: 'web/src/features/inventory/inventory-home.tsx',
     routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
   },
@@ -41,9 +65,33 @@ const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: 
     sourcePath: 'web/src/features/finance/finance-home.tsx',
     routeEvidence: ['route === \'finance\'', '<FinanceHome'],
   },
+  'Finance payment allocation và reversal': {
+    sourcePath: 'web/src/features/finance/finance-home.tsx',
+    routeEvidence: ['route === \'finance\'', '<FinanceHome'],
+  },
+  'Shift close reconciliation': {
+    sourcePath: 'web/src/features/finance/finance-home.tsx',
+    routeEvidence: ['route === \'finance\'', '<FinanceHome'],
+  },
   'Báo cáo, quản trị và vận hành': {
     sourcePath: 'web/src/features/reporting/reporting-administration-operations-home.tsx',
     routeEvidence: ['route === \'reports\' || route === \'admin\'', '<ReportingAdministrationOperationsHome'],
+  },
+  'Admin access, config và lifecycle': {
+    sourcePath: 'web/src/features/reporting/reporting-administration-operations-home.tsx',
+    routeEvidence: ['route === \'reports\' || route === \'admin\'', '<ReportingAdministrationOperationsHome'],
+  },
+  'Operations run center': {
+    sourcePath: 'web/src/features/reporting/reporting-administration-operations-home.tsx',
+    routeEvidence: ['route === \'reports\' || route === \'admin\'', '<ReportingAdministrationOperationsHome'],
+  },
+  'Report builder và drilldown': {
+    sourcePath: 'web/src/features/reporting/reporting-administration-operations-home.tsx',
+    routeEvidence: ['route === \'reports\' || route === \'admin\'', '<ReportingAdministrationOperationsHome'],
+  },
+  'Auth security và session states': {
+    sourcePath: 'web/src/app/auth/auth-flow.tsx',
+    routeEvidence: ['<AuthFlow'],
   },
 };
 

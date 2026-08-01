@@ -131,6 +131,7 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
       };
     },
     getPosProjection(input) {
+      const variants = deps.repository.listVariants();
       const barcodesByVariantId = new Map(
         deps.repository
           .listBarcodes()
@@ -145,12 +146,11 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
       );
 
       return {
-        projectionVersion: `catalog-pos-${deps.repository.listVariants().length}`,
+        projectionVersion: `catalog-pos-${variants.length}`,
         branchId: input.branchId,
         warehouseId: input.warehouseId,
         generatedAt: deps.now().toISOString(),
-        variants: deps.repository
-          .listVariants()
+        variants: variants
           .filter((variant) => variant.isActive)
           .flatMap((variant) => {
             const unit = unitVersionsByVariantId.get(variant.variantId);

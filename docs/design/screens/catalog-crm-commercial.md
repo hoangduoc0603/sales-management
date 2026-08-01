@@ -3,8 +3,15 @@
 ## Trạng thái
 
 - Status: `Approved` — đã được người dùng duyệt, được dùng làm nguồn triển khai UI.
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` / `catalog-crm-commercial.html`
+
+## Hash/state cần verify
+
+- `#catalog`
+- `#customers`
+- `#commercial`
+- `#imports`
 
 ## Phạm vi
 
@@ -14,7 +21,7 @@ Product/Variant và bundle formula version, catalog import/label, customer/profi
 
 - Theo `SRS-CRM-001..015`, `SRS-ACC-006/008/017`, LLD `catalog-crm.md`.
 - Không hard delete dữ liệu đã tham chiếu; price/policy/unit version có hiệu lực về sau, không sửa snapshot cũ.
-- Sensitive receivable/cost/profit chỉ từ backend permission; dùng custom listbox, token Core v0.6 và loading icon-only.
+- Sensitive receivable/cost/profit chỉ từ backend permission; dùng custom listbox, token Core v0.7 và loading icon-only.
 
 ## Đã kiểm tra
 

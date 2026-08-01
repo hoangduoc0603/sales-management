@@ -2,13 +2,15 @@ import type { Clock } from '../api/invoke';
 import { createAppsScriptLockProvider } from '../infrastructure/google-workspace/apps-script-lock-provider';
 import { createPropertiesCredentialVerifierStore } from '../infrastructure/google-workspace/credential-verifier-store';
 import { createPropertiesRuntimeConfigStore } from '../infrastructure/google-workspace/runtime-config-store';
-import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gateway';
+import { createSheetGateway, type GoogleSheetsAdvancedService } from '../infrastructure/google-workspace/sheet-gateway';
 import { createActiveRuntimeTableLocator } from '../infrastructure/google-workspace/runtime-table-locator';
 import { createAppsScriptLoginRateLimiter } from '../infrastructure/google-workspace/login-rate-limiter';
 import { createAppsScriptCacheStore } from '../infrastructure/google-workspace/cache-store';
 import { createPropertiesTenantSecretStore } from '../infrastructure/google-workspace/tenant-secret-store';
 import { createAppsScriptSessionTokenFingerprinter } from '../services/platform/auth/session-token-fingerprinter';
 import { createProductionApiComposition } from './create-production-api-composition';
+
+declare const Sheets: GoogleSheetsAdvancedService;
 
 export function createAppsScriptProductionComposition(clock: Clock) {
   const properties = PropertiesService.getScriptProperties();
@@ -20,6 +22,8 @@ export function createAppsScriptProductionComposition(clock: Clock) {
   const sheetGateway = createSheetGateway({
     spreadsheetApp: SpreadsheetApp,
     tableLocator: createActiveRuntimeTableLocator(runtimeConfig),
+    sheetsAdvancedService: Sheets,
+    deferAppends: true,
   });
   const tenantSecretStore = createPropertiesTenantSecretStore({ properties });
   const platformCacheStore = createAppsScriptCacheStore({ cacheService: CacheService });

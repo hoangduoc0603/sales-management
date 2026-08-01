@@ -4,10 +4,20 @@
 
 - Status: `Approved`
 - Ngày chốt: 2026-07-31
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `auth-first-run.html`
 - Handoff trong Open Design: `auth-first-run.html`
+
+## Hash/state cần verify
+
+- `#checking`
+- `#login`
+- `#cached-login`
+- `#failed`
+- `#check-failed`
+- `#setup`
+- `#revoked`
 
 ## Tài liệu nghiệp vụ/kỹ thuật liên quan
 

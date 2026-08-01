@@ -4,9 +4,17 @@
 
 - Status: `Approved` — đã được người dùng duyệt, được dùng làm nguồn triển khai UI.
 - Ngày thiết kế: 2026-07-26
-- Design System: Cenio Core v0.6
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact: `reporting-administration-operations.html`
+
+## Hash/state cần verify
+
+- `#reports`
+- `#audit`
+- `#admin`
+- `#import`
+- `#operations`
 
 ## Phạm vi artifact
 
@@ -20,7 +28,7 @@
 - Theo `SRS-ACC-001..018`, `SRS-OVR-005..011`, `SRS-OVR-019..024` và LLD `administration-reporting-operations.md`.
 - Backend phải cắt scope/field sensitive trước projection/export. UI không được suy diễn đầy đủ coverage khi archive chưa sẵn sàng, hoặc coi stale/retry là offline write/sync.
 - Backup/restore không ghi đè trực tiếp production; Owner confirmation và state từ backend là bắt buộc.
-- Dùng custom listbox, Cenio Core v0.6 và loading icon-only; không có integration ngoài PRD/SRS.
+- Dùng custom listbox, Cenio Core v0.7 và loading icon-only; không có integration ngoài PRD/SRS.
 
 ## Kiểm tra thiết kế đã thực hiện
 

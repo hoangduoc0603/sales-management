@@ -61,6 +61,7 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
     tenantId: runtimeConfig.tenantId,
     bootstrapOnStart: false,
     seedDemoReadModels: false,
+    afterInvoke: deps.sheetGateway.flushPendingAppends,
   };
 
   return createApiCompositionFromDependencies(compositionDeps);

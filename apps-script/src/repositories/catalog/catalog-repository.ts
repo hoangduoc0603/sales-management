@@ -5,6 +5,7 @@ import type {
   VariantDTO,
 } from '@shared/contracts/catalog/catalog';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from '../platform/sheet-record-repository';
 
 export interface CatalogRepository {
@@ -59,6 +60,7 @@ function clone<T>(value: T): T {
 export interface SheetCatalogRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
+  cacheStore?: PlatformCacheStore;
 }
 
 export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDependencies): CatalogRepository {
@@ -66,21 +68,25 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'Product'),
     idField: 'productId',
+    cacheStore: deps.cacheStore,
   });
   const variants = createVersionedSheetTable<VariantDTO>({
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'Variant'),
     idField: 'variantId',
+    cacheStore: deps.cacheStore,
   });
   const barcodes = createVersionedSheetTable<VariantBarcodeDTO>({
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'VariantBarcode'),
     idField: 'barcodeId',
+    cacheStore: deps.cacheStore,
   });
   const unitVersions = createVersionedSheetTable<UnitConversionVersionDTO>({
     gateway: deps.gateway,
     table: findTable(deps.tableDefinitions, 'UnitConversionVersion'),
     idField: 'unitVersionId',
+    cacheStore: deps.cacheStore,
   });
 
   return {
@@ -113,6 +119,7 @@ interface VersionedSheetTableDependencies<TRecord extends object> {
   gateway: AppendOnlySheetRecordGateway;
   table: TableDefinitionDTO;
   idField: keyof TRecord & string;
+  cacheStore?: PlatformCacheStore;
 }
 
 interface VersionedSheetTable<TRecord extends object> {
@@ -129,6 +136,8 @@ interface VersionedSheetRow extends Record<string, unknown> {
 function createVersionedSheetTable<TRecord extends object>(
   deps: VersionedSheetTableDependencies<TRecord>,
 ): VersionedSheetTable<TRecord> {
+  const cacheKey = `catalog.table.${deps.table.tableName}.v${deps.table.schemaVersion}`;
+
   function readRows(): VersionedSheetRow[] {
     return deps.gateway.readTable({ table: deps.table }).map((row) => deepClone(row) as VersionedSheetRow);
   }
@@ -148,9 +157,15 @@ function createVersionedSheetTable<TRecord extends object>(
 
   return {
     list() {
-      return latestRows().map((row) => stripSheetMetadata(row) as TRecord);
+      const cached = readCachedList<TRecord>(deps.cacheStore, cacheKey);
+      if (cached !== undefined) return cached;
+
+      const records = latestRows().map((row) => stripSheetMetadata(row) as TRecord);
+      writeCachedList(deps.cacheStore, cacheKey, records);
+      return records.map(deepClone);
     },
     save(record) {
+      deps.cacheStore?.remove(cacheKey);
       const recordData = deepClone(record) as Record<string, unknown>;
       const recordId = String(recordData[deps.idField] ?? '');
       if (recordId.trim() === '') {
@@ -171,8 +186,38 @@ function createVersionedSheetTable<TRecord extends object>(
           },
         ],
       });
+      deps.cacheStore?.remove(cacheKey);
     },
   };
+}
+
+const catalogCacheTtlSeconds = 21_600;
+const maxCachePayloadLength = 90_000;
+
+function readCachedList<TRecord extends object>(
+  cacheStore: PlatformCacheStore | undefined,
+  cacheKey: string,
+): TRecord[] | undefined {
+  if (cacheStore === undefined) return undefined;
+  const raw = cacheStore.get(cacheKey);
+  if (raw === undefined) return undefined;
+  try {
+    return (JSON.parse(raw) as TRecord[]).map(deepClone);
+  } catch {
+    cacheStore.remove(cacheKey);
+    return undefined;
+  }
+}
+
+function writeCachedList<TRecord extends object>(
+  cacheStore: PlatformCacheStore | undefined,
+  cacheKey: string,
+  records: readonly TRecord[],
+): void {
+  if (cacheStore === undefined) return;
+  const payload = JSON.stringify(records);
+  if (payload.length > maxCachePayloadLength) return;
+  cacheStore.put(cacheKey, payload, catalogCacheTtlSeconds);
 }
 
 function findTable(definitions: readonly TableDefinitionDTO[], tableName: string): TableDefinitionDTO {

@@ -5,9 +5,10 @@ import type { SalesRepository } from '../repositories/sales/sales-repository';
 import type { CommandRepository } from '../repositories/platform/command-repository';
 import type { LockProvider } from '../infrastructure/platform/runtime';
 import { createPropertiesCredentialVerifierStore } from '../infrastructure/google-workspace/credential-verifier-store';
+import { createAppsScriptCacheStore } from '../infrastructure/google-workspace/cache-store';
 import { createAppsScriptLockProvider } from '../infrastructure/google-workspace/apps-script-lock-provider';
 import { createPropertiesRuntimeConfigStore } from '../infrastructure/google-workspace/runtime-config-store';
-import { createSheetGateway } from '../infrastructure/google-workspace/sheet-gateway';
+import { createSheetGateway, type GoogleSheetsAdvancedService } from '../infrastructure/google-workspace/sheet-gateway';
 import { createActiveRuntimeTableLocator } from '../infrastructure/google-workspace/runtime-table-locator';
 import { createCatalogService } from '../services/catalog/catalog-service';
 import { createPricingService } from '../services/catalog/pricing-service';
@@ -27,6 +28,8 @@ const fixturePaymentMethodId = 'cash';
 const fixtureShiftId = 'shift-local-open';
 const fixtureSku = 'POS-ACCEPT-001';
 const fixtureBarcode = '899999000001';
+
+declare const Sheets: GoogleSheetsAdvancedService;
 const fixtureQuantityTargetMilli = 50_000;
 const fixtureCheckoutQuantityMilli = 2_000;
 const fixtureCheckoutQuantity = 2;
@@ -258,14 +261,18 @@ export function runPosAcceptanceDrillForAppsScript_(): PosAcceptanceDrillForApps
   }
 
   const tableDefinitions = createPlatformTableDefinitions();
+  const sheetGateway = createSheetGateway({
+    spreadsheetApp: SpreadsheetApp,
+    tableLocator: createActiveRuntimeTableLocator(runtimeConfig),
+    sheetsAdvancedService: Sheets,
+    deferAppends: true,
+  });
   const repositories = createProductionRepositories({
-    sheetGateway: createSheetGateway({
-      spreadsheetApp: SpreadsheetApp,
-      tableLocator: createActiveRuntimeTableLocator(runtimeConfig),
-    }),
+    sheetGateway,
     tableDefinitions,
     transactionPartitionKey: runtimeConfig.storage.transaction.activePartitionKey,
     credentialVerifierStore: createPropertiesCredentialVerifierStore({ properties }),
+    platformCacheStore: createAppsScriptCacheStore({ cacheService: CacheService }),
   });
   let sequence = 0;
   const { result, performance } = withPerformanceTracker(() => {
@@ -287,6 +294,7 @@ export function runPosAcceptanceDrillForAppsScript_(): PosAcceptanceDrillForApps
         return `${prefix}-${Utilities.getUuid()}-${sequence}`;
       },
     });
+    sheetGateway.flushPendingAppends?.();
     return {
       result: drillResult,
       performance: readPerformanceSnapshot(),

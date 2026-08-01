@@ -55,6 +55,8 @@ type SalesServiceResult<T> =
       };
     };
 
+type CatalogPosProjection = ReturnType<CatalogService['getPosProjection']>;
+
 export interface SalesService {
   saveDraft(input: SalesDraftSaveRequest): SalesServiceResult<SalesDraftSaveResponse>;
   listDrafts(input: SalesDraftOpenRequest): SalesDraftListResponse;
@@ -874,7 +876,13 @@ function completePosSale(
   );
   if (shiftError !== undefined) return shiftError;
 
-  const quote = measure('sales.pos.quoteMs', () => quoteCurrentCart(deps, input));
+  const projection = measure('sales.pos.catalogProjectionMs', () =>
+    deps.catalogService.getPosProjection({
+      branchId: input.branchId,
+      warehouseId: input.warehouseId,
+    }),
+  );
+  const quote = measure('sales.pos.quoteMs', () => quoteCurrentCart(deps, input, projection));
   if (quote.quoteVersion !== input.quoteVersion) {
     return failure('PRICE_CHANGED', 'Giá hoặc khuyến mãi đã thay đổi. Vui lòng áp dụng báo giá mới trước khi hoàn tất.', {
       expectedVersion: input.quoteVersion,
@@ -909,7 +917,7 @@ function completePosSale(
   const receivableVnd = Math.max(0, quote.totalVnd - paidVnd);
   const changeVnd = Math.max(0, paidVnd - quote.totalVnd);
   const paymentStatus = resolvePaymentStatus(quote.totalVnd, paidVnd);
-  const lines = buildLineSnapshots(deps, input, saleOrderId, quote.lines);
+  const lines = buildLineSnapshots(deps, input, saleOrderId, quote.lines, projection);
   const order: SaleOrderDTO = {
     saleOrderId,
     tenantId: deps.tenantId,
@@ -1085,11 +1093,14 @@ function buildDraftResponse(
   };
 }
 
-function quoteCurrentCart(deps: SalesServiceDependencies, input: Pick<SalesPosCompleteRequest, 'branchId' | 'warehouseId' | 'customerId' | 'lines'>) {
-  const projection = deps.catalogService.getPosProjection({
+function quoteCurrentCart(
+  deps: SalesServiceDependencies,
+  input: Pick<SalesPosCompleteRequest, 'branchId' | 'warehouseId' | 'customerId' | 'lines'>,
+  projection: CatalogPosProjection = deps.catalogService.getPosProjection({
     branchId: input.branchId,
     warehouseId: input.warehouseId,
-  });
+  }),
+) {
   return createPricingService({
     variants: projection.variants.map((variant) => ({
       variantId: variant.variantId,
@@ -1116,12 +1127,11 @@ function buildLineSnapshots(
   input: Pick<SalesPosCompleteRequest, 'branchId' | 'warehouseId' | 'lines'>,
   saleOrderId: string,
   quotedLines: readonly { lineId: string; unitPriceVnd: number; lineSubtotalVnd: number; lineDiscountVnd: number; lineTotalVnd: number }[],
-): SaleOrderLineDTO[] {
-  const projection = deps.catalogService.getPosProjection({
+  projection: CatalogPosProjection = deps.catalogService.getPosProjection({
     branchId: input.branchId,
     warehouseId: input.warehouseId,
-  });
-
+  }),
+): SaleOrderLineDTO[] {
   return input.lines.map((line) => {
     const variant = projection.variants.find((candidate) => candidate.variantId === line.variantId);
     const quoteLine = quotedLines.find((candidate) => candidate.lineId === line.lineId);
@@ -1143,16 +1153,21 @@ function findStockConflict(
   deps: SalesServiceDependencies,
   input: SalesPosCompleteRequest,
 ): SalesServiceResult<SalesPosCompleteResponse> | undefined {
-  const balances = deps.inventoryService.getBalanceSummary({ warehouseId: input.warehouseId }).rows;
-  for (const line of input.lines) {
-    const balance = balances.find((candidate) => candidate.variantId === line.variantId);
-    if (balance === undefined || balance.availableMilli < line.quantityMilli) {
-      return failure('INSUFFICIENT_STOCK', 'Không đủ tồn khả dụng để hoàn tất bán hàng.', {
-        lineId: line.lineId,
-        variantId: line.variantId,
-        availableMilli: String(balance?.availableMilli ?? 0),
-      });
-    }
+  const conflict = deps.inventoryService.checkAvailability({
+    warehouseId: input.warehouseId,
+    lines: input.lines.map((line) => ({
+      lineId: line.lineId,
+      variantId: line.variantId,
+      quantityMilli: line.quantityMilli,
+    })),
+  })[0];
+  if (conflict !== undefined) {
+    return failure('INSUFFICIENT_STOCK', 'Không đủ tồn khả dụng để hoàn tất bán hàng.', {
+      lineId: conflict.lineIds[0] ?? '',
+      variantId: conflict.variantId,
+      requestedMilli: String(conflict.requestedMilli),
+      availableMilli: String(conflict.availableMilli),
+    });
   }
 
   return undefined;

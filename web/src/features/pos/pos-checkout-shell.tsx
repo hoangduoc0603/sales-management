@@ -13,7 +13,12 @@ import { AppIcon } from '../../components/ui/icons';
 import { Listbox } from '../../components/ui/listbox';
 import { TextAvatar } from '../../components/ui/text-avatar';
 import type { ApiClient } from '../../lib/api/client';
-import { loadPosCatalogProjection } from './catalog-cache/load-pos-catalog-projection';
+import {
+  loadPosCatalogProjection,
+  readCachedPosCatalogProjectionEntry,
+  shouldRefreshCachedPosCatalogProjection,
+  writeCachedPosCatalogProjection,
+} from './catalog-cache/load-pos-catalog-projection';
 import type { CatalogPosProjectionResponse } from './catalog-cache/pos-catalog-cache';
 import { createPosCatalogCache } from './catalog-cache/pos-catalog-cache';
 import type { PosCartLine } from './pos-cart-state';
@@ -114,6 +119,7 @@ const tenderMethods = [
 ] as const;
 
 const categories = ['Tất cả', 'Sữa & đồ uống', 'Mỹ phẩm', 'Gia dụng', 'Thời trang'] as const;
+const posCatalogProjectionFreshTtlMs = 5 * 60 * 1000;
 
 const recoveryStates = [
   {
@@ -252,6 +258,7 @@ export function PosCheckoutShell({
   const activeState = recoveryStates.find((state) => state.id === activeStateId) ?? recoveryStates[1];
   const isStandaloneShell = shellMode === 'standalone';
   const MainTag = isStandaloneShell ? 'main' : 'div';
+  const catalogCacheNamespace = `${activeActor.tenantId}:${activeActor.userId}:v${activeActor.authVersion}`;
 
   useEffect(() => {
     if (apiClient === undefined || sessionToken === undefined) {
@@ -260,30 +267,62 @@ export function PosCheckoutShell({
     }
 
     let isActive = true;
+    const cachedProjectionEntry = readCachedPosCatalogProjectionEntry({
+      branchId: selectedBranchId,
+      cacheNamespace: catalogCacheNamespace,
+      warehouseId: selectedWarehouseId,
+    });
+    const cachedProjection = cachedProjectionEntry?.projection;
+    if (cachedProjection !== undefined) {
+      setActiveProjection(cachedProjection);
+      setMessage(`Dữ liệu hàng hóa đã sẵn sàng từ cache phiên bản ${cachedProjection.projectionVersion}.`);
+    }
+
+    if (
+      cachedProjectionEntry !== undefined &&
+      !shouldRefreshCachedPosCatalogProjection({
+        cachedAt: cachedProjectionEntry.cachedAt,
+        maxAgeMs: posCatalogProjectionFreshTtlMs,
+        projection: cachedProjectionEntry.projection,
+      })
+    ) {
+      return () => {
+        isActive = false;
+      };
+    }
+
     void loadPosCatalogProjection({
       apiClient,
       requestId: `pos-catalog-${Date.now()}`,
       sessionToken,
       branchId: selectedBranchId,
       warehouseId: selectedWarehouseId,
-    })
+      })
       .then((nextProjection) => {
+        writeCachedPosCatalogProjection({
+          branchId: selectedBranchId,
+          cacheNamespace: catalogCacheNamespace,
+          projection: nextProjection,
+          warehouseId: selectedWarehouseId,
+        });
         if (isActive) {
           setActiveProjection(nextProjection);
           setMessage(`Dữ liệu hàng hóa đã cập nhật phiên bản ${nextProjection.projectionVersion}.`);
         }
       })
       .catch(() => {
-        if (isActive) {
+        if (isActive && cachedProjection === undefined) {
           setActiveProjection(projection);
           setMessage('Không tải được dữ liệu hàng hóa mới; đang dùng dữ liệu dự phòng của màn hình.');
+        } else if (isActive) {
+          setMessage('Không tải được dữ liệu hàng hóa mới; tiếp tục dùng dữ liệu đã lưu trên máy.');
         }
       });
 
     return () => {
       isActive = false;
     };
-  }, [apiClient, projection, selectedBranchId, selectedWarehouseId, sessionToken]);
+  }, [apiClient, catalogCacheNamespace, projection, selectedBranchId, selectedWarehouseId, sessionToken]);
 
   const addVariant = useCallback((variant: CatalogPosVariantDTO) => {
     setCartLines((current) => upsertCartLine(current, variant));

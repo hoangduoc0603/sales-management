@@ -116,10 +116,107 @@ describe('Sheet-backed CatalogRepository', () => {
       barcode: '893000000001',
     });
   });
+
+  it('caches small POS catalog master reads and invalidates the table cache on save', () => {
+    const gateway = new FakeSheetGateway({
+      Variant: [
+        {
+          id: 'variant-existing:v1',
+          tenantId: 'tenant-default',
+          schemaVersion: 1,
+          recordVersion: 1,
+          variantId: 'variant-existing',
+          productId: 'product-existing',
+          sku: 'EXIST-001',
+          skuNormalized: 'EXIST-001',
+          displayName: 'Hàng đã có',
+          inventoryMode: 'Tracked',
+          lotTracking: false,
+          serialTracking: false,
+          defaultUnitId: 'chai',
+          isActive: true,
+          unitPriceVnd: 10000,
+        },
+      ],
+      VariantBarcode: [
+        {
+          id: 'barcode-existing:v1',
+          tenantId: 'tenant-default',
+          schemaVersion: 1,
+          recordVersion: 1,
+          barcodeId: 'barcode-existing',
+          variantId: 'variant-existing',
+          unitVersionId: 'unit-existing',
+          barcode: '893000000001',
+          barcodeNormalized: '893000000001',
+          barcodeKind: 'Manufacturer',
+          isActive: true,
+        },
+      ],
+      UnitConversionVersion: [
+        {
+          id: 'unit-existing:v1',
+          tenantId: 'tenant-default',
+          schemaVersion: 1,
+          recordVersion: 1,
+          unitVersionId: 'unit-existing',
+          variantId: 'variant-existing',
+          unitId: 'chai',
+          unitName: 'chai',
+          baseUnitId: 'chai',
+          factor: 1,
+          saleEnabled: true,
+          purchaseEnabled: true,
+          effectiveFrom: '2026-07-27T00:00:00.000Z',
+          isActive: true,
+        },
+      ],
+    });
+    const cacheStore = new FakePlatformCacheStore();
+    const repository = createSheetCatalogRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      cacheStore,
+    });
+    const service = createCatalogService({
+      repository,
+      tenantId: 'tenant-default',
+      now: () => new Date('2026-07-27T00:00:00.000Z'),
+      newId: createSequenceId(),
+    });
+
+    expect(service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' }).variants).toHaveLength(1);
+    expect(gateway.readRequests).toEqual(['Variant', 'VariantBarcode', 'UnitConversionVersion']);
+    expect(cacheStore.ttls()).toEqual([21600, 21600, 21600]);
+
+    gateway.readRequests = [];
+    expect(service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' }).variants).toHaveLength(1);
+    expect(gateway.readRequests).toEqual([]);
+
+    repository.saveVariant({
+      variantId: 'variant-new',
+      tenantId: 'tenant-default',
+      productId: 'product-new',
+      sku: 'NEW-001',
+      skuNormalized: 'NEW-001',
+      displayName: 'Hàng mới',
+      inventoryMode: 'Tracked',
+      lotTracking: false,
+      serialTracking: false,
+      defaultUnitId: 'chai',
+      isActive: true,
+      unitPriceVnd: 20000,
+    });
+
+    gateway.readRequests = [];
+    expect(repository.listVariants().map((variant) => variant.variantId)).toEqual(['variant-existing', 'variant-new']);
+    expect(gateway.readRequests).toEqual(['Variant']);
+  });
 });
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; rows: Record<string, unknown>[] }> = [];
+  readRequests: string[] = [];
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
   constructor(seed: Record<string, Record<string, unknown>[]> = {}) {
@@ -129,6 +226,7 @@ class FakeSheetGateway {
   }
 
   readTable(request: { table: TableDefinitionDTO }): Record<string, unknown>[] {
+    this.readRequests.push(request.table.tableName);
     return this.getRows(request.table.tableName).map(clone);
   }
 
@@ -149,6 +247,28 @@ class FakeSheetGateway {
       this.rowsByTable.set(tableName, rows);
     }
     return rows;
+  }
+}
+
+class FakePlatformCacheStore {
+  private readonly values = new Map<string, string>();
+  private readonly ttlValues: number[] = [];
+
+  get(key: string): string | undefined {
+    return this.values.get(key);
+  }
+
+  put(key: string, value: string, expirationInSeconds: number): void {
+    this.values.set(key, value);
+    this.ttlValues.push(expirationInSeconds);
+  }
+
+  remove(key: string): void {
+    this.values.delete(key);
+  }
+
+  ttls(): number[] {
+    return [...this.ttlValues];
   }
 }
 
