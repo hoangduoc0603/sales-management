@@ -3,8 +3,8 @@
 ## Trạng thái
 
 - Status: `Approved`
-- Ngày chốt: 2026-07-31
-- Design System: Cenio Core v0.6
+- Ngày chốt: 2026-08-01
+- Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `auth-first-run.html`
 - Handoff trong Open Design: `auth-first-run.html`
@@ -37,6 +37,7 @@ Luồng Auth và First-run setup xác định runtime config trước khi ngư�
 - `Check failed`: nếu fresh open không có marker mà `platform.install.getStatus` lỗi hoặc timeout sau 15 giây, hiển thị recovery state có CTA `Thử lại`; không mở form setup.
 - `Setup`: chỉ hiển thị khi backend trả `NotInstalled` hoặc sau khi runtime config bị mất. Form gồm tên cửa hàng, `loginId admin`, mật khẩu admin và xác nhận mật khẩu.
 - `Revoked config`: nếu browser có marker `Installed` nhưng backend trả `NotInstalled`, xóa marker local, clear session/cache nhạy cảm và chuyển về setup.
+- Artifact hỗ trợ state selector/deep link để review: `#checking`, `#login`, `#cached-login`, `#failed`, `#check-failed`, `#setup`, `#revoked` và alias `#view-*`.
 
 ## Rule triển khai
 
@@ -46,7 +47,8 @@ Luồng Auth và First-run setup xác định runtime config trước khi ngư�
 - Lỗi check install không được map thành `InstallStatus Failed` của setup run.
 - `platform.install.run` lỗi mới hiển thị trong setup flow để admin thử lại.
 - Button submit/loading giữ nguyên nhãn theo rule Cenio Core.
-- Light/dark theme dùng token Cenio Core; không tạo palette cục bộ trong React.
+- Light/dark theme dùng token Cenio Core v0.7; không tạo palette cục bộ trong React.
+- Visual theo hướng TailAdmin-inspired nhưng phù hợp auth/setup: panel vận hành gọn, không landing hero, không gradient/glass/neon.
 
 ## Acceptance checklist
 
@@ -58,3 +60,4 @@ Luồng Auth và First-run setup xác định runtime config trước khi ngư�
 - [ ] Backend trả `NotInstalled`: marker và session local bị clear trước khi vào setup.
 - [ ] `platform.install.run` thành công: clear session cũ, ghi marker `Installed`, chuyển về login nội bộ.
 - [ ] UI bám artifact `auth-first-run.html` và hoạt động responsive/light/dark.
+- [ ] Không native select, gradient, selector user rộng; script parse và render desktop hash `#setup` đã được kiểm tra.
