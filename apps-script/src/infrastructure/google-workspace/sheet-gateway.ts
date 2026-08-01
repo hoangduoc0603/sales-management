@@ -70,6 +70,11 @@ interface PendingAppendGroup {
   rows: unknown[][];
 }
 
+interface AppendSheetState {
+  headersEnsured: boolean;
+  lastRow: number;
+}
+
 interface SpreadsheetLike {
   getSheetByName(sheetName: string): SheetLike | null;
   insertSheet?(sheetName: string): SheetLike;
@@ -98,7 +103,9 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
   const spreadsheetCache = new Map<string, SpreadsheetLike>();
   const sheetCache = new Map<string, SheetLike | null>();
   const tableRecordCache = new Map<string, Record<string, unknown>[]>();
+  const findRecordCache = new Map<string, Record<string, unknown>[]>();
   const pendingAppends = new Map<string, PendingAppendGroup>();
+  const appendSheetStateCache = new Map<string, AppendSheetState>();
 
   const flushPendingAppends = () => {
     if (pendingAppends.size === 0) return;
@@ -174,9 +181,20 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
     findRowsByColumn(request) {
       const startedAt = Date.now();
       const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
+      const findCacheKey = getFindCacheKey(tableKey, request.columnName, request.value);
+      const cachedFindRows = findRecordCache.get(findCacheKey);
+      if (cachedFindRows !== undefined) {
+        recordIo('sheetFindCount');
+        recordIo('sheetFindCacheHit');
+        recordIo('sheetFindRows', cachedFindRows.length);
+        recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+        return cachedFindRows.map(deepCloneRecord);
+      }
+
       const cachedRows = tableRecordCache.get(tableKey);
       if (cachedRows !== undefined) {
         const result = filterRecordsByColumn(cachedRows, request.columnName, request.value);
+        findRecordCache.set(findCacheKey, result.map(deepCloneRecord));
         recordIo('sheetFindCount');
         recordIo('sheetFindCacheHit');
         recordIo('sheetFindRows', result.length);
@@ -208,13 +226,17 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         const columnIndex = actualHeaders.indexOf(request.columnName);
         if (columnIndex === -1) return [];
 
-        if (sheet.getLastRow() - 1 <= smallTableFullScanRowThreshold) {
+        if (
+          sheet.getLastRow() - 1 <= smallTableFullScanRowThreshold &&
+          !isUniqueSingleColumnLookup(request.table, request.columnName)
+        ) {
           const values = sheet.getDataRange().getValues();
           recordIo('sheetReadCount');
           recordIo('sheetReadRows', Math.max(0, values.length - 1));
           const rows = values.slice(1).map((row) => rowToRecord(row, actualHeaders, request.table.headers));
           tableRecordCache.set(tableKey, rows.map(deepCloneRecord));
           const result = filterRecordsByColumn(rows, request.columnName, request.value);
+          findRecordCache.set(findCacheKey, result.map(deepCloneRecord));
           recordIo('sheetFindRows', result.length);
           recordIo('sheetFindSmallFullScanCount');
           recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
@@ -236,6 +258,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
                   .getValues()[0] ?? [];
                 return rowToRecord(row, actualHeaders, request.table.headers);
               });
+        findRecordCache.set(findCacheKey, result.map(deepCloneRecord));
         recordIo('sheetFindRows', result.length);
         recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
         return result;
@@ -252,6 +275,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         .slice(1)
         .filter((row) => String(row[columnIndex] ?? '') === request.value)
         .map((row) => rowToRecord(row, actualHeaders, request.table.headers));
+      findRecordCache.set(findCacheKey, matchedRows.map(deepCloneRecord));
       recordIo('sheetFindRows', matchedRows.length);
       recordIo('sheetFindFullScanCount');
       recordIo('sheetFindFullScanRows', Math.max(0, values.length - 1));
@@ -272,7 +296,9 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         throw new Error(`Cannot append to missing sheet ${request.table.sheetName}.`);
       }
 
-      ensureHeaders(sheet, request.table, created);
+      const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
+      const sheetKey = `${location.spreadsheetId}:${location.sheetName}`;
+      const appendState = ensureHeaders(sheet, request.table, created, appendSheetStateCache, sheetKey);
 
       const serializedRows = request.rows.map((row) =>
         request.table.headers.map((column) => serializeCell(row[column.name], column)),
@@ -286,19 +312,19 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         deps.sheetsAdvancedService !== undefined
       ) {
         const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
-        const sheetKey = `${location.spreadsheetId}:${location.sheetName}`;
         const existingGroup = pendingAppends.get(sheetKey);
         if (existingGroup === undefined) {
           pendingAppends.set(sheetKey, {
             spreadsheetId: location.spreadsheetId,
             sheetName: location.sheetName,
-            startRow: sheet.getLastRow() + 1,
+            startRow: appendState.lastRow + 1,
             columnCount: request.table.headers.length,
             rows: serializedRows,
           });
         } else {
           existingGroup.rows.push(...serializedRows);
         }
+        appendState.lastRow += serializedRows.length;
         recordIo('sheetAppendDeferredCount');
         recordIo('sheetAppendDeferredRows', serializedRows.length);
       } else if (
@@ -306,8 +332,9 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         sheet.getLastRow !== undefined &&
         sheet.getRange !== undefined
       ) {
+        const startRow = appendState.lastRow + 1;
         const targetRange = sheet.getRange(
-          sheet.getLastRow() + 1,
+          startRow,
           1,
           serializedRows.length,
           request.table.headers.length,
@@ -319,13 +346,16 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
             sheet.appendRow(row);
           }
         }
+        appendState.lastRow += serializedRows.length;
       } else {
         for (const row of serializedRows) {
           sheet.appendRow(row);
         }
+        appendState.lastRow += serializedRows.length;
       }
 
       const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
+      invalidateFindCacheForTable(findRecordCache, tableKey);
       const cachedRows = tableRecordCache.get(tableKey);
       if (cachedRows !== undefined) {
         cachedRows.push(...request.rows.map(deepCloneRecord));
@@ -377,16 +407,36 @@ function openLocatedSheet(
   return { sheet: null, created: false };
 }
 
-function ensureHeaders(sheet: SheetLike, table: TableDefinitionDTO, created: boolean): void {
+function ensureHeaders(
+  sheet: SheetLike,
+  table: TableDefinitionDTO,
+  created: boolean,
+  appendSheetStateCache: Map<string, AppendSheetState>,
+  sheetKey: string,
+): AppendSheetState {
+  const cachedState = appendSheetStateCache.get(sheetKey);
+  if (cachedState !== undefined) return cachedState;
+
+  let lastRow: number | undefined;
   if (!created) {
     if (sheet.getLastRow !== undefined) {
-      if (sheet.getLastRow() > 0) return;
+      lastRow = sheet.getLastRow();
+      if (lastRow > 0) {
+        const state = { headersEnsured: true, lastRow };
+        appendSheetStateCache.set(sheetKey, state);
+        return state;
+      }
     } else if (sheet.getDataRange().getValues().length > 0) {
-      return;
+      const state = { headersEnsured: true, lastRow: 0 };
+      appendSheetStateCache.set(sheetKey, state);
+      return state;
     }
   }
 
   sheet.appendRow(table.headers.map((column) => column.name));
+  const state = { headersEnsured: true, lastRow: (lastRow ?? 0) + 1 };
+  appendSheetStateCache.set(sheetKey, state);
+  return state;
 }
 
 function openSpreadsheet(
@@ -433,12 +483,32 @@ function getTableCacheKey(
   return `${location.spreadsheetId}:${location.sheetName}`;
 }
 
+function getFindCacheKey(tableKey: string, columnName: string, value: string): string {
+  return `${tableKey}\u0000${columnName}\u0000${value}`;
+}
+
+function invalidateFindCacheForTable(
+  findRecordCache: Map<string, Record<string, unknown>[]>,
+  tableKey: string,
+): void {
+  const prefix = `${tableKey}\u0000`;
+  for (const key of findRecordCache.keys()) {
+    if (key.startsWith(prefix)) findRecordCache.delete(key);
+  }
+}
+
 function filterRecordsByColumn(
   rows: readonly Record<string, unknown>[],
   columnName: string,
   value: string,
 ): Record<string, unknown>[] {
   return rows.filter((row) => String(row[columnName] ?? '') === value).map(deepCloneRecord);
+}
+
+function isUniqueSingleColumnLookup(table: TableDefinitionDTO, columnName: string): boolean {
+  return table.lookupKeys.some(
+    (lookupKey) => lookupKey.unique && lookupKey.columns.length === 1 && lookupKey.columns[0] === columnName,
+  );
 }
 
 function deepCloneRecord(record: Record<string, unknown>): Record<string, unknown> {

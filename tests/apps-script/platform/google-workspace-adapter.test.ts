@@ -110,7 +110,7 @@ describe('Google Workspace adapter seams', () => {
     expect(sheet.rowRangeReadCount).toBe(0);
   });
 
-  it('uses cached full table reads for small column lookups to avoid expensive Apps Script per-row calls', () => {
+  it('uses targeted unique lookup and cached full table reads for other small column lookups', () => {
     const sheet = new FakeSheet('UserAccount', [
       ['id', 'status', 'detailsJson'],
       ['user-1', 'Active', '{"schemaVersion":1,"displayName":"Admin"}'],
@@ -131,7 +131,68 @@ describe('Google Workspace adapter seams', () => {
     expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'status', value: 'Active' })).toHaveLength(1);
 
     expect(sheet.dataRangeReadCount).toBe(1);
-    expect(sheet.rowRangeReadCount).toBe(0);
+    expect(sheet.rowRangeReadCount).toBe(1);
+  });
+
+  it('uses targeted lookup for small-table unique keys instead of full-scanning the table', () => {
+    const rows = [
+      ['id', 'status', 'detailsJson'],
+      ...Array.from({ length: 100 }, (_, index) => [
+        `user-${index + 1}`,
+        index % 2 === 0 ? 'Active' : 'Disabled',
+        JSON.stringify({ displayName: `User ${index + 1}` }),
+      ]),
+    ];
+    const sheet = new FakeSheet('UserAccount', rows, { supportsRangeLookup: true });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-99' })).toHaveLength(1);
+
+    expect(sheet.dataRangeReadCount).toBe(0);
+    expect(sheet.rowRangeReadCount).toBe(1);
+  });
+
+  it('caches repeated large-table column lookups within one execution and invalidates them on append', () => {
+    const rows = [
+      ['id', 'status', 'detailsJson'],
+      ...Array.from({ length: 600 }, (_, index) => [
+        `user-${index + 1}`,
+        index % 2 === 0 ? 'Active' : 'Disabled',
+        JSON.stringify({ displayName: `User ${index + 1}` }),
+      ]),
+    ];
+    const sheet = new FakeSheet('UserAccount', rows, { supportsRangeLookup: true });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-599' })).toHaveLength(1);
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-599' })).toHaveLength(1);
+    expect(sheet.rowRangeReadCount).toBe(1);
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-601', status: 'Active', detailsJson: { displayName: 'New User' } }],
+    });
+
+    expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-599' })).toHaveLength(1);
+    expect(sheet.rowRangeReadCount).toBe(2);
   });
 
   it('updates cached table rows after append so same-request lookups see new data without rereading Sheets', () => {
@@ -157,8 +218,8 @@ describe('Google Workspace adapter seams', () => {
     });
 
     expect(gateway.findRowsByColumn({ table: userAccountTable, columnName: 'id', value: 'user-2' })).toHaveLength(1);
-    expect(sheet.dataRangeReadCount).toBe(1);
-    expect(sheet.rowRangeReadCount).toBe(0);
+    expect(sheet.dataRangeReadCount).toBe(0);
+    expect(sheet.rowRangeReadCount).toBe(2);
   });
 
   it('does not read the full existing sheet only to verify headers before append', () => {
@@ -242,6 +303,48 @@ describe('Google Workspace adapter seams', () => {
         },
       },
     ]);
+  });
+
+  it('reuses deferred append sheet state instead of reading last row for every append to the same sheet', () => {
+    const sheet = new FakeSheet('UserAccount', [['id', 'status', 'detailsJson']], {
+      supportsRangeLookup: true,
+    });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const sheetsAdvancedService = new FakeSheetsAdvancedService();
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      sheetsAdvancedService,
+      deferAppends: true,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-2', status: 'Active', detailsJson: { displayName: 'Admin' } }],
+    });
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-3', status: 'Disabled', detailsJson: { displayName: 'Disabled' } }],
+    });
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-4', status: 'Active', detailsJson: { displayName: 'Second' } }],
+    });
+
+    expect(sheet.lastRowReadCount).toBe(1);
+    gateway.flushPendingAppends?.();
+    expect(sheetsAdvancedService.batchUpdates[0]?.resource).toMatchObject({
+      data: [
+        {
+          range: "'UserAccount'!A2:C4",
+        },
+      ],
+    });
   });
 
   it('creates private tenant Drive folders without public URLs', () => {
@@ -365,6 +468,7 @@ class FakeSheet {
   readonly appendedRows: unknown[][] = [];
   dataRangeReadCount = 0;
   rowRangeReadCount = 0;
+  lastRowReadCount = 0;
 
   constructor(
     readonly name: string,
@@ -382,6 +486,7 @@ class FakeSheet {
   }
 
   getLastRow(): number {
+    this.lastRowReadCount += 1;
     return this.values.length;
   }
 

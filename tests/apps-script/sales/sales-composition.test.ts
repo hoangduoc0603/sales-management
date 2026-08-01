@@ -136,9 +136,13 @@ describe('sales composition', () => {
       data: {
         order: { status: 'Completed', paymentStatus: 'Paid' },
         receipt: { receiptFormat: 'K80' },
+        inventoryMovements: [],
       },
     });
     if (!checkout.ok) throw new Error('checkout failed');
+    expect(checkout.data.financeResult).toBeUndefined();
+    expect(JSON.stringify(checkout.data)).not.toContain('cashTransaction');
+    expect(JSON.stringify(checkout.data)).not.toContain('InventoryMovement');
 
     const exchangeProduct = composition.invoke({
       operation: 'catalog.product.create',

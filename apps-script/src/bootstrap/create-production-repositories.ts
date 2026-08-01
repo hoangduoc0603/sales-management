@@ -86,6 +86,7 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
       gateway: deps.sheetGateway,
       table: findRequiredTable(deps.tableDefinitions, 'CommandTransaction', 'platform'),
       partitionKey: deps.transactionPartitionKey,
+      cacheStore: deps.platformCacheStore,
     }),
     catalogRepository: createSheetCatalogRepository({
       gateway: deps.sheetGateway,
@@ -110,6 +111,7 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
       transactionPartitionKey: deps.transactionPartitionKey,
+      cacheStore: deps.platformCacheStore,
     }),
     salesRepository: createSheetSalesRepository({
       gateway: deps.sheetGateway,

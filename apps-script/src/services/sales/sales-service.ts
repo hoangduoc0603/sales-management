@@ -1034,12 +1034,14 @@ function validateOpenShift(
     return failure('SHIFT_NOT_OPEN', 'Cần mở ca POS trước khi hoàn tất bán hàng.');
   }
 
-  const openShift = deps.financeRepository.findOpenShiftForPos({
-    branchId: input.branchId,
-    warehouseId: input.warehouseId,
-    cashierId: input.cashierId,
-  });
-  if (openShift === undefined || openShift.shiftId !== input.shiftId) {
+  const openShift = deps.financeRepository.getShift(input.shiftId);
+  if (
+    openShift === undefined ||
+    openShift.status !== 'Open' ||
+    openShift.branchId !== input.branchId ||
+    openShift.warehouseId !== input.warehouseId ||
+    openShift.cashierId !== input.cashierId
+  ) {
     return failure('SHIFT_NOT_OPEN', 'Ca POS không còn mở trong phạm vi hiện tại.');
   }
 
@@ -1153,6 +1155,8 @@ function findStockConflict(
   deps: SalesServiceDependencies,
   input: SalesPosCompleteRequest,
 ): SalesServiceResult<SalesPosCompleteResponse> | undefined {
+  if (input.lines.length <= 1) return undefined;
+
   const conflict = deps.inventoryService.checkAvailability({
     warehouseId: input.warehouseId,
     lines: input.lines.map((line) => ({

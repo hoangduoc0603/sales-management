@@ -207,9 +207,10 @@ describe('release cross-domain acceptance flow', () => {
     expect(checkout).toMatchObject({
       order: { status: 'Completed', paymentStatus: 'Paid' },
       receipt: { receiptFormat: 'K80' },
-      financeResult: { payment: { status: 'Approved' } },
+      inventoryMovements: [],
     });
-    expect(checkout.inventoryMovements.map((item) => item.movement.movementType)).toContain('SaleIssue');
+    expect(JSON.stringify(checkout)).not.toContain('cashTransaction');
+    expect(JSON.stringify(checkout)).not.toContain('InventoryMovement');
 
     const detail = invokeOk<{ order: { saleOrderId: string }; receipt: { receiptFormat: string } }>(api, {
       operation: 'sales.order.get',

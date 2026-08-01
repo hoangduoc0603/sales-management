@@ -10,6 +10,7 @@ import type {
   SupplierPrepaymentDTO,
 } from '@shared/contracts/finance/finance';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import {
   createAppendOnlySheetRecordRepository,
   type AppendOnlySheetRecordGateway,
@@ -140,6 +141,7 @@ export interface SheetFinanceRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
   transactionPartitionKey: string;
+  cacheStore?: PlatformCacheStore;
 }
 
 export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDependencies): FinanceRepository {
@@ -221,6 +223,7 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
     },
     saveShift(shift) {
       shifts.save(shift);
+      cacheShift(deps.cacheStore, shift);
     },
     savePayment(payment) {
       payments.save(payment);
@@ -255,7 +258,11 @@ export function createSheetFinanceRepository(deps: SheetFinanceRepositoryDepende
       allocations.append(paymentAllocationToRow(allocation));
     },
     getShift(shiftId) {
-      return shifts.findById(shiftId);
+      const cached = readCachedShift(deps.cacheStore, shiftId);
+      if (cached !== undefined) return cached;
+      const shift = shifts.findById(shiftId);
+      if (shift !== undefined) cacheShift(deps.cacheStore, shift);
+      return shift;
     },
     findOpenShiftByCashier(cashierId) {
       return shifts.findByColumn('cashierId', cashierId).find((shift) => shift.status === 'Open');
@@ -617,6 +624,30 @@ function getRecordVersion(row: FinanceRow): number {
   if (Number.isFinite(parsed) && parsed > 0) return parsed;
   const match = /:v(\d+)$/.exec(String(row.id ?? ''));
   return match === null ? 0 : Number(match[1]);
+}
+
+const shiftCacheTtlSeconds = 300;
+
+function shiftCacheKey(shiftId: string): string {
+  return `finance.shift.byId.v1:${shiftId}`;
+}
+
+function cacheShift(cacheStore: PlatformCacheStore | undefined, shift: ShiftDTO): void {
+  if (cacheStore === undefined) return;
+  cacheStore.put(shiftCacheKey(shift.shiftId), JSON.stringify(shift), shiftCacheTtlSeconds);
+}
+
+function readCachedShift(cacheStore: PlatformCacheStore | undefined, shiftId: string): ShiftDTO | undefined {
+  if (cacheStore === undefined) return undefined;
+  const raw = cacheStore.get(shiftCacheKey(shiftId));
+  if (raw === undefined) return undefined;
+
+  try {
+    return deepClone(JSON.parse(raw) as ShiftDTO);
+  } catch {
+    cacheStore.remove(shiftCacheKey(shiftId));
+    return undefined;
+  }
 }
 
 function optionalString(value: unknown): string | undefined {

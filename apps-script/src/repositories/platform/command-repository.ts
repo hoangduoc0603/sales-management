@@ -1,5 +1,6 @@
 import type { CommandStatus } from '@shared/contracts/platform/command';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import {
   createAppendOnlySheetRecordRepository,
   type AppendOnlySheetRecordGateway,
@@ -16,6 +17,7 @@ export interface CommandTransactionRecord {
 }
 
 export interface CommandRepository {
+  findCachedByIdempotencyKey?(idempotencyKey: string): CommandTransactionRecord | undefined;
   findByIdempotencyKey(idempotencyKey: string): CommandTransactionRecord | undefined;
   findByCommandId(commandId: string): CommandTransactionRecord | undefined;
   appendNew(record: CommandTransactionRecord): void;
@@ -26,6 +28,7 @@ export interface SheetCommandRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   table: TableDefinitionDTO;
   partitionKey?: string;
+  cacheStore?: PlatformCacheStore;
 }
 
 export function createInMemoryCommandRepository(): CommandRepository {
@@ -83,6 +86,10 @@ export function createSheetCommandRepository(deps: SheetCommandRepositoryDepende
   }
 
   return {
+    findCachedByIdempotencyKey:
+      deps.cacheStore === undefined
+        ? undefined
+        : (idempotencyKey) => readCachedCommand(deps.cacheStore, idempotencyKey),
     findByIdempotencyKey(idempotencyKey) {
       if (deps.gateway.findRowsByColumn !== undefined) {
         return latestFromRows(findRowsByColumn('idempotencyKey', idempotencyKey));
@@ -101,6 +108,7 @@ export function createSheetCommandRepository(deps: SheetCommandRepositoryDepende
         partitionKey: deps.partitionKey,
         rows: [toSheetRow(record, 1)],
       });
+      cacheCommand(deps.cacheStore, record);
     },
     save(record) {
       const existingRows =
@@ -109,8 +117,39 @@ export function createSheetCommandRepository(deps: SheetCommandRepositoryDepende
           : recordRepository.list().filter((row) => row.commandId === record.commandId);
       const nextVersion = existingRows.reduce((maxVersion, row) => Math.max(maxVersion, parseVersion(row.id)), 0) + 1;
       recordRepository.append(toSheetRow(record, nextVersion));
+      cacheCommand(deps.cacheStore, record);
     },
   };
+}
+
+const commandCacheTtlSeconds = 21_600;
+const maxCommandCachePayloadBytes = 90_000;
+
+function cacheCommand(cacheStore: PlatformCacheStore | undefined, record: CommandTransactionRecord): void {
+  if (cacheStore === undefined) return;
+  const payload = JSON.stringify(record);
+  if (payload.length > maxCommandCachePayloadBytes) return;
+  cacheStore.put(commandCacheKey(record.idempotencyKey), payload, commandCacheTtlSeconds);
+}
+
+function readCachedCommand(
+  cacheStore: PlatformCacheStore | undefined,
+  idempotencyKey: string,
+): CommandTransactionRecord | undefined {
+  if (cacheStore === undefined) return undefined;
+  const key = commandCacheKey(idempotencyKey);
+  const raw = cacheStore.get(key);
+  if (raw === undefined) return undefined;
+  try {
+    return JSON.parse(raw) as CommandTransactionRecord;
+  } catch {
+    cacheStore.remove(key);
+    return undefined;
+  }
+}
+
+function commandCacheKey(idempotencyKey: string): string {
+  return `command:idempotency:${idempotencyKey}`;
 }
 
 interface CommandTransactionSheetRow extends Record<string, unknown> {

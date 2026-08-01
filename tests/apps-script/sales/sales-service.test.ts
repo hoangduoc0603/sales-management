@@ -89,6 +89,39 @@ describe('SalesService POS checkout', () => {
     expect(financeRepository.listPayments()).toHaveLength(1);
   });
 
+  it('validates POS shift by direct shiftId lookup instead of scanning open shifts by cashier', () => {
+    const { financeRepository, salesService, shiftId } = createFixture();
+    let getShiftCalls = 0;
+    const originalGetShift = financeRepository.getShift;
+    financeRepository.getShift = (currentShiftId: string) => {
+      getShiftCalls += 1;
+      return originalGetShift(currentShiftId);
+    };
+    financeRepository.findOpenShiftForPos = () => {
+      throw new Error('POS checkout must not scan open shifts by cashier when shiftId is provided.');
+    };
+
+    const result = salesService.completePosSale(posCompleteInput({ shiftId }));
+
+    expect(result).toMatchObject({ ok: true, data: { order: { status: 'Completed' } } });
+    expect(getShiftCalls).toBe(1);
+  });
+
+  it('skips separate stock precheck for single-line POS because issueForSale validates availability before writing', () => {
+    const { inventoryService, salesService, shiftId } = createFixture();
+    let checkAvailabilityCalls = 0;
+    const originalCheckAvailability = inventoryService.checkAvailability;
+    inventoryService.checkAvailability = (input) => {
+      checkAvailabilityCalls += 1;
+      return originalCheckAvailability(input);
+    };
+
+    const result = salesService.completePosSale(posCompleteInput({ shiftId }));
+
+    expect(result).toMatchObject({ ok: true, data: { order: { status: 'Completed' } } });
+    expect(checkAvailabilityCalls).toBe(0);
+  });
+
   it('creates receivable when POS tender is partial', () => {
     const { financeRepository, salesService, shiftId } = createFixture();
 
@@ -678,6 +711,7 @@ function createFixture(options: { quantityMilli?: number; openShift?: boolean; i
   return {
     financeRepository,
     inventoryRepository,
+    inventoryService,
     salesRepository,
     salesService,
     exchangeVariant:

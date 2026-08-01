@@ -42,9 +42,17 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
             }
           };
 
-          const existing = measure('command.findExistingMs', () =>
-            deps.commandRepository.findByIdempotencyKey(command.idempotencyKey),
-          );
+          const cachedExisting =
+            deps.commandRepository.findCachedByIdempotencyKey === undefined
+              ? undefined
+              : measure('command.findCachedExistingMs', () =>
+                  deps.commandRepository.findCachedByIdempotencyKey?.(command.idempotencyKey),
+                );
+          const existing =
+            cachedExisting ??
+            (deps.commandRepository.findCachedByIdempotencyKey === undefined
+              ? measure('command.findExistingMs', () => deps.commandRepository.findByIdempotencyKey(command.idempotencyKey))
+              : undefined);
 
           if (existing?.status === 'Committed' && existing.resultJson !== undefined) {
             return JSON.parse(existing.resultJson) as ReturnType<typeof handler>;

@@ -7,6 +7,7 @@ import type {
   ShiftDTO,
 } from '../../../shared/contracts/finance/finance';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../../apps-script/src/infrastructure/platform/cache';
 import { createSheetFinanceRepository } from '../../../apps-script/src/repositories/finance/finance-repository';
 import { createFinanceService } from '../../../apps-script/src/services/finance/finance-service';
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
@@ -175,6 +176,29 @@ describe('Sheet-backed FinanceRepository', () => {
     ]);
   });
 
+  it('caches shift lookup by shiftId and invalidates cache when shift is saved again', () => {
+    const cacheStore = new FakePlatformCacheStore();
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetFinanceRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+      cacheStore,
+    });
+
+    repository.saveShift(openShiftFixture);
+    gateway.findRequests = [];
+
+    expect(repository.getShift('shift-1')).toMatchObject({ status: 'Open' });
+    expect(gateway.findRequests).toEqual([]);
+
+    repository.saveShift({ ...openShiftFixture, status: 'Closed', closedAt: '2026-07-27T10:00:00.000Z' });
+    gateway.findRequests = [];
+    expect(repository.getShift('shift-1')).toMatchObject({ status: 'Closed' });
+    expect(gateway.findRequests).toEqual([]);
+    expect(cacheStore.ttls()).toEqual([300, 300]);
+  });
+
   it('appends new POS payment and cash transaction without preflight Sheet lookups', () => {
     const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
     const repository = createSheetFinanceRepository({
@@ -326,6 +350,28 @@ class FakeSheetGateway {
       this.rowsByTable.set(tableName, rows);
     }
     return rows;
+  }
+}
+
+class FakePlatformCacheStore implements PlatformCacheStore {
+  private readonly values = new Map<string, string>();
+  private readonly ttlValues: number[] = [];
+
+  get(key: string): string | undefined {
+    return this.values.get(key);
+  }
+
+  put(key: string, value: string, expirationInSeconds: number): void {
+    this.values.set(key, value);
+    this.ttlValues.push(expirationInSeconds);
+  }
+
+  remove(key: string): void {
+    this.values.delete(key);
+  }
+
+  ttls(): number[] {
+    return this.ttlValues;
   }
 }
 

@@ -6,7 +6,7 @@ import type {
   SalesDraftSaveResponse,
   SalesPosCompleteResponse,
 } from '@shared/contracts/sales/sales';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenioBrandMark } from '../../components/ui/brand-mark';
 import { Button, IconButton } from '../../components/ui/button';
 import { AppIcon } from '../../components/ui/icons';
@@ -246,6 +246,7 @@ export function PosCheckoutShell({
   const [message, setMessage] = useState('POS sẵn sàng. Quét, tìm hàng và chỉnh giỏ được xử lý nhanh trên máy này.');
   const [isCompleting, setIsCompleting] = useState(false);
   const [receipt, setReceipt] = useState<SalesPosCompleteResponse['receipt']>();
+  const pendingCompleteCommandRef = useRef<{ commandId: string; idempotencyKey: string } | undefined>(undefined);
   const branch = scope.branches.find((candidate) => candidate.branchId === selectedBranchId);
   const warehouse = scope.warehouses.find((candidate) => candidate.warehouseId === selectedWarehouseId);
   const activeActor = actor ?? createFallbackActor();
@@ -324,6 +325,10 @@ export function PosCheckoutShell({
     };
   }, [apiClient, catalogCacheNamespace, projection, selectedBranchId, selectedWarehouseId, sessionToken]);
 
+  useEffect(() => {
+    pendingCompleteCommandRef.current = undefined;
+  }, [cartLines, receivedAmountVnd, selectedBranchId, selectedTenderId, selectedWarehouseId]);
+
   const addVariant = useCallback((variant: CatalogPosVariantDTO) => {
     setCartLines((current) => upsertCartLine(current, variant));
     setQuery('');
@@ -395,13 +400,15 @@ export function PosCheckoutShell({
       return;
     }
     setIsCompleting(true);
+    const command = pendingCompleteCommandRef.current ?? createPosCompleteCommand();
+    pendingCompleteCommandRef.current = command;
     const result = await apiClient.invoke<SalesPosCompleteResponse>({
       operation: 'sales.pos.complete',
       requestId: `pos-complete-${Date.now()}`,
       sessionToken,
       payload: {
-        commandId: `cmd-pos-${Date.now()}`,
-        idempotencyKey: `idem-pos-${Date.now()}`,
+        commandId: command.commandId,
+        idempotencyKey: command.idempotencyKey,
         branchId: selectedBranchId,
         warehouseId: selectedWarehouseId,
         cashierId: activeActor.userId,
@@ -420,6 +427,7 @@ export function PosCheckoutShell({
       return;
     }
     setReceipt(result.data.receipt);
+    pendingCompleteCommandRef.current = undefined;
     setCartLines([]);
     setActiveStateId('success');
     setMessage(`Đã hoàn tất ${result.data.order.businessNumber}.`);
@@ -949,6 +957,17 @@ function toTenderInputs(paymentMethodId: string, amountVnd: number) {
           cashDrawerId: 'drawer-main',
         },
       ];
+}
+
+function createPosCompleteCommand(): { commandId: string; idempotencyKey: string } {
+  const suffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return {
+    commandId: `cmd-pos-${suffix}`,
+    idempotencyKey: `idem-pos-${suffix}`,
+  };
 }
 
 function parseVnd(value: string): number | undefined {

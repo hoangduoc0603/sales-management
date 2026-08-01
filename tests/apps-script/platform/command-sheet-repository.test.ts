@@ -4,6 +4,7 @@ import {
   createSheetCommandRepository,
   type CommandTransactionRecord,
 } from '../../../apps-script/src/repositories/platform/command-repository';
+import type { PlatformCacheStore } from '../../../apps-script/src/infrastructure/platform/cache';
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 
 describe('Sheet-backed CommandRepository', () => {
@@ -175,6 +176,38 @@ describe('Sheet-backed CommandRepository', () => {
       },
     ]);
   });
+
+  it('serves recent committed commands from cache without hitting Sheets for retry', () => {
+    const gateway = new FakeSheetGateway([], { supportFindRowsByColumn: true });
+    const cacheStore = new FakePlatformCacheStore();
+    const repository = createSheetCommandRepository({
+      gateway,
+      table: commandTable,
+      partitionKey: 'FY2026-P01',
+      cacheStore,
+    });
+
+    repository.appendNew({
+      commandId: 'cmd-cached-commit-1',
+      idempotencyKey: 'idem-cached-commit-1',
+      status: 'Committed',
+      resultJson: '{"receiptId":"receipt-cached-1"}',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:01.000Z',
+    });
+    gateway.findRequests.length = 0;
+
+    expect(repository.findCachedByIdempotencyKey?.('idem-cached-commit-1')).toEqual({
+      commandId: 'cmd-cached-commit-1',
+      idempotencyKey: 'idem-cached-commit-1',
+      status: 'Committed',
+      resultJson: '{"receiptId":"receipt-cached-1"}',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:01.000Z',
+    });
+    expect(gateway.findRequests).toEqual([]);
+    expect(cacheStore.ttls()).toEqual([21600]);
+  });
 });
 
 const commandTable = createPlatformTableDefinitions().find((table) => table.tableName === 'CommandTransaction')!;
@@ -224,4 +257,26 @@ function row(record: CommandTransactionRecord & { id: string }): Record<string, 
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+class FakePlatformCacheStore implements PlatformCacheStore {
+  private readonly values = new Map<string, string>();
+  private readonly ttlValues: number[] = [];
+
+  get(key: string): string | undefined {
+    return this.values.get(key);
+  }
+
+  put(key: string, value: string, expirationInSeconds: number): void {
+    this.values.set(key, value);
+    this.ttlValues.push(expirationInSeconds);
+  }
+
+  remove(key: string): void {
+    this.values.delete(key);
+  }
+
+  ttls(): number[] {
+    return [...this.ttlValues];
+  }
 }

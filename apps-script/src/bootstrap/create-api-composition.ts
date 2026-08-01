@@ -68,6 +68,7 @@ import type {
   SalesOrderDetailRequest,
   SalesOrderListRequest,
   SalesPosCompleteRequest,
+  SalesPosCompleteResponse,
   SalesReturnCreateRequest,
   SalesReturnResolveRequest,
   SalesWarrantyOpenRequest,
@@ -79,6 +80,7 @@ import type {
 import type { CommandStatusRequest } from '@shared/contracts/platform/command';
 import type { DisableWarehouseRequest } from '@shared/contracts/platform/administration';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type { ApiError } from '@shared/contracts/errors';
 import { parseDisableWarehouseRequest } from '@shared/schemas/platform/administration';
 import { parseAuthChangeOwnPasswordRequest, parseAuthLoginRequest } from '@shared/schemas/platform/auth';
 import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap';
@@ -722,7 +724,8 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       kind: 'mutation',
       requiredAction: 'sales.pos.complete',
       parsePayload: parseSalesPosCompleteRequest,
-      handler: (input) => salesService.completePosSale(input as SalesPosCompleteRequest),
+      handler: (input) =>
+        slimSalesPosCompleteResult(salesService.completePosSale(input as SalesPosCompleteRequest)),
     },
     {
       name: 'sales.order.list',
@@ -1029,6 +1032,32 @@ function seedOperationsRepository(repository: ReturnType<typeof createInMemoryOp
     readOnly: false,
     rowCount: 42,
   });
+}
+
+type CompositionServiceResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: ApiError };
+
+function slimSalesPosCompleteResult(
+  result: CompositionServiceResult<SalesPosCompleteResponse>,
+): CompositionServiceResult<SalesPosCompleteResponse> {
+  if (!result.ok) {
+    return result;
+  }
+
+  const { order, lines, receipt, conflicts, receivable } = result.data;
+
+  return {
+    ok: true,
+    data: {
+      order,
+      lines,
+      receipt,
+      conflicts,
+      inventoryMovements: [],
+      ...(receivable === undefined ? {} : { receivable }),
+    },
+  };
 }
 
 function seedReportingRepository(repository: ReturnType<typeof createInMemoryReportingRepository>): void {
