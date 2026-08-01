@@ -8,7 +8,7 @@ Registry này ánh xạ màn hình trong sản phẩm với project/artifact tr�
 
 | Tên | Project | Phiên bản | Local preview | Ghi chú |
 | --- | --- | --- | --- | --- |
-| Cenio Core | `brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209` | v0.7 | [Mở DESIGN.md](http://127.0.0.1:50416/api/projects/brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209/raw/DESIGN.md) | Nguồn chuẩn token, component catalog và pattern. |
+| Cenio Core | `brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209` | v0.7 | [Mở DESIGN.md](http://127.0.0.1:50416/api/projects/brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209/raw/DESIGN.md) | Nguồn chuẩn token light/dark, component catalog, AppShell và page pattern. |
 
 ## Screens
 
@@ -40,7 +40,7 @@ Registry này ánh xạ màn hình trong sản phẩm với project/artifact tr�
 - Chỉ implement UI từ artifact có trạng thái `Approved`.
 - Nếu artifact trên Open Design đã đổi nhưng registry chưa cập nhật, dừng lại và yêu cầu cập nhật handoff trước khi code.
 - Nếu task yêu cầu màn hình chưa có trong registry, tạo hoặc cập nhật design/handoff trước khi implement UI.
-- Khi đổi tên artifact, đổi project hoặc đổi trạng thái duyệt, cập nhật registry trong cùng thay đổi.
+- Khi đổi tên artifact, đổi project, đổi trạng thái duyệt hoặc đổi local preview port, cập nhật registry trong cùng thay đổi.
 - Khi local preview port đổi sau khi Open Design khởi động lại, cập nhật registry trong cùng thay đổi bàn giao để link mở nhanh không bị stale. Việc đổi port không làm thay đổi source of truth; `Open Design project` + `Artifact chính` vẫn là định danh chuẩn.
 - Trước khi code, dùng `Open Design project` + `Artifact chính` để lấy artifact hiện hành qua Open Design; sau đó mở `Local preview` để đối chiếu trực quan. Không code UI chỉ từ screenshot.
-- `Local preview` dùng `127.0.0.1`, nên chỉ hoạt động trên máy đang chạy dịch vụ Open Design. Nếu link không mở được do dịch vụ hoặc port thay đổi, dùng định danh chuẩn để lấy lại artifact qua Open Design; không coi link hỏng là design bị mất và không cập nhật registry chỉ vì port local thay đổi.
+- `Local preview` dùng `127.0.0.1`, nên chỉ hoạt động trên máy đang chạy dịch vụ Open Design. Nếu link không mở được do dịch vụ hoặc port thay đổi, dùng định danh chuẩn để lấy lại artifact qua Open Design; không coi link hỏng là design bị mất.
