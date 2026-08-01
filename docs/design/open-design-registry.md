@@ -8,7 +8,7 @@ Registry này ánh xạ màn hình trong sản phẩm với project/artifact tr�
 
 | Tên | Project | Phiên bản | Local preview | Ghi chú |
 | --- | --- | --- | --- | --- |
-| Cenio Core | `brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209` | v0.6 | [Mở DESIGN.md](http://127.0.0.1:61609/api/projects/brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209/raw/DESIGN.md) | Nguồn chuẩn token, component catalog và pattern. |
+| Cenio Core | `brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209` | v0.7 | [Mở DESIGN.md](http://127.0.0.1:50416/api/projects/brand-cenio-core-l-product-design-system-d-ng-chung-ch-7e9209/raw/DESIGN.md) | Nguồn chuẩn token light/dark, component catalog, AppShell và page pattern. |
 
 ## Screens
 
