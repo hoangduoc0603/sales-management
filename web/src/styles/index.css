@@ -647,7 +647,7 @@ input:focus-visible {
   min-width: 0;
   max-width: 140px;
   overflow: hidden;
-  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-width var(--cn-motion-base) var(--cn-ease);
+  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-width var(--cn-motion-base) var(--cn-ease), max-height var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-sidebar-brand .cn-brand-mark {
@@ -728,15 +728,23 @@ input:focus-visible {
 }
 
 .cn-app-shell-collapsed .cn-sidebar-brand {
+  height: 64px;
   min-height: 64px;
   justify-content: center;
   gap: 6px;
+  overflow: hidden;
   padding: 10px;
 }
 
 .cn-app-shell-collapsed .cn-sidebar-brand .cn-brand-mark {
   width: 36px;
   height: 36px;
+}
+
+.cn-app-shell-collapsed .cn-sidebar-brand-copy {
+  flex: 0 0 0;
+  max-height: 0;
+  overflow: hidden;
 }
 
 .cn-app-shell-collapsed .cn-sidebar-rail-toggle svg {

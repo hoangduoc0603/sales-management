@@ -164,6 +164,13 @@ describe('AppShell', () => {
     expect(css).not.toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*bottom:\s*68px;[^}]*height:\s*38px;/s);
     expect(css).toMatch(/\.cn-sidebar-rail-handle\s*\{[^}]*border-radius:\s*999px;/s);
   });
+
+  it('sidebar collapsed giữ vùng logo cao 64px và không để brand text ẩn kéo lệch border', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    expect(css).toMatch(/\.cn-app-shell-collapsed\s+\.cn-sidebar-brand\s*\{[^}]*height:\s*64px;[^}]*min-height:\s*64px;[^}]*overflow:\s*hidden;/s);
+    expect(css).toMatch(/\.cn-app-shell-collapsed\s+\.cn-sidebar-brand-copy\s*\{[^}]*flex:\s*0 0 0;[^}]*max-height:\s*0;[^}]*overflow:\s*hidden;/s);
+  });
 });
 
 describe('theme utilities', () => {
