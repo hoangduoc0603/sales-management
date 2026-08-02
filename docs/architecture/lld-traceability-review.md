@@ -35,7 +35,7 @@ Các điều kiện sau là bắt buộc cho từng implementation slice, không
 1. Chuyển command/query được chọn thành TypeScript contracts, schema validator, error code tiếng Việt và permission matrix trong `shared/`/backend theo [folder structure](folder-structure.md).
 2. Khai báo TableRegistry/header/migration thực tế từ dictionary của slice; không hard-code sheet ID, name, row number hoặc header index.
 3. Viết unit/service, repository/integration, permission-scope, idempotency/retry, recovery và performance tests đã nêu trong LLD trước khi coi slice hoàn thành.
-4. Benchmark mọi release ảnh hưởng POS theo `SRS-OVR-024`, gồm report/export chạy song song; chỉ tối ưu projection/cache khi số đo chỉ ra bottleneck mà không phá source-of-truth.
+4. Với path có API, Google Workspace I/O, cache, worker hoặc dữ liệu lớn, hoàn thành performance intake theo [Performance playbook](performance-playbook.md). Benchmark mọi release ảnh hưởng POS theo `SRS-OVR-024`, gồm report/export chạy song song; evidence phải nêu cache state, môi trường, số mẫu, p50/p95/p99/max và stage/I/O; chỉ tối ưu khi số đo chỉ ra bottleneck mà không phá source-of-truth.
 5. Bất kỳ thay đổi nào làm mâu thuẫn ADR Accepted, state machine, ledger ownership hoặc storage routing phải quay lại Solution Design/ADR để được phê duyệt trước.
 
 ## 4. Kết luận

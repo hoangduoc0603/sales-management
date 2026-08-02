@@ -5,6 +5,7 @@ Các tài liệu tại đây mô tả Solution/System Design đã được phê 
 - [Solution Design](solution-design.md): system context, nguyên tắc, module boundaries, luồng xuyên miền và truy vết SRS.
 - [Kiến trúc ứng dụng](application-architecture.md): lớp mã nguồn, API boundary và orchestration theo domain.
 - [Runtime và hiệu năng](runtime-and-performance.md): POS fast path, cache, commit, lock, idempotency và worker.
+- [Performance playbook](performance-playbook.md): checklist bắt buộc để thiết kế, code và kiểm thử mọi thay đổi ảnh hưởng I/O, cache, lock hoặc dữ liệu lớn.
 - [Bảo mật và truy cập](security-and-access.md): public Web App, identity nội bộ, session, permission và bảo vệ dữ liệu.
 - [Triển khai và vòng đời](deployment-and-lifecycle.md): bootstrap tenant, upgrade, migration, backup/restore và health.
 - [Deployment Runbook](deployment-runbook.md): checklist triển khai/customer installation, bootstrap, upgrade, backup trước migration và emergency restore.

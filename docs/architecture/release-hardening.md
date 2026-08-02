@@ -7,6 +7,8 @@
 
 Tài liệu này là artifact đọc độc lập cho Phase 12. Nó ghi rõ release hiện đang bị chặn bởi gap nào, cần bằng chứng gì để gỡ chặn và gap nào phải xin quyết định scope trước khi code tiếp.
 
+Đây là nhật ký evidence và release gate, không thay thế quy tắc implement tại [Performance playbook](performance-playbook.md). Mọi benchmark mới phải ghi môi trường, cache cold/warm, số mẫu, p50/p95/p99/max và stage/I/O; dưới 20 mẫu chỉ là smoke evidence.
+
 ## 2. P0 gaps — chặn release
 
 | ID | Gap | Nguồn | Evidence cần có để đóng |

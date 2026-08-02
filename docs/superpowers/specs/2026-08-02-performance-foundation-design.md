@@ -1,6 +1,6 @@
 # Thiết kế — nền tảng hiệu năng toàn ứng dụng
 
-**Trạng thái:** Chờ user duyệt spec  
+**Trạng thái:** Đã được user duyệt
 **Nguồn:** `SRS-OVR-012` đến `SRS-OVR-024`, [Runtime và hiệu năng](../../architecture/runtime-and-performance.md), ADR 0004, ADR 0005, ADR 0016 và ADR 0017.
 
 ## 1. Mục tiêu và phạm vi
@@ -38,6 +38,8 @@ release ScriptLock
 ```
 
 `afterInvoke` vẫn flush best-effort như safety net cho query/non-command append hoặc error path, nhưng không là cơ chế correctness cho critical command. Nếu flush lỗi, command không được trả success; error được sanitize và coordinator ghi `Failed` khi khả thi trước khi unlock. Không chuyển ledger, command journal hay commit sang worker.
+
+**Quyết định phạm vi:** giữ ADR 0016 single-commit. Flush lỗi đi qua error path hiện có và caller chỉ được retry/tra cứu với cùng idempotency key; baseline không bổ sung `Preparing` recovery, không hứa tự phân giải mọi unknown outcome và không thay command state machine trong thay đổi này.
 
 ### 2.3. POS checkout hai pha
 

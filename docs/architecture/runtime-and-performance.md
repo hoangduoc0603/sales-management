@@ -49,6 +49,6 @@ Worker có một scheduled trigger chung, `runId`, checkpoint, execution budget 
 
 ## 5. Telemetry và regression gate
 
-`ApiMeta` đo `serverDurationMs`, transport/cold-start overhead, stage timing, `spreadsheetOpens`, table read/write, cells read/written và `lockWaitMs`. Success bình thường không ghi SystemEvent bền vững; warning/error mới được ghi best-effort.
+`ApiMeta` trả `durationMs`, `stages` và `io`. Fast path phải ghi stage đủ để xem `command.lockWaitMs`, `command.lockHoldMs`, command/batch flush và các domain stage; I/O phải thể hiện spreadsheet open, table read/write, cells/ranges/rows và full-scan counter khi có. Client/debug drill đo transport/cold-start ngoài `ApiMeta`. Success bình thường không ghi SystemEvent bền vững; warning/error mới được ghi best-effort.
 
-Release ảnh hưởng POS phải benchmark cache cold/warm với profile SRS, gồm mở POS, scan liên tiếp, search, cart, checkout đơn giản/phức tạp, retry, hai checkout đồng thời và export/report nền. Release bị chặn nếu vượt SLO hoặc có full-table scan/I/O regression trong fast path.
+Release ảnh hưởng POS phải benchmark cache cold/warm với profile SRS, gồm mở POS, scan liên tiếp, search, cart, checkout đơn giản/phức tạp, retry, hai checkout đồng thời và export/report nền. Evidence ghi môi trường, cache state, số mẫu, p50/p95/p99/max và stage/I/O chính; dưới 20 mẫu chỉ là smoke evidence, không phải chứng nhận percentile. Release bị chặn nếu vượt SLO hoặc có full-table scan/I/O regression trong fast path.
