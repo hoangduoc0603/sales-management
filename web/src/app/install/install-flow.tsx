@@ -44,7 +44,7 @@ export function InstallFlow({
           <CenioBrandMark />
           <div>
             <strong>Cenio Sales</strong>
-            <span>Retail operations</span>
+            <span>Quản lý bán hàng</span>
           </div>
         </div>
         <form className="cn-auth-form" onSubmit={submit}>
@@ -138,7 +138,7 @@ export function InstallCheckingScreen({
           <CenioBrandMark />
           <div>
             <strong>Cenio Sales</strong>
-            <span>Retail operations</span>
+            <span>Quản lý bán hàng</span>
           </div>
         </div>
         <div className="cn-install-check-content" role="status" aria-live="polite">

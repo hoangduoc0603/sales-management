@@ -528,7 +528,7 @@ export function PosCheckoutShell({
               <CenioBrandMark className="cn-pos-brand-mark" />
               <span>
                 <strong>Cenio Sales</strong>
-                <span>Retail operations</span>
+                <span>Quản lý bán hàng</span>
               </span>
             </button>
             <div className="cn-pos-context-row">

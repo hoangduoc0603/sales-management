@@ -75,9 +75,12 @@ describe('AppShell', () => {
     );
 
     expect(html).toContain('Cenio Sales');
+    expect(html).toContain('Quản lý bán hàng');
     expect(html).toContain('Tổng quan');
     expect(html).toContain('Chi nhánh mặc định');
     expect(html).toContain('Kho mặc định');
+    expect(html).not.toContain('Retail operations');
+    expect(html).not.toContain('Không gian quản lý');
     expect(html).toContain('aria-label="Chuyển sang giao diện tối"');
     expect(html).toContain('aria-label="Thu gọn sidebar"');
     expect(html).toContain('aria-expanded="true"');
@@ -119,7 +122,8 @@ describe('AppShell', () => {
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('class="cn-nav-text">Bán hàng</span>');
     expect(html).toContain('class="cn-sidebar-brand-copy"');
-    expect(html).toContain('Retail operations');
+    expect(html).toContain('Quản lý bán hàng');
+    expect(html).not.toContain('Retail operations');
     expect(html).toContain('cn-sidebar-tooltip-trigger');
     expect(html).toContain('cn-sidebar-foot-compact');
     expect(html).not.toContain('class="cn-sidebar-foot"><span class="cn-sync-dot"></span>Đồng bộ cục bộ sẵn sàng');

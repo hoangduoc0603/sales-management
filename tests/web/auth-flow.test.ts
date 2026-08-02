@@ -16,9 +16,11 @@ describe('AuthFlow', () => {
     );
 
     expect(html).toContain('Đăng nhập nội bộ');
+    expect(html).toContain('Quản lý bán hàng');
     expect(html).toContain('loginId');
     expect(html).toContain('Mật khẩu');
     expect(html).toContain('Không dùng tài khoản Google làm danh tính ứng dụng');
+    expect(html).not.toContain('Retail operations');
   });
 
   it('hiển thị lựa chọn ghi nhớ đăng nhập 7 ngày trên thiết bị này', () => {

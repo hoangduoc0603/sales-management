@@ -24,11 +24,13 @@ describe('InstallFlow', () => {
     );
 
     expect(html).toContain('Khởi tạo hệ thống lần đầu');
+    expect(html).toContain('Quản lý bán hàng');
     expect(html).toContain('Tên cửa hàng');
     expect(html).toContain('loginId admin');
     expect(html).toContain('Mật khẩu admin');
     expect(html).toContain('Xác nhận mật khẩu');
     expect(html).toContain('Khởi tạo hệ thống');
+    expect(html).not.toContain('Retail operations');
   });
 
   it('hiển thị lỗi setup trước đó để admin có thể thử lại', () => {
@@ -61,8 +63,10 @@ describe('InstallCheckingScreen', () => {
     );
 
     expect(html).toContain('Chưa kiểm tra được cài đặt');
+    expect(html).toContain('Quản lý bán hàng');
     expect(html).toContain('Không thể kiểm tra trạng thái cài đặt sau 15 giây.');
     expect(html).toContain('Thử lại');
     expect(html).not.toContain('Khởi tạo hệ thống lần đầu');
+    expect(html).not.toContain('Retail operations');
   });
 });

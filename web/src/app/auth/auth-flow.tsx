@@ -47,7 +47,7 @@ export function AuthFlow({
           <CenioBrandMark />
           <div>
             <strong>Cenio Sales</strong>
-            <span>Retail operations</span>
+            <span>Quản lý bán hàng</span>
           </div>
         </div>
         {mode === 'login' ? (

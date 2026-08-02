@@ -110,6 +110,7 @@ describe('PosCheckoutShell', () => {
 
     expect(html).toContain('cn-pos-page');
     expect(html).toContain('cn-pos-header');
+    expect(html).toContain('Quản lý bán hàng');
     expect(html).toContain('cn-pos-layout-grid');
     expect(html).toContain('cn-product-grid');
     expect(html).toContain('cn-product-card');
@@ -129,6 +130,7 @@ describe('PosCheckoutShell', () => {
     expect(source).not.toContain('cn-pos-recovery-grid');
     expect(source).toContain('name="barcodeScan"');
     expect(html).not.toContain('Cache sẵn sàng');
+    expect(html).not.toContain('Retail operations');
     expect(globalCss).toMatch(/html\[data-theme="dark"\][\s\S]*\.cn-pos-page/);
   });
 

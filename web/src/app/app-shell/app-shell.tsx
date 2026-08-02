@@ -143,7 +143,6 @@ export function AppShell({
             </IconButton>
             <div className="cn-workspace">
               <strong>{scope.tenant.displayName}</strong>
-              <span>Không gian quản lý</span>
             </div>
             <Listbox
               className="cn-scope-control"
@@ -251,7 +250,7 @@ function SidebarPanel({
         <CenioBrandMark />
         <div className="cn-sidebar-brand-copy">
           <strong>Cenio Sales</strong>
-          <span>Retail operations</span>
+          <span>Quản lý bán hàng</span>
         </div>
       </div>
       <nav className="cn-nav" id={showToggle ? 'cn-sidebar-navigation' : undefined} aria-label="Điều hướng chính">
