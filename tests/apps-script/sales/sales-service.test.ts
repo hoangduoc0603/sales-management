@@ -107,6 +107,16 @@ describe('SalesService POS checkout', () => {
     expect(getShiftCalls).toBe(1);
   });
 
+  it('prepares the POS snapshot before the command lock, then revalidates only current inputs inside it', () => {
+    const stages: string[] = [];
+    const { salesService, shiftId } = createFixture({ onPosCheckoutStage: (stage) => stages.push(stage) });
+
+    const result = salesService.completePosSale(posCompleteInput({ shiftId }));
+
+    expect(result).toMatchObject({ ok: true, data: { order: { status: 'Completed' } } });
+    expect(stages).toEqual(['projection', 'lock', 'shift', 'targetedQuote']);
+  });
+
   it('skips separate stock precheck for single-line POS because issueForSale validates availability before writing', () => {
     const { inventoryService, salesService, shiftId } = createFixture();
     let checkAvailabilityCalls = 0;
@@ -705,7 +715,12 @@ describe('SalesService POS checkout', () => {
   });
 });
 
-function createFixture(options: { quantityMilli?: number; openShift?: boolean; includeExchangeVariant?: boolean } = {}) {
+function createFixture(options: {
+  quantityMilli?: number;
+  openShift?: boolean;
+  includeExchangeVariant?: boolean;
+  onPosCheckoutStage?: (stage: 'projection' | 'lock' | 'shift' | 'targetedQuote') => void;
+} = {}) {
   const tenantId = 'tenant-default';
   const catalogRepository = createInMemoryCatalogRepository();
   const inventoryRepository = createInMemoryInventoryRepository();
@@ -716,6 +731,16 @@ function createFixture(options: { quantityMilli?: number; openShift?: boolean; i
   const catalogService = createCatalogService({ repository: catalogRepository, tenantId, now, newId });
   const inventoryService = createInventoryService({ repository: inventoryRepository, tenantId, now, newId });
   const financeService = createFinanceService({ repository: financeRepository, tenantId, now, newId });
+  const originalGetPosProjection = catalogService.getPosProjection.bind(catalogService);
+  catalogService.getPosProjection = (input) => {
+    options.onPosCheckoutStage?.('projection');
+    return originalGetPosProjection(input);
+  };
+  const originalQuotePosLines = catalogService.quotePosLines.bind(catalogService);
+  catalogService.quotePosLines = (input) => {
+    options.onPosCheckoutStage?.('targetedQuote');
+    return originalQuotePosLines(input);
+  };
 
   catalogService.createProduct({
     productCode: 'P-MILK',
@@ -771,9 +796,21 @@ function createFixture(options: { quantityMilli?: number; openShift?: boolean; i
           openingCashVnd: 500_000,
         });
 
+  const originalGetShift = financeRepository.getShift.bind(financeRepository);
+  financeRepository.getShift = (shiftId: string) => {
+    options.onPosCheckoutStage?.('shift');
+    return originalGetShift(shiftId);
+  };
+  const commandCoordinator = createCommandCoordinatorForTest();
+  const originalRunCommand = commandCoordinator.run.bind(commandCoordinator);
+  commandCoordinator.run = (command, handler, actor) => {
+    options.onPosCheckoutStage?.('lock');
+    return originalRunCommand(command, handler, actor);
+  };
+
   const salesService = createSalesService({
     catalogService,
-    commandCoordinator: createCommandCoordinatorForTest(),
+    commandCoordinator,
     financeRepository,
     financeService,
     inventoryService,

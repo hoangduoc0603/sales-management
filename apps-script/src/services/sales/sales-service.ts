@@ -181,9 +181,10 @@ export function createSalesService(deps: SalesServiceDependencies): SalesService
       };
     },
     completePosSale(input) {
+      const preflight = preparePosSale(deps, input);
       return deps.commandCoordinator.run(
         toCommand(input),
-        () => completePosSale(deps, input),
+        () => commitPosSale(deps, input, preflight),
         { actorId: input.cashierId, action: 'sales.pos.complete' },
       );
     },
@@ -965,9 +966,31 @@ function transitionWarranty(
   return { ok: true, data: { warrantyCase: next } };
 }
 
-function completePosSale(
+interface PosSalePreflight {
+  projection: CatalogPosProjection;
+}
+
+function preparePosSale(
   deps: SalesServiceDependencies,
   input: SalesPosCompleteRequest,
+): PosSalePreflight {
+  const startedAt = Date.now();
+  try {
+    return {
+      projection: deps.catalogService.getPosProjection({
+        branchId: input.branchId,
+        warehouseId: input.warehouseId,
+      }),
+    };
+  } finally {
+    recordStage('sales.pos.preflightCatalogProjectionMs', Date.now() - startedAt);
+  }
+}
+
+function commitPosSale(
+  deps: SalesServiceDependencies,
+  input: SalesPosCompleteRequest,
+  preflight: PosSalePreflight,
 ): SalesServiceResult<SalesPosCompleteResponse> {
   const measure = <T>(stage: string, operation: () => T): T => {
     const startedAt = Date.now();
@@ -983,13 +1006,19 @@ function completePosSale(
   );
   if (shiftError !== undefined) return shiftError;
 
-  const projection = measure('sales.pos.catalogProjectionMs', () =>
-    deps.catalogService.getPosProjection({
+  const quote = measure('sales.pos.targetedQuoteMs', () =>
+    deps.catalogService.quotePosLines({
       branchId: input.branchId,
       warehouseId: input.warehouseId,
+      customerId: input.customerId,
+      lines: input.lines.map((line) => ({
+        lineId: line.lineId,
+        variantId: line.variantId,
+        unitVersionId: line.unitVersionId,
+        quantity: line.quantity,
+      })),
     }),
   );
-  const quote = measure('sales.pos.quoteMs', () => quoteCurrentCart(deps, input, projection));
   if (quote.quoteVersion !== input.quoteVersion) {
     return failure('PRICE_CHANGED', 'Giá hoặc khuyến mãi đã thay đổi. Vui lòng áp dụng báo giá mới trước khi hoàn tất.', {
       expectedVersion: input.quoteVersion,
@@ -1024,7 +1053,7 @@ function completePosSale(
   const receivableVnd = Math.max(0, quote.totalVnd - paidVnd);
   const changeVnd = Math.max(0, paidVnd - quote.totalVnd);
   const paymentStatus = resolvePaymentStatus(quote.totalVnd, paidVnd);
-  const lines = buildLineSnapshots(deps, input, saleOrderId, quote.lines, projection);
+  const lines = buildLineSnapshots(deps, input, saleOrderId, quote.lines, preflight.projection);
   const order: SaleOrderDTO = {
     saleOrderId,
     tenantId: deps.tenantId,
