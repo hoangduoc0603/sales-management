@@ -77,6 +77,92 @@ describe('CommandCoordinator', () => {
     expect(repository.durableFindCalls).toEqual([]);
     expect(repository.records).toHaveLength(1);
   });
+
+  it('flushes pending command writes before SpreadsheetApp flush and lock release', () => {
+    const events: string[] = [];
+    const coordinator = createCommandCoordinator({
+      commandRepository: {
+        findByIdempotencyKey: () => undefined,
+        findByCommandId: () => undefined,
+        appendNew: () => events.push('appendCommitted'),
+        save: () => undefined,
+      },
+      lockProvider: {
+        withLock(operation, timing) {
+          events.push('waitLock:3000');
+          timing?.onAcquired(7);
+          try {
+            return operation();
+          } finally {
+            events.push('spreadsheetFlush');
+            events.push('releaseLock');
+            timing?.onReleased(11);
+          }
+        },
+      },
+      flushPendingWrites: () => events.push('flushPendingWrites'),
+      now: () => new Date('2026-08-02T00:00:00.000Z'),
+      newId: (prefix) => `${prefix}-1`,
+    });
+
+    const performance = withPerformanceTracker(() => {
+      coordinator.run(
+        { commandId: 'cmd-flush-1', idempotencyKey: 'idem-flush-1' },
+        () => {
+          events.push('handler');
+          return { receiptId: 'receipt-flush-1' };
+        },
+      );
+      return readPerformanceSnapshot();
+    });
+
+    expect(events).toEqual([
+      'waitLock:3000',
+      'handler',
+      'appendCommitted',
+      'flushPendingWrites',
+      'spreadsheetFlush',
+      'releaseLock',
+    ]);
+    expect(performance.stages['command.lockWaitMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['command.lockHoldMs']).toBeGreaterThanOrEqual(0);
+  });
+
+  it('releases the lock and surfaces a pending-write flush failure', () => {
+    const events: string[] = [];
+    const coordinator = createCommandCoordinator({
+      commandRepository: {
+        findByIdempotencyKey: () => undefined,
+        findByCommandId: () => undefined,
+        appendNew: () => events.push('append'),
+        save: () => undefined,
+      },
+      lockProvider: {
+        withLock(operation) {
+          events.push('acquire');
+          try {
+            return operation();
+          } finally {
+            events.push('release');
+          }
+        },
+      },
+      flushPendingWrites: () => {
+        events.push('flush');
+        throw new Error('batch flush failed');
+      },
+      now: () => new Date('2026-08-02T00:00:00.000Z'),
+      newId: (prefix) => `${prefix}-1`,
+    });
+
+    expect(() =>
+      coordinator.run(
+        { commandId: 'cmd-flush-error', idempotencyKey: 'idem-flush-error' },
+        () => ({ receiptId: 'receipt-flush-error' }),
+      ),
+    ).toThrow('batch flush failed');
+    expect(events).toEqual(['acquire', 'append', 'flush', 'append', 'release']);
+  });
 });
 
 class FastPathCommandRepository {

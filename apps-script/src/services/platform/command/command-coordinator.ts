@@ -23,6 +23,7 @@ export interface CommandCoordinator {
 interface CommandCoordinatorDependencies {
   commandRepository: CommandRepository;
   lockProvider: LockProvider;
+  flushPendingWrites?: () => void;
   now: () => Date;
   newId: (prefix: string) => string;
 }
@@ -72,7 +73,9 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
                 updatedAt: deps.now().toISOString(),
               });
             });
-
+            measure('command.flushPendingWritesMs', () => {
+              deps.flushPendingWrites?.();
+            });
             return result;
           } catch (error) {
             measure('command.appendFailedMs', () => {
@@ -87,6 +90,13 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
             });
             throw error;
           }
+        }, {
+          onAcquired(waitMs) {
+            recordStage('command.lockWaitMs', waitMs);
+          },
+          onReleased(holdMs) {
+            recordStage('command.lockHoldMs', holdMs);
+          },
         });
       } finally {
         recordStage('command.totalWithLockMs', Date.now() - totalStartedAt);

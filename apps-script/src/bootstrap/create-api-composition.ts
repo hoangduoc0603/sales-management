@@ -387,6 +387,7 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   const commandCoordinator = createCommandCoordinator({
     commandRepository: input.repositories?.commandRepository ?? createInMemoryCommandRepository(),
     lockProvider: input.lockProvider ?? createImmediateLockProvider(),
+    flushPendingWrites: input.afterInvoke,
     now: () => clock.now(),
     newId,
   });
