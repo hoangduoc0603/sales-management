@@ -668,14 +668,15 @@ input:focus-visible {
 
 .cn-sidebar-rail-toggle {
   position: absolute;
+  top: 0;
   right: -11px;
-  bottom: 68px;
   z-index: 5;
-  display: grid;
+  display: flex;
   width: 22px;
-  height: 38px;
-  place-items: center;
-  padding: 0;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 68px;
   border: 0;
   background: transparent;
   color: var(--cn-text-muted);

@@ -160,8 +160,8 @@ describe('AppShell', () => {
     expect(css).toContain('.cn-sidebar-rail-toggle');
     expect(css).toContain('.cn-sidebar-rail-handle');
     expect(css).not.toContain('.cn-sidebar-toggle');
-    expect(css).toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*bottom:\s*68px;[^}]*height:\s*38px;[^}]*padding:\s*0;/s);
-    expect(css).not.toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*top:\s*0;[^}]*height:\s*100%;/s);
+    expect(css).toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*top:\s*0;[^}]*height:\s*100%;[^}]*align-items:\s*flex-end;[^}]*padding:\s*0 0 68px;/s);
+    expect(css).not.toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*bottom:\s*68px;[^}]*height:\s*38px;/s);
     expect(css).toMatch(/\.cn-sidebar-rail-handle\s*\{[^}]*border-radius:\s*999px;/s);
   });
 });
