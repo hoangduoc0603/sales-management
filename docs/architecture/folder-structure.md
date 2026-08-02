@@ -96,6 +96,9 @@ docs/
     screens/         # Handoff UI theo từng màn hình
   product/           # Yêu cầu sản phẩm, phạm vi và quy tắc nghiệp vụ
     srs/             # Đặc tả yêu cầu phần mềm theo từng miền nghiệp vụ
+  superpowers/       # Spec và implementation plan cho thay đổi đã qua quy trình thiết kế
+    specs/           # Thiết kế đã được duyệt, làm đầu vào cho implementation plan
+    plans/           # Kế hoạch triển khai chi tiết, có bước TDD và verification
 scripts/             # Script hỗ trợ và kiểm tra repository
 tests/               # Kiểm thử dùng chung hoặc tích hợp
   performance/       # Benchmark regression có ngưỡng cho POS và các fast path release-critical
@@ -169,6 +172,8 @@ tmp/                 # Tài liệu rà soát tạm thời; không phải nguồn
 | `docs/design/screens/` | Handoff UI theo từng màn hình: artifact Open Design, trạng thái duyệt, nội dung bắt buộc, rule và acceptance checklist | Prototype HTML xuất từ Open Design, mã React/Tailwind hoặc tài liệu nháp chưa duyệt |
 | `docs/product/` | PRD, yêu cầu sản phẩm, phạm vi, quy tắc nghiệp vụ và tiêu chí nghiệm thu | Chi tiết thiết kế kỹ thuật hoặc schema Google Sheets |
 | `docs/product/srs/` | Bộ SRS mô-đun; `overview.md` là nguồn quy tắc chung, các tệp còn lại đặc tả theo miền và dẫn chiếu bằng mã yêu cầu | Schema Sheet chi tiết, API contract, wireframe hoặc kiến trúc mã nguồn |
+| `docs/superpowers/specs/` | Spec thiết kế đã được user duyệt trước khi lập implementation plan; chỉ ghi rõ phạm vi, quyết định kỹ thuật, dữ liệu, lỗi và kiểm thử của thay đổi | Nguồn SRS/ADR/LLD chuẩn, nhật ký benchmark runtime hoặc mã nguồn ứng dụng |
+| `docs/superpowers/plans/` | Kế hoạch triển khai theo task, nêu rõ file, interface, TDD và verification; không thay thế spec đã duyệt | Nguồn requirement/ADR/LLD chuẩn hoặc evidence release đã thực thi |
 | `docs/` | Tài liệu tiếng Việt về kiến trúc, dữ liệu, quyết định và tính năng | Cấu hình runtime hoặc secret |
 | `tests/performance/` | Benchmark tự động có threshold rõ ràng, dùng dữ liệu seed đại diện để chặn regression hiệu năng release-critical | Benchmark phụ thuộc tài nguyên production thật, sleep/timeouts dài hoặc số đo không có assertion |
 | `tmp/` | Báo cáo rà soát, bản nháp hoặc tài liệu làm việc tạm thời trước khi được chốt/move vào `docs/` | Nguồn chuẩn về kiến trúc, dữ liệu, sản phẩm hoặc quyết định |

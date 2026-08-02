@@ -3,8 +3,21 @@ import type { CatalogPosProjectionResponse, CatalogPosVariantDTO } from '../../.
 export interface BenchmarkSample {
   name: string;
   durationsMs: readonly number[];
+  sampleCount: number;
+  p50Ms: number;
   p95Ms: number;
   p99Ms: number;
+  maxMs: number;
+  certified: boolean;
+}
+
+export interface PerformanceSampleSummary {
+  sampleCount: number;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  maxMs: number;
+  certified: boolean;
 }
 
 export function createLargePosProjection(variantCount = 10_000): CatalogPosProjectionResponse {
@@ -55,8 +68,18 @@ export function measureDurationsMs(
   return {
     name,
     durationsMs,
-    p95Ms: percentile(durationsMs, 0.95),
-    p99Ms: percentile(durationsMs, 0.99),
+    ...summarizePerformanceSamples(durationsMs),
+  };
+}
+
+export function summarizePerformanceSamples(values: readonly number[]): PerformanceSampleSummary {
+  return {
+    sampleCount: values.length,
+    p50Ms: percentile(values, 0.5),
+    p95Ms: percentile(values, 0.95),
+    p99Ms: percentile(values, 0.99),
+    maxMs: values.length === 0 ? 0 : Math.max(...values),
+    certified: values.length >= 20,
   };
 }
 

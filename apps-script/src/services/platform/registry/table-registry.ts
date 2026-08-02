@@ -433,7 +433,9 @@ export function createPlatformTableDefinitions(): readonly TableDefinitionDTO[] 
       'taxCode',
       'isActive',
       'descriptionJson',
-    ], 'catalog'),
+    ], 'catalog', [
+      { name: 'Product.productId', columns: ['productId'], unique: true },
+    ]),
     table('Variant', 'core', 'master', 'none', [
       'id',
       'tenantId',
@@ -450,7 +452,9 @@ export function createPlatformTableDefinitions(): readonly TableDefinitionDTO[] 
       'defaultUnitId',
       'isActive',
       'unitPriceVnd',
-    ], 'catalog'),
+    ], 'catalog', [
+      { name: 'Variant.variantId', columns: ['variantId'], unique: true },
+    ]),
     table('VariantBarcode', 'core', 'master', 'none', [
       'id',
       'tenantId',
@@ -480,7 +484,9 @@ export function createPlatformTableDefinitions(): readonly TableDefinitionDTO[] 
       'effectiveFrom',
       'effectiveTo',
       'isActive',
-    ], 'catalog'),
+    ], 'catalog', [
+      { name: 'UnitConversionVersion.unitVersionId', columns: ['unitVersionId'], unique: true },
+    ]),
     table('PriceList', 'core', 'master', 'none', [
       'priceListId',
       'name',

@@ -22,15 +22,19 @@ export function createAppsScriptLockProvider(
   const waitTimeoutMs = deps.waitTimeoutMs ?? 10_000;
 
   return {
-    withLock(operation) {
+    withLock(operation, timing) {
       const lock = deps.lockService.getDocumentLock() ?? deps.lockService.getScriptLock();
+      const waitingStartedAt = Date.now();
       lock.waitLock(waitTimeoutMs);
+      timing?.onAcquired(Date.now() - waitingStartedAt);
+      const lockedAt = Date.now();
       try {
         const result = operation();
         deps.spreadsheetApp?.flush();
         return result;
       } finally {
         lock.releaseLock();
+        timing?.onReleased(Date.now() - lockedAt);
       }
     },
   };

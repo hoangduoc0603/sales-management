@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createInMemoryCatalogRepository } from '../../../apps-script/src/repositories/catalog/catalog-repository';
 import { createCatalogService } from '../../../apps-script/src/services/catalog/catalog-service';
 
-function createService() {
+function createService(repository = createInMemoryCatalogRepository()) {
   let sequence = 0;
 
   return createCatalogService({
-    repository: createInMemoryCatalogRepository(),
+    repository,
     tenantId: 'tenant-default',
     now: () => new Date('2026-07-27T00:00:00.000Z'),
     newId(prefix) {
@@ -17,6 +17,84 @@ function createService() {
 }
 
 describe('CatalogService', () => {
+  it('re-quotes requested POS lines without constructing a full POS projection', () => {
+    const service = createService();
+    const created = service.createProduct({
+      productCode: 'SP-QUOTE-001',
+      name: 'Hàng re-quote',
+      productType: 'Stocked',
+      sku: 'QUOTE-001',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+
+    expect(
+      service.quotePosLines({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        lines: [
+          {
+            lineId: 'line-quote-1',
+            variantId: created.data.defaultVariant.variantId,
+            unitVersionId: created.data.defaultUnit.unitVersionId,
+            quantity: 2,
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true, quote: { totalVnd: 84000, lines: [{ unitPriceVnd: 42000 }] } });
+  });
+
+  it('rejects POS revalidation when the active variant parent product is no longer active instead of quoting zero', () => {
+    const repository = createInMemoryCatalogRepository();
+    const service = createService(repository);
+    const created = service.createProduct({
+      productCode: 'SP-QUOTE-INACTIVE',
+      name: 'Hàng đã ngừng bán',
+      productType: 'Stocked',
+      sku: 'QUOTE-INACTIVE',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    repository.saveProduct({ ...created.data.product, isActive: false });
+
+    expect(
+      service.quotePosLines({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        lines: [{
+          lineId: 'line-quote-inactive',
+          variantId: created.data.defaultVariant.variantId,
+          unitVersionId: created.data.defaultUnit.unitVersionId,
+          quantity: 1,
+        }],
+      }),
+    ).toMatchObject({ ok: false, error: { lineId: 'line-quote-inactive', reason: 'PRODUCT_INACTIVE' } });
+  });
+
+  it('changes POS projectionVersion when price changes without changing the visible variant count', () => {
+    const repository = createInMemoryCatalogRepository();
+    const service = createService(repository);
+    const created = service.createProduct({
+      productCode: 'SP-PROJECTION-VERSION',
+      name: 'Hàng đổi giá',
+      productType: 'Stocked',
+      sku: 'PROJECTION-VERSION',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    const before = service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' });
+
+    repository.saveVariant({ ...created.data.defaultVariant, unitPriceVnd: 43000 });
+    const after = service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' });
+
+    expect(after.variants).toHaveLength(before.variants.length);
+    expect(after.variants[0]?.unitPriceVnd).toBe(43000);
+    expect(after.projectionVersion).not.toBe(before.projectionVersion);
+  });
+
   it('tạo product đơn giản với Default Variant là đơn vị giao dịch', () => {
     const service = createService();
 

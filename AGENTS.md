@@ -25,12 +25,19 @@ Trước khi tạo hoặc sửa mã nguồn cho bất kỳ task nào:
 2. Đọc `docs/architecture/lld-traceability-review.md` và `docs/architecture/detailed-design.md` để xác định bounded context, tài liệu LLD, data dictionary và ADR cần áp dụng.
 3. Theo bounded context bị ảnh hưởng, đọc `docs/product/srs/overview.md`, SRS theo domain, tệp tại `docs/architecture/modules/`, data dictionary tương ứng tại `docs/data-model/tables/`, ADR được dẫn chiếu và mã nguồn hiện có liên quan.
 4. Với task xuyên miền, đọc tài liệu của tất cả domain liên quan và kiểm tra orchestration/traceability giữa chúng.
+5. Nếu task tác động API, Google Sheets/Drive, command/query, cache, worker, payload/read model lớn hoặc UI có dữ liệu lớn, đọc `docs/architecture/performance-playbook.md` và điền performance intake trong plan/task trước khi code.
 
 Thứ tự ưu tiên khi có mâu thuẫn: SRS → ADR Accepted → Solution/System Design → LLD và data dictionary → mã nguồn hiện có. PRD là nguồn về mục tiêu và phạm vi sản phẩm.
 
 Không tự thay đổi requirement, state machine, phân quyền, source of truth, ledger, schema vật lý, partition/lifecycle hoặc performance policy. Khi tài liệu thiếu, mâu thuẫn hoặc task buộc phải thay đổi các nội dung đó, dừng coding và nêu rõ điểm cần quyết định.
 
 Khi hoàn thành task, đối chiếu test scenario/quality gate trong LLD. Nếu thay đổi hành vi, schema hoặc cấu trúc, cập nhật tài liệu nguồn liên quan trong cùng thay đổi.
+
+## Quy tắc hiệu năng xuyên miền
+
+- `docs/architecture/performance-playbook.md` là entrypoint bắt buộc cho mọi thay đổi có khả năng tăng I/O, latency, contention hoặc dữ liệu browser/server. `docs/architecture/runtime-and-performance.md` và ADR Accepted vẫn là policy nguồn.
+- Không tối ưu theo cảm tính hoặc chỉ cho một màn hình khi primitive dùng chung có thể loại bỏ I/O/caching/locking dư thừa cho toàn app. Mọi tối ưu phải giữ source of truth, quyền, ledger và retry semantics.
+- Release ảnh hưởng POS chỉ được coi là có evidence khi benchmark ghi môi trường, cache cold/warm, số mẫu, p50/p95/p99/max và stage/I/O chính; benchmark local không thay thế Apps Script `/dev` hoặc production evidence.
 
 ## Quy tắc triển khai UI từ Design
 

@@ -56,6 +56,7 @@ web/src/features/<domain>
 | Conceptual record ownership | [Logical data model](../data-model/logical-data-model.md) |
 | Storage group, partition và archive | [Storage partitioning](../data-model/storage-partitioning-and-lifecycle.md) |
 | Chỉ tiêu vận hành POS | [Runtime và hiệu năng](runtime-and-performance.md) |
+| Intake và checklist hiệu năng xuyên miền | [Performance playbook](performance-playbook.md) |
 
 ## 5. Hợp đồng của một LLD domain
 
@@ -76,6 +77,7 @@ Mỗi tài liệu domain phải có các mục sau, chỉ ở mức cần thiế
 - Mỗi query phải xác định scope, partition set, projection/read model, sorting/pagination và giới hạn không quét full table trong fast path.
 - Mỗi physical table phải có owner, storage role, lifecycle, schema version, primary key, lookup key logic và migration behavior.
 - Trước implementation, module phải có test matrix bao phủ happy path, validation, permission/scope, idempotency/retry, failure recovery và scenario hiệu năng liên quan.
+- Với API, Sheets/Drive, cache, worker, payload/read model lớn hoặc UI có dữ liệu lớn, plan phải kèm performance intake: path class, SLO/budget, read/write set, cache/invalidation, lock/flush boundary, telemetry và evidence theo [Performance playbook](performance-playbook.md).
 
 ## 7. Quyết định nền tảng được cụ thể hóa
 

@@ -522,6 +522,22 @@ describe('Google Workspace adapter seams', () => {
     expect(spreadsheetApp.flushCalls).toBe(1);
   });
 
+  it('reports wait and hold timing around the Apps Script lock lifecycle', () => {
+    const lockService = new FakeLockService();
+    const timings: string[] = [];
+    const provider = createAppsScriptLockProvider({ lockService, waitTimeoutMs: 3000 });
+
+    provider.withLock(
+      () => 'committed',
+      {
+        onAcquired: (waitMs: number) => timings.push(`wait:${waitMs}`),
+        onReleased: (holdMs: number) => timings.push(`hold:${holdMs}`),
+      },
+    );
+
+    expect(timings).toEqual([expect.stringMatching(/^wait:\d+$/), expect.stringMatching(/^hold:\d+$/)]);
+  });
+
   it('falls back to Apps Script script lock when document lock is unavailable', () => {
     const lockService = new FakeLockService({ documentLockAvailable: false });
     const provider = createAppsScriptLockProvider({

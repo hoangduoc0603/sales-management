@@ -33,6 +33,10 @@ import { InventoryHome } from '../features/inventory/inventory-home';
 import { PosCheckoutShell } from '../features/pos/pos-checkout-shell';
 import { ReportingAdministrationOperationsHome } from '../features/reporting/reporting-administration-operations-home';
 import { SalesOrdersReturnsHome } from '../features/sales/sales-orders-returns-home';
+import {
+  buildPosCatalogCacheNamespace,
+  clearCachedPosCatalogProjectionNamespace,
+} from '../features/pos/catalog-cache/load-pos-catalog-projection';
 
 export interface SalesManagementAppProps {
   runtimeMode?: RuntimeApiMode;
@@ -165,6 +169,17 @@ export function SalesManagementApp({
   ]);
 
   const clearSession = useCallback(() => {
+    if (actor !== undefined) {
+      void clearCachedPosCatalogProjectionNamespace({
+        cacheNamespace: buildPosCatalogCacheNamespace({
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          authVersion: actor.authVersion,
+          appVersion: installStatus?.appVersion ?? '0.1.0',
+          schemaVersion: installStatus?.schemaVersion ?? 1,
+        }),
+      });
+    }
     sessionStorage.clear();
 
     if (localDebugAuthEnabled && localDebugActor && localDebugScope) {
@@ -183,7 +198,7 @@ export function SalesManagementApp({
     setSelectedBranchId(undefined);
     setSelectedWarehouseId(undefined);
     setAuthMode('login');
-  }, [localDebugActor, localDebugAuthEnabled, localDebugScope, sessionStorage]);
+  }, [actor, installStatus?.appVersion, installStatus?.schemaVersion, localDebugActor, localDebugAuthEnabled, localDebugScope, sessionStorage]);
 
   const applyScope = useCallback((nextScope: CurrentScopeResponse) => {
     setScope(nextScope);
@@ -476,13 +491,16 @@ export function SalesManagementApp({
       ) : route === 'pos' ? (
         <PosCheckoutShell
           actor={actor}
+          appVersion={installStatus?.appVersion}
           apiClient={client}
+          schemaVersion={installStatus?.schemaVersion}
           scope={scope}
           selectedBranchId={selectedBranchId}
           selectedWarehouseId={selectedWarehouseId}
           sessionToken={sessionToken}
           shellMode="embedded"
           theme={theme}
+          onSessionExpired={clearSession}
         />
       ) : route === 'orders' ? (
         <SalesOrdersReturnsHome

@@ -17,12 +17,14 @@ export interface CommandActorInput {
 
 export interface CommandCoordinator {
   run<T>(command: ApiCommand, handler: () => T, actor?: CommandActorInput): T;
+  getCachedStatus(input: { idempotencyKey: string }): CommandStatusDTO | undefined;
   getStatus(input: { commandId?: string; idempotencyKey?: string }): CommandStatusDTO | undefined;
 }
 
 interface CommandCoordinatorDependencies {
   commandRepository: CommandRepository;
   lockProvider: LockProvider;
+  flushPendingWrites?: () => void;
   now: () => Date;
   newId: (prefix: string) => string;
 }
@@ -72,7 +74,9 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
                 updatedAt: deps.now().toISOString(),
               });
             });
-
+            measure('command.flushPendingWritesMs', () => {
+              deps.flushPendingWrites?.();
+            });
             return result;
           } catch (error) {
             measure('command.appendFailedMs', () => {
@@ -87,6 +91,13 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
             });
             throw error;
           }
+        }, {
+          onAcquired(waitMs) {
+            recordStage('command.lockWaitMs', waitMs);
+          },
+          onReleased(holdMs) {
+            recordStage('command.lockHoldMs', holdMs);
+          },
         });
       } finally {
         recordStage('command.totalWithLockMs', Date.now() - totalStartedAt);
@@ -112,6 +123,19 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
         errorCode: record.errorCode,
         updatedAt: record.updatedAt,
       };
+    },
+    getCachedStatus(input) {
+      const record = deps.commandRepository.findCachedByIdempotencyKey?.(input.idempotencyKey);
+      return record === undefined
+        ? undefined
+        : {
+            commandId: record.commandId,
+            idempotencyKey: record.idempotencyKey,
+            status: record.status,
+            resultJson: record.resultJson,
+            errorCode: record.errorCode,
+            updatedAt: record.updatedAt,
+          };
     },
   };
 }

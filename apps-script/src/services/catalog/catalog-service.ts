@@ -7,8 +7,11 @@ import type {
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
+  CatalogQuoteRequest,
+  CatalogQuoteResponse,
   CatalogPosProjectionRequest,
   CatalogPosProjectionResponse,
+  CatalogPosVariantDTO,
   InventoryMode,
   ProductDTO,
   CatalogSetProductActiveRequest,
@@ -24,6 +27,7 @@ import type {
   VariantDTO,
 } from '@shared/contracts/catalog/catalog';
 import type { CatalogRepository } from '../../repositories/catalog/catalog-repository';
+import { createPricingService } from './pricing-service';
 
 type CatalogServiceResult<T> =
   | {
@@ -35,6 +39,18 @@ type CatalogServiceResult<T> =
       error: {
         code: ApiErrorCode;
         message: string;
+      };
+    };
+
+export type CatalogPosLineQuoteResult =
+  | { ok: true; quote: CatalogQuoteResponse }
+  | {
+      ok: false;
+      error: {
+        lineId: string;
+        variantId: string;
+        unitVersionId: string;
+        reason: 'PRODUCT_NOT_FOUND' | 'PRODUCT_INACTIVE' | 'VARIANT_UNAVAILABLE' | 'UNIT_UNAVAILABLE' | 'UNIT_MISMATCH';
       };
     };
 
@@ -51,6 +67,7 @@ export interface CatalogService {
     input: CatalogSetVariantActiveRequest,
   ): CatalogServiceResult<CatalogSetVariantActiveResponse>;
   getPosProjection(input: CatalogPosProjectionRequest): CatalogPosProjectionResponse;
+  quotePosLines(input: CatalogQuoteRequest): CatalogPosLineQuoteResult;
 }
 
 export interface CatalogServiceDependencies {
@@ -527,39 +544,127 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
           .map((unit) => [unit.variantId, unit]),
       );
 
+      const projectionVariants = variants
+        .filter((variant) => variant.isActive)
+        .filter((variant) => activeProductIds.has(variant.productId))
+        .flatMap((variant) => {
+          const unit = unitVersionsByVariantId.get(variant.variantId);
+          if (unit === undefined) return [];
+
+          return [
+            {
+              variantId: variant.variantId,
+              productId: variant.productId,
+              sku: variant.sku,
+              displayName: variant.displayName,
+              barcode: barcodesByVariantId.get(variant.variantId)?.barcode,
+              unitVersionId: unit.unitVersionId,
+              unitName: unit.unitName,
+              unitPriceVnd: variant.unitPriceVnd,
+              saleEnabled: unit.saleEnabled,
+              inventoryMode: variant.inventoryMode,
+              lotTracking: variant.lotTracking,
+              serialTracking: variant.serialTracking,
+              isActive: variant.isActive,
+            },
+          ];
+        });
+
       return {
-        projectionVersion: `catalog-pos-${variants.length}`,
+        projectionVersion: createPosProjectionVersion(input, projectionVariants),
         branchId: input.branchId,
         warehouseId: input.warehouseId,
         generatedAt: deps.now().toISOString(),
-        variants: variants
-          .filter((variant) => variant.isActive)
-          .filter((variant) => activeProductIds.has(variant.productId))
-          .flatMap((variant) => {
-            const unit = unitVersionsByVariantId.get(variant.variantId);
-            if (unit === undefined) return [];
+        variants: projectionVariants,
+      };
+    },
+    quotePosLines(input) {
+      const variantsById = new Map(
+        deps.repository.findVariantsByIds(input.lines.map((line) => line.variantId)).map((variant) => [variant.variantId, variant]),
+      );
+      const productsById = new Map(
+        deps.repository
+          .findProductsByIds([...variantsById.values()].map((variant) => variant.productId))
+          .map((product) => [product.productId, product]),
+      );
+      const unitsById = new Map(
+        deps.repository
+          .findUnitVersionsByIds(input.lines.map((line) => line.unitVersionId))
+          .map((unitVersion) => [unitVersion.unitVersionId, unitVersion]),
+      );
+      for (const line of input.lines) {
+        const variant = variantsById.get(line.variantId);
+        if (variant === undefined || !variant.isActive) {
+          return { ok: false, error: { ...line, reason: 'VARIANT_UNAVAILABLE' } };
+        }
+        const product = productsById.get(variant.productId);
+        if (product === undefined) {
+          return { ok: false, error: { ...line, reason: 'PRODUCT_NOT_FOUND' } };
+        }
+        if (!product.isActive) {
+          return { ok: false, error: { ...line, reason: 'PRODUCT_INACTIVE' } };
+        }
+        const unitVersion = unitsById.get(line.unitVersionId);
+        if (unitVersion === undefined || !unitVersion.isActive || !unitVersion.saleEnabled) {
+          return { ok: false, error: { ...line, reason: 'UNIT_UNAVAILABLE' } };
+        }
+        if (unitVersion.variantId !== variant.variantId) {
+          return { ok: false, error: { ...line, reason: 'UNIT_MISMATCH' } };
+        }
+      }
+      const pricingVariants = input.lines.flatMap((line) => {
+        const variant = variantsById.get(line.variantId);
+        const unitVersion = unitsById.get(line.unitVersionId);
+        if (variant === undefined || unitVersion === undefined) return [];
+        return [{
+          variantId: variant.variantId,
+          unitVersionId: unitVersion.unitVersionId,
+          unitPriceVnd: variant.unitPriceVnd,
+        }];
+      });
 
-            return [
-              {
-                variantId: variant.variantId,
-                productId: variant.productId,
-                sku: variant.sku,
-                displayName: variant.displayName,
-                barcode: barcodesByVariantId.get(variant.variantId)?.barcode,
-                unitVersionId: unit.unitVersionId,
-                unitName: unit.unitName,
-                unitPriceVnd: variant.unitPriceVnd,
-                saleEnabled: unit.saleEnabled,
-                inventoryMode: variant.inventoryMode,
-                lotTracking: variant.lotTracking,
-                serialTracking: variant.serialTracking,
-                isActive: variant.isActive,
-              },
-            ];
-          }),
+      return {
+        ok: true,
+        quote: createPricingService({
+        variants: pricingVariants,
+        priceRules: [],
+        promotions: [],
+        }).quoteCart(input),
       };
     },
   };
+}
+
+function createPosProjectionVersion(
+  input: CatalogPosProjectionRequest,
+  variants: readonly CatalogPosVariantDTO[],
+): string {
+  const content = JSON.stringify({
+    branchId: input.branchId,
+    warehouseId: input.warehouseId,
+    variants: [...variants]
+      .sort((left, right) => left.variantId.localeCompare(right.variantId) || left.unitVersionId.localeCompare(right.unitVersionId))
+      .map((variant) => [
+        variant.variantId,
+        variant.productId,
+        variant.sku,
+        variant.displayName,
+        variant.barcode,
+        variant.unitVersionId,
+        variant.unitName,
+        variant.unitPriceVnd,
+        variant.saleEnabled,
+        variant.inventoryMode,
+        variant.lotTracking,
+        variant.serialTracking,
+        variant.isActive,
+      ]),
+  });
+  let hash = 2_166_136_261;
+  for (let index = 0; index < content.length; index += 1) {
+    hash = Math.imul(hash ^ content.charCodeAt(index), 16_777_619);
+  }
+  return `catalog-pos-${(hash >>> 0).toString(36)}`;
 }
 
 function matchesProductQuery(item: CatalogProductListItemDTO, query: string): boolean {
