@@ -17,6 +17,34 @@ function createService() {
 }
 
 describe('CatalogService', () => {
+  it('re-quotes requested POS lines without constructing a full POS projection', () => {
+    const service = createService();
+    const created = service.createProduct({
+      productCode: 'SP-QUOTE-001',
+      name: 'Hàng re-quote',
+      productType: 'Stocked',
+      sku: 'QUOTE-001',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+
+    expect(
+      service.quotePosLines({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        lines: [
+          {
+            lineId: 'line-quote-1',
+            variantId: created.data.defaultVariant.variantId,
+            unitVersionId: created.data.defaultUnit.unitVersionId,
+            quantity: 2,
+          },
+        ],
+      }),
+    ).toMatchObject({ totalVnd: 84000, lines: [{ unitPriceVnd: 42000 }] });
+  });
+
   it('tạo product đơn giản với Default Variant là đơn vị giao dịch', () => {
     const service = createService();
 

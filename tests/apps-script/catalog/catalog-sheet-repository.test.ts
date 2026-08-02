@@ -225,10 +225,55 @@ describe('Sheet-backed CatalogRepository', () => {
     expect(repository.listVariants().map((variant) => variant.variantId)).toEqual(['variant-existing', 'variant-new']);
     expect(gateway.readRequests).toEqual(['Variant']);
   });
+
+  it('loads only requested variants through targeted lookup for POS revalidation', () => {
+    const gateway = new FakeSheetGateway({
+      Variant: [
+        variantRow('variant-1', 'Hàng 1'),
+        variantRow('variant-2', 'Hàng 2'),
+        variantRow('variant-3', 'Hàng 3'),
+      ],
+    });
+    const repository = createSheetCatalogRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+    });
+
+    expect(repository.findVariantsByIds(['variant-2', 'variant-1', 'variant-2'])).toEqual([
+      expect.objectContaining({ variantId: 'variant-2' }),
+      expect.objectContaining({ variantId: 'variant-1' }),
+    ]);
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([
+      { tableName: 'Variant', columnName: 'variantId', value: 'variant-2' },
+      { tableName: 'Variant', columnName: 'variantId', value: 'variant-1' },
+    ]);
+  });
+
+  it('loads only requested unit versions through targeted lookup for POS revalidation', () => {
+    const gateway = new FakeSheetGateway({
+      UnitConversionVersion: [unitRow('unit-1', 'variant-1'), unitRow('unit-2', 'variant-2')],
+    });
+    const repository = createSheetCatalogRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+    });
+
+    expect(repository.findUnitVersionsByIds(['unit-2', 'unit-1', 'unit-2'])).toEqual([
+      expect.objectContaining({ unitVersionId: 'unit-2' }),
+      expect.objectContaining({ unitVersionId: 'unit-1' }),
+    ]);
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([
+      { tableName: 'UnitConversionVersion', columnName: 'unitVersionId', value: 'unit-2' },
+      { tableName: 'UnitConversionVersion', columnName: 'unitVersionId', value: 'unit-1' },
+    ]);
+  });
 });
 
 class FakeSheetGateway {
   readonly appendRequests: Array<{ tableName: string; rows: Record<string, unknown>[] }> = [];
+  readonly findRequests: Array<{ tableName: string; columnName: string; value: string }> = [];
   readRequests: string[] = [];
   private readonly rowsByTable = new Map<string, Record<string, unknown>[]>();
 
@@ -241,6 +286,17 @@ class FakeSheetGateway {
   readTable(request: { table: TableDefinitionDTO }): Record<string, unknown>[] {
     this.readRequests.push(request.table.tableName);
     return this.getRows(request.table.tableName).map(clone);
+  }
+
+  findRowsByColumn(request: { table: TableDefinitionDTO; columnName: string; value: string }): Record<string, unknown>[] {
+    this.findRequests.push({
+      tableName: request.table.tableName,
+      columnName: request.columnName,
+      value: request.value,
+    });
+    return this.getRows(request.table.tableName)
+      .filter((row) => String(row[request.columnName] ?? '') === request.value)
+      .map(clone);
   }
 
   appendRows(request: { table: TableDefinitionDTO; rows: readonly Record<string, unknown>[] }): { appendedRowCount: number } {
@@ -295,4 +351,43 @@ function createSequenceId(): (prefix: string) => string {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function variantRow(variantId: string, displayName: string): Record<string, unknown> {
+  return {
+    id: `${variantId}:v1`,
+    tenantId: 'tenant-default',
+    schemaVersion: 1,
+    recordVersion: 1,
+    variantId,
+    productId: `product-${variantId}`,
+    sku: `SKU-${variantId}`,
+    skuNormalized: `SKU-${variantId}`,
+    displayName,
+    inventoryMode: 'Tracked',
+    lotTracking: false,
+    serialTracking: false,
+    defaultUnitId: 'cái',
+    isActive: true,
+    unitPriceVnd: 10000,
+  };
+}
+
+function unitRow(unitVersionId: string, variantId: string): Record<string, unknown> {
+  return {
+    id: `${unitVersionId}:v1`,
+    tenantId: 'tenant-default',
+    schemaVersion: 1,
+    recordVersion: 1,
+    unitVersionId,
+    variantId,
+    unitId: 'cái',
+    unitName: 'cái',
+    baseUnitId: 'cái',
+    factor: 1,
+    saleEnabled: true,
+    purchaseEnabled: true,
+    effectiveFrom: '2026-08-02T00:00:00.000Z',
+    isActive: true,
+  };
 }

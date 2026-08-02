@@ -11,6 +11,8 @@ import type { AppendOnlySheetRecordGateway } from '../platform/sheet-record-repo
 export interface CatalogRepository {
   findProductById(productId: string): ProductDTO | undefined;
   findVariantById(variantId: string): VariantDTO | undefined;
+  findVariantsByIds(variantIds: readonly string[]): readonly VariantDTO[];
+  findUnitVersionsByIds(unitVersionIds: readonly string[]): readonly UnitConversionVersionDTO[];
   findVariantBySkuNormalized(skuNormalized: string): VariantDTO | undefined;
   findBarcodeByNormalized(barcodeNormalized: string): VariantBarcodeDTO | undefined;
   listProducts(): readonly ProductDTO[];
@@ -37,6 +39,18 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
     findVariantById(variantId) {
       const variant = variants.get(variantId);
       return variant === undefined ? undefined : clone(variant);
+    },
+    findVariantsByIds(variantIds) {
+      return [...new Set(variantIds)]
+        .map((variantId) => variants.get(variantId))
+        .filter((variant): variant is VariantDTO => variant !== undefined)
+        .map(clone);
+    },
+    findUnitVersionsByIds(unitVersionIds) {
+      return [...new Set(unitVersionIds)]
+        .map((unitVersionId) => unitVersions.get(unitVersionId))
+        .filter((unitVersion): unitVersion is UnitConversionVersionDTO => unitVersion !== undefined)
+        .map(clone);
     },
     findVariantBySkuNormalized(skuNormalized) {
       return [...variants.values()].find((variant) => variant.skuNormalized === skuNormalized);
@@ -106,6 +120,12 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
     findVariantById(variantId) {
       return variants.list().find((variant) => variant.variantId === variantId);
     },
+    findVariantsByIds(variantIds) {
+      return variants.findByIds(variantIds);
+    },
+    findUnitVersionsByIds(unitVersionIds) {
+      return unitVersions.findByIds(unitVersionIds);
+    },
     findVariantBySkuNormalized(skuNormalized) {
       return variants.list().find((variant) => variant.skuNormalized === skuNormalized);
     },
@@ -140,6 +160,7 @@ interface VersionedSheetTableDependencies<TRecord extends object> {
 
 interface VersionedSheetTable<TRecord extends object> {
   list(): TRecord[];
+  findByIds(ids: readonly string[]): TRecord[];
   save(record: TRecord): void;
 }
 
@@ -159,8 +180,12 @@ function createVersionedSheetTable<TRecord extends object>(
   }
 
   function latestRows(): VersionedSheetRow[] {
+    return latestRowsFrom(readRows());
+  }
+
+  function latestRowsFrom(rows: readonly VersionedSheetRow[]): VersionedSheetRow[] {
     const latestByRecordId = new Map<string, VersionedSheetRow>();
-    for (const row of readRows()) {
+    for (const row of rows) {
       const recordId = String(row[deps.idField] ?? '');
       if (recordId === '') continue;
       const current = latestByRecordId.get(recordId);
@@ -171,6 +196,17 @@ function createVersionedSheetTable<TRecord extends object>(
     return [...latestByRecordId.values()];
   }
 
+  function findRowsById(recordId: string): VersionedSheetRow[] {
+    const rows = deps.gateway.findRowsByColumn?.({
+      table: deps.table,
+      columnName: deps.idField,
+      value: recordId,
+    }) ?? readRows();
+    return rows
+      .filter((row) => String(row[deps.idField] ?? '') === recordId)
+      .map((row) => deepClone(row) as VersionedSheetRow);
+  }
+
   return {
     list() {
       const cached = readCachedList<TRecord>(deps.cacheStore, cacheKey);
@@ -179,6 +215,19 @@ function createVersionedSheetTable<TRecord extends object>(
       const records = latestRows().map((row) => stripSheetMetadata(row) as TRecord);
       writeCachedList(deps.cacheStore, cacheKey, records);
       return records.map(deepClone);
+    },
+    findByIds(ids) {
+      const recordsById = new Map<string, TRecord>();
+      for (const id of [...new Set(ids)]) {
+        const latest = latestRowsFrom(findRowsById(id))[0];
+        if (latest !== undefined) {
+          recordsById.set(id, stripSheetMetadata(latest) as TRecord);
+        }
+      }
+      return [...new Set(ids)]
+        .map((id) => recordsById.get(id))
+        .filter((record): record is TRecord => record !== undefined)
+        .map(deepClone);
     },
     save(record) {
       deps.cacheStore?.remove(cacheKey);

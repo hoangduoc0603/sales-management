@@ -5,6 +5,8 @@ import type {
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
+  CatalogQuoteRequest,
+  CatalogQuoteResponse,
   CatalogPosProjectionRequest,
   CatalogPosProjectionResponse,
   InventoryMode,
@@ -18,6 +20,7 @@ import type {
   VariantDTO,
 } from '@shared/contracts/catalog/catalog';
 import type { CatalogRepository } from '../../repositories/catalog/catalog-repository';
+import { createPricingService } from './pricing-service';
 
 type CatalogServiceResult<T> =
   | {
@@ -40,6 +43,7 @@ export interface CatalogService {
     input: CatalogSetProductActiveRequest,
   ): CatalogServiceResult<CatalogSetProductActiveResponse>;
   getPosProjection(input: CatalogPosProjectionRequest): CatalogPosProjectionResponse;
+  quotePosLines(input: CatalogQuoteRequest): CatalogQuoteResponse;
 }
 
 export interface CatalogServiceDependencies {
@@ -352,6 +356,36 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
             ];
           }),
       };
+    },
+    quotePosLines(input) {
+      const variantsById = new Map(
+        deps.repository
+          .findVariantsByIds(input.lines.map((line) => line.variantId))
+          .filter((variant) => variant.isActive)
+          .map((variant) => [variant.variantId, variant]),
+      );
+      const unitsById = new Map(
+        deps.repository
+          .findUnitVersionsByIds(input.lines.map((line) => line.unitVersionId))
+          .filter((unitVersion) => unitVersion.isActive && unitVersion.saleEnabled)
+          .map((unitVersion) => [unitVersion.unitVersionId, unitVersion]),
+      );
+      const pricingVariants = input.lines.flatMap((line) => {
+        const variant = variantsById.get(line.variantId);
+        const unitVersion = unitsById.get(line.unitVersionId);
+        if (variant === undefined || unitVersion?.variantId !== variant.variantId) return [];
+        return [{
+          variantId: variant.variantId,
+          unitVersionId: unitVersion.unitVersionId,
+          unitPriceVnd: variant.unitPriceVnd,
+        }];
+      });
+
+      return createPricingService({
+        variants: pricingVariants,
+        priceRules: [],
+        promotions: [],
+      }).quoteCart(input);
     },
   };
 }

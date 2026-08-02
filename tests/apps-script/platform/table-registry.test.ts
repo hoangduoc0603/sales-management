@@ -50,6 +50,24 @@ describe('TableRegistryService', () => {
     expect(
       definitions.find((table) => table.tableName === 'UnitConversionVersion')?.headers.map((header) => header.name),
     ).toEqual(expect.arrayContaining(['id', 'tenantId', 'schemaVersion', 'recordVersion', 'unitName']));
+    expect(definitions.find((table) => table.tableName === 'Variant')?.lookupKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Variant.variantId',
+          columns: ['variantId'],
+          unique: true,
+        }),
+      ]),
+    );
+    expect(definitions.find((table) => table.tableName === 'UnitConversionVersion')?.lookupKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'UnitConversionVersion.unitVersionId',
+          columns: ['unitVersionId'],
+          unique: true,
+        }),
+      ]),
+    );
   });
 
   it('đăng ký table Inventory ledger/projection theo data dictionary Phase 5', () => {
