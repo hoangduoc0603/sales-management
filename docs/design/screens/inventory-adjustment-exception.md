@@ -8,6 +8,7 @@
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact: `inventory-adjustment-exception.html`
 - Đường dẫn file Open Design: `/Users/hoangduoc/Library/Application Support/Open Design/namespaces/release-stable/data/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/inventory-adjustment-exception.html`
+- Mở bằng Chrome: `open -a "Google Chrome" "/Users/hoangduoc/Library/Application Support/Open Design/namespaces/release-stable/data/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/inventory-adjustment-exception.html"`
 
 ## Phạm vi
 
