@@ -1,11 +1,14 @@
 import type { AuthChangeOwnPasswordRequest, AuthLoginRequest } from '@shared/contracts/platform/auth';
 import type {
   CatalogCreateProductRequest,
+  CatalogCreateVariantRequest,
   CatalogProductListRequest,
   CatalogPosProjectionRequest,
   CatalogQuoteRequest,
   CatalogSetProductActiveRequest,
+  CatalogSetVariantActiveRequest,
   CatalogUpdateProductRequest,
+  CatalogUpdateVariantRequest,
 } from '@shared/contracts/catalog/catalog';
 import type {
   CustomerQuickCreateRequest,
@@ -105,11 +108,14 @@ import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap
 import { parseCommandStatusRequest } from '@shared/schemas/platform/command';
 import {
   parseCatalogCreateProductRequest,
+  parseCatalogCreateVariantRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
   parseCatalogSetProductActiveRequest,
+  parseCatalogSetVariantActiveRequest,
   parseCatalogUpdateProductRequest,
+  parseCatalogUpdateVariantRequest,
 } from '@shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -553,6 +559,27 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       requiredAction: 'catalog.product.configure',
       parsePayload: parseCatalogSetProductActiveRequest,
       handler: (input) => catalogService.setProductActive(input as CatalogSetProductActiveRequest),
+    },
+    {
+      name: 'catalog.variant.create',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogCreateVariantRequest,
+      handler: (input) => catalogService.createVariant(input as CatalogCreateVariantRequest),
+    },
+    {
+      name: 'catalog.variant.update',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogUpdateVariantRequest,
+      handler: (input) => catalogService.updateVariant(input as CatalogUpdateVariantRequest),
+    },
+    {
+      name: 'catalog.variant.setActive',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogSetVariantActiveRequest,
+      handler: (input) => catalogService.setVariantActive(input as CatalogSetVariantActiveRequest),
     },
     {
       name: 'catalog.pos.getProjection',

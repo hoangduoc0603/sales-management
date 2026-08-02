@@ -1,10 +1,13 @@
 import type {
   CatalogCreateProductResponse,
+  CatalogCreateVariantResponse,
   CatalogProductListItemDTO,
   CatalogProductListResponse,
   CatalogProductListStatus,
   CatalogSetProductActiveResponse,
+  CatalogSetVariantActiveResponse,
   CatalogUpdateProductResponse,
+  CatalogUpdateVariantResponse,
   InventoryMode,
   ProductType,
 } from '@shared/contracts/catalog/catalog';
@@ -41,6 +44,20 @@ interface ProductFormState {
   inventoryMode: InventoryMode;
   lotTracking: boolean;
   serialTracking: boolean;
+}
+
+interface VariantFormState {
+  displayName: string;
+  sku: string;
+  barcode: string;
+  defaultUnitId: string;
+  unitPriceVnd: string;
+  unitFactor: string;
+  inventoryMode: InventoryMode;
+  lotTracking: boolean;
+  serialTracking: boolean;
+  saleEnabled: boolean;
+  purchaseEnabled: boolean;
 }
 
 interface CustomerFormState {
@@ -125,6 +142,20 @@ const emptyForm: ProductFormState = {
   serialTracking: false,
 };
 
+const emptyVariantForm: VariantFormState = {
+  displayName: '',
+  sku: '',
+  barcode: '',
+  defaultUnitId: 'cái',
+  unitPriceVnd: '0',
+  unitFactor: '1',
+  inventoryMode: 'Tracked',
+  lotTracking: false,
+  serialTracking: false,
+  saleEnabled: true,
+  purchaseEnabled: true,
+};
+
 const emptyCustomerForm: CustomerFormState = {
   displayName: '',
   phone: '',
@@ -148,29 +179,44 @@ export function CatalogCrmHome({
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<CatalogProductListStatus>('Active');
   const [items, setItems] = useState<readonly CatalogProductListItemDTO[]>(initialProductItems);
-  const [selectedProductId, setSelectedProductId] = useState<string | undefined>(
-    initialProductItems[0]?.productId,
+  const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(
+    initialProductItems[0]?.variantId,
   );
   const [form, setForm] = useState<ProductFormState>(() =>
     initialProductItems[0] ? formFromItem(initialProductItems[0]) : emptyForm,
   );
+  const [variantForm, setVariantForm] = useState<VariantFormState>(() =>
+    initialProductItems[0] ? variantFormFromItem(initialProductItems[0]) : emptyVariantForm,
+  );
   const [mode, setMode] = useState<'create' | 'edit'>(initialProductItems[0] ? 'edit' : 'create');
+  const [variantMode, setVariantMode] = useState<'create' | 'edit'>(
+    initialProductItems[0] ? 'edit' : 'create',
+  );
+  const [editorTab, setEditorTab] = useState<'product' | 'variant' | 'barcode'>('product');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [barcodeCheckMessage, setBarcodeCheckMessage] = useState<string>();
 
   const selectedItem = useMemo(
-    () => items.find((item) => item.productId === selectedProductId) ?? items[0],
-    [items, selectedProductId],
+    () => items.find((item) => item.variantId === selectedVariantId) ?? items[0],
+    [items, selectedVariantId],
+  );
+  const selectedProductVariantCount = useMemo(
+    () => (selectedItem === undefined ? 0 : items.filter((item) => item.productId === selectedItem.productId).length),
+    [items, selectedItem],
   );
 
   useEffect(() => {
     if (selectedItem === undefined) return;
     if (mode === 'edit') {
       setForm(formFromItem(selectedItem));
-      setSelectedProductId(selectedItem.productId);
+      setSelectedVariantId(selectedItem.variantId);
     }
-  }, [mode, selectedItem]);
+    if (variantMode === 'edit') {
+      setVariantForm(variantFormFromItem(selectedItem));
+    }
+  }, [mode, selectedItem, variantMode]);
 
   useEffect(() => {
     if (apiClient === undefined || sessionToken === undefined) return;
@@ -193,8 +239,8 @@ export function CatalogCrmHome({
       },
       onSuccess: (nextItems) => {
         setItems(nextItems);
-        setSelectedProductId((current) =>
-          nextItems.some((item) => item.productId === current) ? current : nextItems[0]?.productId,
+        setSelectedVariantId((current) =>
+          nextItems.some((item) => item.variantId === current) ? current : nextItems[0]?.variantId,
         );
       },
       onError: setErrorMessage,
@@ -207,14 +253,16 @@ export function CatalogCrmHome({
   }, [apiClient, query, sessionToken, status]);
 
   const rows = items.map((item) => ({
-    id: item.productId,
+    id: item.variantId,
     code: (
       <button
         className="cn-table-link"
         onClick={() => {
           setMode('edit');
-          setSelectedProductId(item.productId);
+          setVariantMode('edit');
+          setSelectedVariantId(item.variantId);
           setForm(formFromItem(item));
+          setVariantForm(variantFormFromItem(item));
         }}
         type="button"
       >
@@ -244,7 +292,7 @@ export function CatalogCrmHome({
     actions: (
       <Button
         onClick={() => {
-          void toggleProductActive(item);
+          void toggleVariantActive(item);
         }}
         variant="ghost"
       >
@@ -335,9 +383,77 @@ export function CatalogCrmHome({
     setMessage(mode === 'create' ? 'Đã tạo sản phẩm.' : 'Đã cập nhật sản phẩm.');
     await refreshProducts();
     if (mode === 'create') {
-      setSelectedProductId(result.data.product.productId);
+      setSelectedVariantId(result.data.defaultVariant.variantId);
       setMode('edit');
     }
+  }
+
+  async function submitVariant() {
+    const productId = selectedItem?.productId;
+    if (productId === undefined) {
+      setErrorMessage('Chọn một product trước khi tạo biến thể.');
+      return;
+    }
+    const parsedPrice = Number(variantForm.unitPriceVnd);
+    const parsedFactor = Number(variantForm.unitFactor);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      setErrorMessage('Giá bán biến thể phải là số không âm.');
+      return;
+    }
+    if (!Number.isFinite(parsedFactor) || parsedFactor <= 0) {
+      setErrorMessage('Quy đổi đơn vị phải lớn hơn 0.');
+      return;
+    }
+    if (apiClient === undefined || sessionToken === undefined) {
+      setMessage(variantMode === 'create' ? 'Đã mô phỏng tạo biến thể.' : 'Đã mô phỏng cập nhật biến thể.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(undefined);
+    const payload = {
+      displayName: variantForm.displayName,
+      sku: variantForm.sku,
+      barcode: variantForm.barcode.trim() || undefined,
+      defaultUnitId: variantForm.defaultUnitId,
+      unitPriceVnd: Math.round(parsedPrice),
+      inventoryMode: variantForm.inventoryMode,
+      lotTracking: variantForm.lotTracking,
+      serialTracking: variantForm.serialTracking,
+      unitFactor: parsedFactor,
+      saleEnabled: variantForm.saleEnabled,
+      purchaseEnabled: variantForm.purchaseEnabled,
+    };
+    const result =
+      variantMode === 'create'
+        ? await apiClient.invoke<CatalogCreateVariantResponse>({
+            operation: 'catalog.variant.create',
+            requestId: createRequestId('catalog-variant-create'),
+            sessionToken,
+            payload: {
+              productId,
+              ...payload,
+            },
+          })
+        : await apiClient.invoke<CatalogUpdateVariantResponse>({
+            operation: 'catalog.variant.update',
+            requestId: createRequestId('catalog-variant-update'),
+            sessionToken,
+            payload: {
+              variantId: selectedItem?.variantId,
+              ...payload,
+            },
+          });
+
+    setIsLoading(false);
+    if (!result.ok) {
+      setErrorMessage(result.error.message);
+      return;
+    }
+    setMessage(variantMode === 'create' ? 'Đã tạo biến thể.' : 'Đã cập nhật biến thể.');
+    await refreshProducts();
+    setVariantMode('edit');
+    setSelectedVariantId(result.data.variant.variantId);
   }
 
   async function toggleProductActive(item: CatalogProductListItemDTO) {
@@ -373,6 +489,56 @@ export function CatalogCrmHome({
     await refreshProducts();
   }
 
+  async function toggleVariantActive(item: CatalogProductListItemDTO) {
+    if (apiClient === undefined || sessionToken === undefined) {
+      setItems((current) =>
+        current.map((candidate) =>
+          candidate.variantId === item.variantId
+            ? { ...candidate, isActive: !candidate.isActive }
+            : candidate,
+        ),
+      );
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(undefined);
+    const result = await apiClient.invoke<CatalogSetVariantActiveResponse>({
+      operation: 'catalog.variant.setActive',
+      requestId: createRequestId('catalog-variant-active'),
+      sessionToken,
+      payload: {
+        variantId: item.variantId,
+        isActive: !item.isActive,
+        reason: item.isActive ? 'Ngừng bán biến thể từ màn Hàng hóa' : undefined,
+      },
+    });
+    setIsLoading(false);
+    if (!result.ok) {
+      setErrorMessage(result.error.message);
+      return;
+    }
+    setMessage(item.isActive ? 'Đã ngừng bán biến thể.' : 'Đã kích hoạt biến thể.');
+    await refreshProducts();
+  }
+
+  function checkBarcodeOrSku() {
+    const sku = variantForm.sku.trim().toLocaleUpperCase('vi-VN');
+    const barcode = variantForm.barcode.trim().toLocaleUpperCase('vi-VN');
+    const duplicate = items.find((item) => {
+      if (variantMode === 'edit' && item.variantId === selectedItem?.variantId) return false;
+      return (
+        (sku !== '' && item.sku.trim().toLocaleUpperCase('vi-VN') === sku) ||
+        (barcode !== '' && item.barcode?.trim().toLocaleUpperCase('vi-VN') === barcode)
+      );
+    });
+    setBarcodeCheckMessage(
+      duplicate === undefined
+        ? 'SKU/barcode chưa trùng trong dữ liệu đang tải.'
+        : `Trùng với ${duplicate.displayName} (${duplicate.sku}).`,
+    );
+  }
+
   if (isCustomerRoute) {
     return (
       <CustomerWorkspace
@@ -399,8 +565,11 @@ export function CatalogCrmHome({
           <Button
             onClick={() => {
               setMode('create');
+              setVariantMode('create');
+              setEditorTab('product');
               setForm(emptyForm);
-              setSelectedProductId(undefined);
+              setVariantForm(emptyVariantForm);
+              setSelectedVariantId(undefined);
             }}
             variant="primary"
           >
@@ -447,11 +616,29 @@ export function CatalogCrmHome({
       {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
       {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
 
+      <div className="cn-catalog-view-tabs" role="tablist" aria-label="Catalog workspace">
+        {[
+          { value: 'catalog', label: 'Catalog' },
+          { value: 'customers', label: 'Khách hàng' },
+          { value: 'commercial', label: 'Commercial' },
+          { value: 'imports', label: 'Imports' },
+        ].map((tab) => (
+          <button
+            aria-selected={tab.value === 'catalog'}
+            className="cn-catalog-view-tab"
+            key={tab.value}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="cn-catalog-grid cn-catalog-master-detail">
         <Panel
           action={<Badge tone="neutral">{items.length} biến thể</Badge>}
           description="Variant là đơn vị giao dịch. Product/variant đã có chứng từ chỉ ngừng bán, không xóa cứng."
-          title="Product / Variant"
+          title="Catalog table"
         >
           <Table
             columns={[
@@ -471,133 +658,310 @@ export function CatalogCrmHome({
         </Panel>
 
         <Panel
-          description={
-            mode === 'create'
-              ? 'Tạo product đơn giản với Default Variant.'
-              : 'Cập nhật thông tin bán hàng của Default Variant.'
+          action={
+            selectedItem ? (
+              <Badge tone="neutral">{selectedProductVariantCount} variant</Badge>
+            ) : (
+              <Badge tone="info">New</Badge>
+            )
           }
-          title={mode === 'create' ? 'Tạo sản phẩm' : 'Chi tiết sản phẩm'}
+          description="Product editor và policy builder theo artifact mới; không dùng native select."
+          title="Product editor"
         >
-          <div className="cn-catalog-form">
-            <label className="cn-field">
-              Mã sản phẩm
-              <input
-                onChange={(event) => setForm((current) => ({ ...current, productCode: event.target.value }))}
-                value={form.productCode}
-              />
-            </label>
-            <label className="cn-field">
-              Tên hàng
-              <input
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                value={form.name}
-              />
-            </label>
-            <label className="cn-field">
-              SKU
-              <input
-                onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
-                value={form.sku}
-              />
-            </label>
-            <label className="cn-field">
-              Barcode
-              <input
-                onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
-                value={form.barcode}
-              />
-            </label>
-            <label className="cn-field">
-              Đơn vị bán
-              <input
-                onChange={(event) => setForm((current) => ({ ...current, defaultUnitId: event.target.value }))}
-                value={form.defaultUnitId}
-              />
-            </label>
-            <label className="cn-field">
-              Giá bán
-              <input
-                inputMode="numeric"
-                onChange={(event) => setForm((current) => ({ ...current, unitPriceVnd: event.target.value }))}
-                value={form.unitPriceVnd}
-              />
-            </label>
-            <div className="cn-field">
-              Loại hàng
-              <div className="cn-segment-row" role="group" aria-label="Loại hàng">
-                {productTypes.map((type) => (
-                  <button
-                    aria-pressed={form.productType === type}
-                    className="cn-segment"
-                    key={type}
-                    onClick={() =>
-                      setForm((current) => ({
-                        ...current,
-                        productType: type,
-                        inventoryMode: defaultInventoryModeForProductType(type),
-                      }))
-                    }
-                    type="button"
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="cn-field">
-              Chế độ tồn
-              <div className="cn-segment-row" role="group" aria-label="Chế độ tồn">
-                {inventoryModes.map((modeOption) => (
-                  <button
-                    aria-pressed={form.inventoryMode === modeOption}
-                    className="cn-segment"
-                    key={modeOption}
-                    onClick={() =>
-                      setForm((current) => ({
-                        ...current,
-                        inventoryMode: modeOption,
-                      }))
-                    }
-                    type="button"
-                  >
-                    {modeOption}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="cn-catalog-toggle-row">
-              <label>
+          <div className="cn-editor-tabs" role="tablist" aria-label="Product editor sections">
+            {[
+              { value: 'product', label: 'Product master' },
+              { value: 'variant', label: 'Variant & đơn vị' },
+              { value: 'barcode', label: 'Barcode search' },
+            ].map((tab) => (
+              <button
+                aria-selected={editorTab === tab.value}
+                className="cn-editor-tab"
+                key={tab.value}
+                onClick={() => setEditorTab(tab.value as typeof editorTab)}
+                role="tab"
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {editorTab === 'product' ? (
+            <div className="cn-catalog-form cn-editor-card">
+              <label className="cn-field">
+                Mã sản phẩm
                 <input
-                  checked={form.lotTracking}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, lotTracking: event.target.checked }))
-                  }
-                  type="checkbox"
-                />{' '}
-                Theo dõi lô/hạn
+                  onChange={(event) => setForm((current) => ({ ...current, productCode: event.target.value }))}
+                  value={form.productCode}
+                />
               </label>
-              <label>
+              <label className="cn-field">
+                Tên hàng
                 <input
-                  checked={form.serialTracking}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, serialTracking: event.target.checked }))
-                  }
-                  type="checkbox"
-                />{' '}
-                Theo dõi serial
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  value={form.name}
+                />
               </label>
-            </div>
-            <div className="cn-action-row">
-              <Button disabled={isLoading} isLoading={isLoading} onClick={() => void submitProduct()} variant="primary">
-                {mode === 'create' ? 'Tạo sản phẩm' : 'Lưu thay đổi'}
-              </Button>
-              {selectedItem ? (
-                <Button disabled={isLoading} onClick={() => void toggleProductActive(selectedItem)} variant="secondary">
-                  {selectedItem.isActive ? 'Ngừng bán' : 'Kích hoạt lại'}
+              <div className="cn-editor-grid">
+                <label className="cn-field">
+                  Default SKU
+                  <input
+                    onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
+                    value={form.sku}
+                  />
+                </label>
+                <label className="cn-field">
+                  Barcode
+                  <input
+                    onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+                    value={form.barcode}
+                  />
+                </label>
+              </div>
+              <div className="cn-editor-grid">
+                <label className="cn-field">
+                  Đơn vị bán mặc định
+                  <input
+                    onChange={(event) => setForm((current) => ({ ...current, defaultUnitId: event.target.value }))}
+                    value={form.defaultUnitId}
+                  />
+                </label>
+                <label className="cn-field">
+                  Giá bán mặc định
+                  <input
+                    inputMode="numeric"
+                    onChange={(event) => setForm((current) => ({ ...current, unitPriceVnd: event.target.value }))}
+                    value={form.unitPriceVnd}
+                  />
+                </label>
+              </div>
+              <div className="cn-field">
+                Loại hàng
+                <div className="cn-segment-row" role="group" aria-label="Loại hàng">
+                  {productTypes.map((type) => (
+                    <button
+                      aria-pressed={form.productType === type}
+                      className="cn-segment"
+                      key={type}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          productType: type,
+                          inventoryMode: defaultInventoryModeForProductType(type),
+                        }))
+                      }
+                      type="button"
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="cn-field">
+                Chế độ tồn mặc định
+                <div className="cn-segment-row" role="group" aria-label="Chế độ tồn">
+                  {inventoryModes.map((modeOption) => (
+                    <button
+                      aria-pressed={form.inventoryMode === modeOption}
+                      className="cn-segment"
+                      key={modeOption}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          inventoryMode: modeOption,
+                        }))
+                      }
+                      type="button"
+                    >
+                      {modeOption}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="cn-action-row">
+                <Button disabled={isLoading} isLoading={isLoading} onClick={() => void submitProduct()} variant="primary">
+                  {mode === 'create' ? 'Tạo sản phẩm' : 'Lưu Product master'}
                 </Button>
+                {selectedItem ? (
+                  <Button disabled={isLoading} onClick={() => void toggleProductActive(selectedItem)} variant="secondary">
+                    {selectedItem.isActive ? 'Ngừng toàn bộ product' : 'Kích hoạt lại'}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {editorTab === 'variant' ? (
+            <div className="cn-catalog-form cn-editor-card">
+              <div className="cn-action-row cn-action-row-between">
+                <Badge tone="info">{variantMode === 'create' ? 'New variant' : selectedItem?.sku ?? 'Variant'}</Badge>
+                <Button
+                  onClick={() => {
+                    setVariantMode('create');
+                    setVariantForm({
+                      ...emptyVariantForm,
+                      inventoryMode: selectedItem?.inventoryMode ?? emptyVariantForm.inventoryMode,
+                    });
+                  }}
+                  variant="secondary"
+                >
+                  Thêm variant
+                </Button>
+              </div>
+              <label className="cn-field">
+                Tên biến thể
+                <input
+                  onChange={(event) => setVariantForm((current) => ({ ...current, displayName: event.target.value }))}
+                  value={variantForm.displayName}
+                />
+              </label>
+              <div className="cn-editor-grid">
+                <label className="cn-field">
+                  SKU
+                  <input
+                    onChange={(event) => setVariantForm((current) => ({ ...current, sku: event.target.value }))}
+                    value={variantForm.sku}
+                  />
+                </label>
+                <label className="cn-field">
+                  Barcode
+                  <input
+                    onChange={(event) => setVariantForm((current) => ({ ...current, barcode: event.target.value }))}
+                    value={variantForm.barcode}
+                  />
+                </label>
+              </div>
+              <div className="cn-editor-grid">
+                <label className="cn-field">
+                  Đơn vị bán
+                  <input
+                    onChange={(event) => setVariantForm((current) => ({ ...current, defaultUnitId: event.target.value }))}
+                    value={variantForm.defaultUnitId}
+                  />
+                </label>
+                <label className="cn-field">
+                  Quy đổi về đơn vị gốc
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => setVariantForm((current) => ({ ...current, unitFactor: event.target.value }))}
+                    value={variantForm.unitFactor}
+                  />
+                </label>
+              </div>
+              <label className="cn-field">
+                Giá bán
+                <input
+                  inputMode="numeric"
+                  onChange={(event) => setVariantForm((current) => ({ ...current, unitPriceVnd: event.target.value }))}
+                  value={variantForm.unitPriceVnd}
+                />
+              </label>
+              <div className="cn-field">
+                Chế độ tồn
+                <div className="cn-segment-row" role="group" aria-label="Chế độ tồn biến thể">
+                  {inventoryModes.map((modeOption) => (
+                    <button
+                      aria-pressed={variantForm.inventoryMode === modeOption}
+                      className="cn-segment"
+                      key={modeOption}
+                      onClick={() =>
+                        setVariantForm((current) => ({
+                          ...current,
+                          inventoryMode: modeOption,
+                        }))
+                      }
+                      type="button"
+                    >
+                      {modeOption}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="cn-catalog-toggle-row">
+                <label>
+                  <input
+                    checked={variantForm.lotTracking}
+                    onChange={(event) =>
+                      setVariantForm((current) => ({ ...current, lotTracking: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />{' '}
+                  Theo dõi lô/hạn
+                </label>
+                <label>
+                  <input
+                    checked={variantForm.serialTracking}
+                    onChange={(event) =>
+                      setVariantForm((current) => ({ ...current, serialTracking: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />{' '}
+                  Theo dõi serial
+                </label>
+                <label>
+                  <input
+                    checked={variantForm.saleEnabled}
+                    onChange={(event) =>
+                      setVariantForm((current) => ({ ...current, saleEnabled: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />{' '}
+                  Cho bán
+                </label>
+                <label>
+                  <input
+                    checked={variantForm.purchaseEnabled}
+                    onChange={(event) =>
+                      setVariantForm((current) => ({ ...current, purchaseEnabled: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />{' '}
+                  Cho nhập
+                </label>
+              </div>
+              <div className="cn-action-row">
+                <Button disabled={isLoading} isLoading={isLoading} onClick={() => void submitVariant()} variant="primary">
+                  {variantMode === 'create' ? 'Tạo variant' : 'Lưu variant'}
+                </Button>
+                {selectedItem ? (
+                  <Button disabled={isLoading} onClick={() => void toggleVariantActive(selectedItem)} variant="secondary">
+                    {selectedItem.isActive ? 'Ngừng bán variant' : 'Kích hoạt variant'}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {editorTab === 'barcode' ? (
+            <div className="cn-catalog-form cn-editor-card">
+              <StateBlock
+                description="Kiểm tra nhanh trên catalog đã tải. Backend vẫn là nguồn quyết định cuối cùng khi lưu."
+                title="Barcode search"
+                tone="neutral"
+              />
+              <label className="cn-field">
+                SKU cần kiểm tra
+                <input
+                  onChange={(event) => setVariantForm((current) => ({ ...current, sku: event.target.value }))}
+                  value={variantForm.sku}
+                />
+              </label>
+              <label className="cn-field">
+                Barcode cần kiểm tra
+                <input
+                  onChange={(event) => setVariantForm((current) => ({ ...current, barcode: event.target.value }))}
+                  value={variantForm.barcode}
+                />
+              </label>
+              <Button onClick={checkBarcodeOrSku} variant="secondary">
+                Kiểm tra trùng
+              </Button>
+              {barcodeCheckMessage ? (
+                <p className="cn-inline-message cn-inline-message-warning">{barcodeCheckMessage}</p>
               ) : null}
             </div>
-          </div>
+          ) : null}
         </Panel>
       </div>
     </div>
@@ -927,6 +1291,22 @@ function formFromItem(item: CatalogProductListItemDTO): ProductFormState {
     inventoryMode: item.inventoryMode,
     lotTracking: item.lotTracking,
     serialTracking: item.serialTracking,
+  };
+}
+
+function variantFormFromItem(item: CatalogProductListItemDTO): VariantFormState {
+  return {
+    displayName: item.displayName,
+    sku: item.sku,
+    barcode: item.barcode ?? '',
+    defaultUnitId: item.defaultUnitId,
+    unitPriceVnd: String(item.unitPriceVnd),
+    unitFactor: '1',
+    inventoryMode: item.inventoryMode,
+    lotTracking: item.lotTracking,
+    serialTracking: item.serialTracking,
+    saleEnabled: item.isActive,
+    purchaseEnabled: item.inventoryMode === 'Tracked',
   };
 }
 

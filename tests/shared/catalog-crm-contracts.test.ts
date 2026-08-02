@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseCatalogCreateProductRequest,
+  parseCatalogCreateVariantRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
   parseCatalogSetProductActiveRequest,
+  parseCatalogSetVariantActiveRequest,
   parseCatalogUpdateProductRequest,
+  parseCatalogUpdateVariantRequest,
 } from '../../shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -19,10 +22,72 @@ describe('Catalog/CRM shared contracts', () => {
     expect(operationNames).toContain('catalog.product.list');
     expect(operationNames).toContain('catalog.product.update');
     expect(operationNames).toContain('catalog.product.setActive');
+    expect(operationNames).toContain('catalog.variant.create');
+    expect(operationNames).toContain('catalog.variant.update');
+    expect(operationNames).toContain('catalog.variant.setActive');
     expect(operationNames).toContain('catalog.pos.getProjection');
     expect(operationNames).toContain('catalog.quote.preview');
     expect(operationNames).toContain('crm.customer.quickCreate');
     expect(operationNames).toContain('crm.customer.search');
+  });
+
+  it('parse create/update/setActive variant request cho màn Variant & đơn vị', () => {
+    expect(
+      parseCatalogCreateVariantRequest({
+        productId: 'product-1',
+        displayName: 'Senka thùng 12',
+        sku: 'SRM-120-C12',
+        barcode: '893000000012',
+        defaultUnitId: 'thùng',
+        unitPriceVnd: 1020000,
+        inventoryMode: 'Tracked',
+        lotTracking: true,
+        serialTracking: false,
+        unitFactor: 12,
+        saleEnabled: true,
+        purchaseEnabled: true,
+      }),
+    ).toMatchObject({
+      productId: 'product-1',
+      sku: 'SRM-120-C12',
+      defaultUnitId: 'thùng',
+      unitFactor: 12,
+      saleEnabled: true,
+    });
+
+    expect(() =>
+      parseCatalogCreateVariantRequest({
+        productId: 'product-1',
+        displayName: 'Variant lỗi',
+        sku: '',
+        defaultUnitId: 'thùng',
+        unitPriceVnd: 1000,
+        unitFactor: 0,
+      }),
+    ).toThrow();
+
+    expect(
+      parseCatalogUpdateVariantRequest({
+        variantId: 'variant-1',
+        displayName: 'Senka thùng 12 - mẫu mới',
+        sku: 'SRM-120-C12B',
+        barcode: '893000000099',
+        defaultUnitId: 'thùng',
+        unitPriceVnd: 990000,
+        unitFactor: 12,
+        saleEnabled: true,
+        purchaseEnabled: false,
+      }),
+    ).toMatchObject({
+      variantId: 'variant-1',
+      displayName: 'Senka thùng 12 - mẫu mới',
+      sku: 'SRM-120-C12B',
+    });
+
+    expect(parseCatalogSetVariantActiveRequest({ variantId: 'variant-1', isActive: false })).toEqual({
+      variantId: 'variant-1',
+      isActive: false,
+    });
   });
 
   it('parse list/update/setActive product request cho màn Hàng hóa', () => {

@@ -292,6 +292,83 @@ describe('createLocalFakeBackendClient', () => {
     });
   });
 
+  it('hỗ trợ Catalog variant create/update/setActive ở local fake backend', async () => {
+    const client = createLocalFakeBackendClient();
+    const login = await client.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    const product = await client.invoke({
+      operation: 'catalog.product.create',
+      requestId: 'req-product-create',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        productCode: 'SP-BOX',
+        name: 'Sữa hạt test',
+        productType: 'Stocked',
+        sku: 'MILK-1',
+        barcode: '899900000001',
+        defaultUnitId: 'chai',
+        unitPriceVnd: 42000,
+      },
+    });
+    expect(product).toMatchObject({ ok: true });
+    if (!product.ok) throw new Error('create product failed');
+
+    const variant = await client.invoke({
+      operation: 'catalog.variant.create',
+      requestId: 'req-variant-create',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        productId: product.data.product.productId,
+        displayName: 'Sữa hạt test thùng 12 chai',
+        sku: 'MILK-BOX12',
+        barcode: '899900000012',
+        defaultUnitId: 'thùng',
+        unitPriceVnd: 480000,
+        unitFactor: 12,
+      },
+    });
+    expect(variant).toMatchObject({
+      ok: true,
+      data: { variant: { sku: 'MILK-BOX12' }, unit: { factor: 12 } },
+    });
+    if (!variant.ok) throw new Error('create variant failed');
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.variant.update',
+        requestId: 'req-variant-update',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          variantId: variant.data.variant.variantId,
+          sku: 'MILK-BOX24',
+          displayName: 'Sữa hạt test thùng 24 chai',
+          unitFactor: 24,
+          unitPriceVnd: 920000,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { variant: { sku: 'MILK-BOX24' }, unit: { factor: 24 } },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.variant.setActive',
+        requestId: 'req-variant-off',
+        sessionToken: login.data.sessionToken,
+        payload: { variantId: variant.data.variant.variantId, isActive: false },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { product: { isActive: true }, variant: { isActive: false } },
+    });
+  });
+
   it('hỗ trợ Inventory balance summary ở local fake backend', async () => {
     const client = createLocalFakeBackendClient();
     const login = await client.invoke({

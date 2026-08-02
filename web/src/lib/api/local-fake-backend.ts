@@ -15,6 +15,8 @@ import type {
 import type {
   CatalogCreateProductRequest,
   CatalogCreateProductResponse,
+  CatalogCreateVariantRequest,
+  CatalogCreateVariantResponse,
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
@@ -23,8 +25,12 @@ import type {
   CatalogQuoteResponse,
   CatalogSetProductActiveRequest,
   CatalogSetProductActiveResponse,
+  CatalogSetVariantActiveRequest,
+  CatalogSetVariantActiveResponse,
   CatalogUpdateProductRequest,
   CatalogUpdateProductResponse,
+  CatalogUpdateVariantRequest,
+  CatalogUpdateVariantResponse,
   ProductDTO,
   UnitConversionVersionDTO,
   VariantBarcodeDTO,
@@ -118,11 +124,14 @@ import type { TableDefinitionDTO, TableDefinitionsResponse } from '@shared/contr
 import { parseApiRequest } from '@shared/schemas/api';
 import {
   parseCatalogCreateProductRequest,
+  parseCatalogCreateVariantRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
   parseCatalogSetProductActiveRequest,
+  parseCatalogSetVariantActiveRequest,
   parseCatalogUpdateProductRequest,
+  parseCatalogUpdateVariantRequest,
 } from '@shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -556,6 +565,56 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             now,
             user,
             () => setLocalCatalogProductActive(apiRequest.payload as CatalogSetProductActiveRequest, catalogProducts),
+          );
+        case 'catalog.variant.create':
+          try {
+            parseCatalogCreateVariantRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogCreateVariantResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () =>
+              createLocalCatalogVariant(
+                apiRequest.payload as CatalogCreateVariantRequest,
+                catalogProducts,
+                nextId,
+              ),
+          );
+        case 'catalog.variant.update':
+          try {
+            parseCatalogUpdateVariantRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogUpdateVariantResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => updateLocalCatalogVariant(apiRequest.payload as CatalogUpdateVariantRequest, catalogProducts),
+          );
+        case 'catalog.variant.setActive':
+          try {
+            parseCatalogSetVariantActiveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogSetVariantActiveResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => setLocalCatalogVariantActive(apiRequest.payload as CatalogSetVariantActiveRequest, catalogProducts),
           );
         case 'catalog.pos.getProjection':
           try {
@@ -1658,7 +1717,7 @@ function createLocalCatalogProducts(): [string, CatalogProductListItemDTO][] {
       unitPriceVnd: 159000,
       serialTracking: false,
     }),
-  ].map((item) => [item.productId, item]);
+  ].map((item) => [item.variantId, item]);
 }
 
 function createLocalCatalogProductItem(input: {
@@ -1776,7 +1835,7 @@ function createLocalCatalogProduct(
     serialTracking: input.serialTracking ?? false,
     isActive: true,
   };
-  products.set(productId, item);
+  products.set(variantId, item);
 
   return catalogItemToCreateResponse(item);
 }
@@ -1785,7 +1844,7 @@ function updateLocalCatalogProduct(
   input: CatalogUpdateProductRequest,
   products: Map<string, CatalogProductListItemDTO>,
 ): CatalogUpdateProductResponse | ApiResult<CatalogUpdateProductResponse> {
-  const current = products.get(input.productId);
+  const current = findLocalDefaultCatalogItem(products, input.productId);
   if (current === undefined) {
     return localCatalogError('INVALID_INPUT', 'Sản phẩm không tồn tại.');
   }
@@ -1796,7 +1855,7 @@ function updateLocalCatalogProduct(
   const barcodeNormalized = nextBarcode?.toLocaleUpperCase('vi-VN');
   if (
     [...products.values()].some(
-      (item) => item.productId !== current.productId && item.sku.toLocaleUpperCase('vi-VN') === skuNormalized,
+      (item) => item.variantId !== current.variantId && item.sku.toLocaleUpperCase('vi-VN') === skuNormalized,
     )
   ) {
     return localCatalogError('DUPLICATE_SKU', 'SKU đã tồn tại.');
@@ -1805,7 +1864,7 @@ function updateLocalCatalogProduct(
     barcodeNormalized &&
     [...products.values()].some(
       (item) =>
-        item.productId !== current.productId &&
+        item.variantId !== current.variantId &&
         item.barcode?.toLocaleUpperCase('vi-VN') === barcodeNormalized,
     )
   ) {
@@ -1827,7 +1886,7 @@ function updateLocalCatalogProduct(
     lotTracking: input.lotTracking ?? current.lotTracking,
     serialTracking: input.serialTracking ?? current.serialTracking,
   };
-  products.set(updated.productId, updated);
+  products.set(updated.variantId, updated);
 
   return catalogItemToUpdateResponse(updated);
 }
@@ -1836,17 +1895,134 @@ function setLocalCatalogProductActive(
   input: CatalogSetProductActiveRequest,
   products: Map<string, CatalogProductListItemDTO>,
 ): CatalogSetProductActiveResponse | ApiResult<CatalogSetProductActiveResponse> {
-  const current = products.get(input.productId);
+  const current = findLocalDefaultCatalogItem(products, input.productId);
   if (current === undefined) {
     return localCatalogError('INVALID_INPUT', 'Sản phẩm không tồn tại.');
   }
 
+  const variants = [...products.values()].filter((item) => item.productId === input.productId);
+  for (const variant of variants) {
+    products.set(variant.variantId, { ...variant, isActive: input.isActive });
+  }
   const updated: CatalogProductListItemDTO = { ...current, isActive: input.isActive };
-  products.set(updated.productId, updated);
 
   return {
     product: catalogItemToProduct(updated),
     defaultVariant: catalogItemToVariant(updated),
+  };
+}
+
+function createLocalCatalogVariant(
+  input: CatalogCreateVariantRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  nextId: (prefix: string) => string,
+): CatalogCreateVariantResponse | ApiResult<CatalogCreateVariantResponse> {
+  const product = findLocalDefaultCatalogItem(products, input.productId);
+  if (product === undefined) {
+    return localCatalogError('INVALID_INPUT', 'Sản phẩm không tồn tại.');
+  }
+  const skuNormalized = normalizeLocalCatalogLookup(input.sku);
+  const barcodeNormalized = input.barcode === undefined ? undefined : normalizeLocalCatalogLookup(input.barcode);
+  if ([...products.values()].some((item) => normalizeLocalCatalogLookup(item.sku) === skuNormalized)) {
+    return localCatalogError('DUPLICATE_SKU', 'SKU đã tồn tại.');
+  }
+  if (
+    barcodeNormalized !== undefined &&
+    [...products.values()].some((item) => item.barcode !== undefined && normalizeLocalCatalogLookup(item.barcode) === barcodeNormalized)
+  ) {
+    return localCatalogError('DUPLICATE_BARCODE', 'Barcode đã tồn tại.');
+  }
+
+  const variantId = nextId('variant');
+  const item: CatalogProductListItemDTO = {
+    ...product,
+    variantId,
+    sku: input.sku.trim(),
+    displayName: input.displayName.trim(),
+    barcode: input.barcode?.trim(),
+    defaultUnitId: input.defaultUnitId.trim(),
+    unitPriceVnd: input.unitPriceVnd,
+    inventoryMode: input.inventoryMode ?? product.inventoryMode,
+    lotTracking: input.lotTracking ?? false,
+    serialTracking: input.serialTracking ?? false,
+    isActive: product.isActive,
+  };
+  products.set(variantId, item);
+
+  return {
+    product: catalogItemToProduct(product),
+    variant: catalogItemToVariant(item),
+    unit: catalogItemToUnit(item, input.unitFactor ?? 1, input.saleEnabled ?? true, input.purchaseEnabled),
+    barcode: item.barcode ? catalogItemToBarcode(item) : undefined,
+  };
+}
+
+function updateLocalCatalogVariant(
+  input: CatalogUpdateVariantRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+): CatalogUpdateVariantResponse | ApiResult<CatalogUpdateVariantResponse> {
+  const current = products.get(input.variantId);
+  if (current === undefined) {
+    return localCatalogError('INVALID_INPUT', 'Biến thể không tồn tại.');
+  }
+  const nextSku = input.sku?.trim() ?? current.sku;
+  const nextBarcode = input.barcode?.trim() ?? current.barcode;
+  const skuNormalized = normalizeLocalCatalogLookup(nextSku);
+  const barcodeNormalized = nextBarcode === undefined ? undefined : normalizeLocalCatalogLookup(nextBarcode);
+  if (
+    [...products.values()].some(
+      (item) => item.variantId !== current.variantId && normalizeLocalCatalogLookup(item.sku) === skuNormalized,
+    )
+  ) {
+    return localCatalogError('DUPLICATE_SKU', 'SKU đã tồn tại.');
+  }
+  if (
+    barcodeNormalized !== undefined &&
+    [...products.values()].some(
+      (item) =>
+        item.variantId !== current.variantId &&
+        item.barcode !== undefined &&
+        normalizeLocalCatalogLookup(item.barcode) === barcodeNormalized,
+    )
+  ) {
+    return localCatalogError('DUPLICATE_BARCODE', 'Barcode đã tồn tại.');
+  }
+
+  const updated: CatalogProductListItemDTO = {
+    ...current,
+    displayName: input.displayName?.trim() ?? current.displayName,
+    sku: nextSku,
+    barcode: nextBarcode,
+    defaultUnitId: input.defaultUnitId?.trim() ?? current.defaultUnitId,
+    unitPriceVnd: input.unitPriceVnd ?? current.unitPriceVnd,
+    inventoryMode: input.inventoryMode ?? current.inventoryMode,
+    lotTracking: input.lotTracking ?? current.lotTracking,
+    serialTracking: input.serialTracking ?? current.serialTracking,
+  };
+  products.set(updated.variantId, updated);
+
+  return {
+    product: catalogItemToProduct(updated),
+    variant: catalogItemToVariant(updated),
+    unit: catalogItemToUnit(updated, input.unitFactor),
+    barcode: updated.barcode ? catalogItemToBarcode(updated) : undefined,
+  };
+}
+
+function setLocalCatalogVariantActive(
+  input: CatalogSetVariantActiveRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+): CatalogSetVariantActiveResponse | ApiResult<CatalogSetVariantActiveResponse> {
+  const current = products.get(input.variantId);
+  if (current === undefined) {
+    return localCatalogError('INVALID_INPUT', 'Biến thể không tồn tại.');
+  }
+  const updated = { ...current, isActive: input.isActive };
+  products.set(updated.variantId, updated);
+  const product = findLocalDefaultCatalogItem(products, updated.productId) ?? updated;
+  return {
+    product: { ...catalogItemToProduct(product), isActive: true },
+    variant: catalogItemToVariant(updated),
   };
 }
 
@@ -1895,7 +2071,12 @@ function catalogItemToVariant(item: CatalogProductListItemDTO): VariantDTO {
   };
 }
 
-function catalogItemToUnit(item: CatalogProductListItemDTO): UnitConversionVersionDTO {
+function catalogItemToUnit(
+  item: CatalogProductListItemDTO,
+  factor = 1,
+  saleEnabled = true,
+  purchaseEnabled?: boolean,
+): UnitConversionVersionDTO {
   return {
     unitVersionId: `unit-${item.variantId}-v1`,
     tenantId: 'tenant-default',
@@ -1903,12 +2084,23 @@ function catalogItemToUnit(item: CatalogProductListItemDTO): UnitConversionVersi
     unitId: item.defaultUnitId,
     unitName: item.defaultUnitId,
     baseUnitId: item.defaultUnitId,
-    factor: 1,
-    saleEnabled: true,
-    purchaseEnabled: item.inventoryMode === 'Tracked',
+    factor,
+    saleEnabled,
+    purchaseEnabled: purchaseEnabled ?? item.inventoryMode === 'Tracked',
     effectiveFrom: '2026-07-27T00:00:00.000Z',
     isActive: item.isActive,
   };
+}
+
+function findLocalDefaultCatalogItem(
+  products: Map<string, CatalogProductListItemDTO>,
+  productId: string,
+): CatalogProductListItemDTO | undefined {
+  return [...products.values()].find((item) => item.productId === productId);
+}
+
+function normalizeLocalCatalogLookup(value: string): string {
+  return value.trim().toLocaleUpperCase('vi-VN');
 }
 
 function catalogItemToBarcode(item: CatalogProductListItemDTO): VariantBarcodeDTO | undefined {

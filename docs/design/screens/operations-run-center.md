@@ -7,6 +7,7 @@
 - Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact: `operations-run-center.html`
+- Đường dẫn file Open Design: `/Users/hoangduoc/Library/Application Support/Open Design/namespaces/release-stable/data/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/operations-run-center.html`
 
 ## Phạm vi
 
@@ -19,4 +20,4 @@
 - Private upload dùng toàn bộ dropzone làm trigger; không render nút hoặc copy visible `Chọn tệp`.
 - Restore theo freeze, verify, replacement, Owner confirmation, switch và health check; không ghi đè trực tiếp production.
 - Export phải cắt sensitive fields theo backend permission.
-- Mobile Operations cần QA trực tiếp trên Local Preview trước khi implement do đã có refine responsive riêng.
+- Mobile Operations cần QA trực tiếp trên file artifact Open Design trước khi implement do đã có refine responsive riêng.

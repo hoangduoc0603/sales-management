@@ -128,6 +128,61 @@ export interface CatalogUpdateProductResponse {
   barcode?: VariantBarcodeDTO;
 }
 
+export interface CatalogCreateVariantRequest {
+  productId: string;
+  displayName: string;
+  sku: string;
+  barcode?: string;
+  defaultUnitId: string;
+  unitPriceVnd: number;
+  inventoryMode?: InventoryMode;
+  lotTracking?: boolean;
+  serialTracking?: boolean;
+  unitFactor?: number;
+  saleEnabled?: boolean;
+  purchaseEnabled?: boolean;
+}
+
+export interface CatalogCreateVariantResponse {
+  product: ProductDTO;
+  variant: VariantDTO;
+  unit: UnitConversionVersionDTO;
+  barcode?: VariantBarcodeDTO;
+}
+
+export interface CatalogUpdateVariantRequest {
+  variantId: string;
+  displayName?: string;
+  sku?: string;
+  barcode?: string;
+  defaultUnitId?: string;
+  unitPriceVnd?: number;
+  inventoryMode?: InventoryMode;
+  lotTracking?: boolean;
+  serialTracking?: boolean;
+  unitFactor?: number;
+  saleEnabled?: boolean;
+  purchaseEnabled?: boolean;
+}
+
+export interface CatalogUpdateVariantResponse {
+  product: ProductDTO;
+  variant: VariantDTO;
+  unit: UnitConversionVersionDTO;
+  barcode?: VariantBarcodeDTO;
+}
+
+export interface CatalogSetVariantActiveRequest {
+  variantId: string;
+  isActive: boolean;
+  reason?: string;
+}
+
+export interface CatalogSetVariantActiveResponse {
+  product: ProductDTO;
+  variant: VariantDTO;
+}
+
 export interface CatalogSetProductActiveRequest {
   productId: string;
   isActive: boolean;

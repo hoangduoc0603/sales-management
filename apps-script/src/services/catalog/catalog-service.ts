@@ -2,6 +2,8 @@ import type { ApiErrorCode } from '@shared/contracts/errors';
 import type {
   CatalogCreateProductRequest,
   CatalogCreateProductResponse,
+  CatalogCreateVariantRequest,
+  CatalogCreateVariantResponse,
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
@@ -11,8 +13,12 @@ import type {
   ProductDTO,
   CatalogSetProductActiveRequest,
   CatalogSetProductActiveResponse,
+  CatalogSetVariantActiveRequest,
+  CatalogSetVariantActiveResponse,
   CatalogUpdateProductRequest,
   CatalogUpdateProductResponse,
+  CatalogUpdateVariantRequest,
+  CatalogUpdateVariantResponse,
   UnitConversionVersionDTO,
   VariantBarcodeDTO,
   VariantDTO,
@@ -34,11 +40,16 @@ type CatalogServiceResult<T> =
 
 export interface CatalogService {
   createProduct(input: CatalogCreateProductRequest): CatalogServiceResult<CatalogCreateProductResponse>;
+  createVariant(input: CatalogCreateVariantRequest): CatalogServiceResult<CatalogCreateVariantResponse>;
   listProducts(input: CatalogProductListRequest): CatalogProductListResponse;
   updateProduct(input: CatalogUpdateProductRequest): CatalogServiceResult<CatalogUpdateProductResponse>;
+  updateVariant(input: CatalogUpdateVariantRequest): CatalogServiceResult<CatalogUpdateVariantResponse>;
   setProductActive(
     input: CatalogSetProductActiveRequest,
   ): CatalogServiceResult<CatalogSetProductActiveResponse>;
+  setVariantActive(
+    input: CatalogSetVariantActiveRequest,
+  ): CatalogServiceResult<CatalogSetVariantActiveResponse>;
   getPosProjection(input: CatalogPosProjectionRequest): CatalogPosProjectionResponse;
 }
 
@@ -140,6 +151,85 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
           defaultUnit,
           barcode,
         },
+      };
+    },
+    createVariant(input) {
+      const product = deps.repository.findProductById(input.productId);
+      if (product === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Sản phẩm không tồn tại.' },
+        };
+      }
+
+      const skuNormalized = normalizeLookup(input.sku);
+      const barcodeNormalized = input.barcode === undefined ? undefined : normalizeLookup(input.barcode);
+      if (deps.repository.findVariantBySkuNormalized(skuNormalized) !== undefined) {
+        return {
+          ok: false,
+          error: { code: 'DUPLICATE_SKU', message: 'SKU đã tồn tại.' },
+        };
+      }
+      if (
+        barcodeNormalized !== undefined &&
+        deps.repository.findBarcodeByNormalized(barcodeNormalized) !== undefined
+      ) {
+        return {
+          ok: false,
+          error: { code: 'DUPLICATE_BARCODE', message: 'Barcode đã tồn tại.' },
+        };
+      }
+
+      const variantId = deps.newId('variant');
+      const unitVersionId = deps.newId('unit-version');
+      const inventoryMode = resolveInventoryModeForProductType(product.productType, input.inventoryMode);
+      const variant: VariantDTO = {
+        variantId,
+        tenantId: deps.tenantId,
+        productId: product.productId,
+        sku: input.sku.trim(),
+        skuNormalized,
+        displayName: input.displayName.trim(),
+        inventoryMode,
+        lotTracking: input.lotTracking ?? false,
+        serialTracking: input.serialTracking ?? false,
+        defaultUnitId: input.defaultUnitId.trim(),
+        isActive: product.isActive,
+        unitPriceVnd: input.unitPriceVnd,
+      };
+      const unit = createUnitVersion({
+        unitVersionId,
+        tenantId: deps.tenantId,
+        variantId,
+        unitId: input.defaultUnitId,
+        factor: input.unitFactor ?? 1,
+        saleEnabled: input.saleEnabled ?? true,
+        purchaseEnabled: input.purchaseEnabled ?? inventoryMode === 'Tracked',
+        effectiveFrom: deps.now().toISOString(),
+      });
+      const barcode: VariantBarcodeDTO | undefined =
+        input.barcode === undefined || barcodeNormalized === undefined
+          ? undefined
+          : {
+              barcodeId: deps.newId('barcode'),
+              tenantId: deps.tenantId,
+              variantId,
+              unitVersionId,
+              barcode: input.barcode.trim(),
+              barcodeNormalized,
+              barcodeKind: 'Manufacturer',
+              isActive: true,
+            };
+
+      deps.repository.saveVariant(variant);
+      deps.repository.saveUnitVersion(unit);
+      if (barcode !== undefined) {
+        deps.repository.saveBarcode(barcode);
+      }
+
+      return {
+        ok: true,
+        data: { product, variant, unit, barcode },
       };
     },
     listProducts(input) {
@@ -270,6 +360,98 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
         },
       };
     },
+    updateVariant(input) {
+      const currentVariant = deps.repository.findVariantById(input.variantId);
+      if (currentVariant === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Biến thể không tồn tại.' },
+        };
+      }
+      const product = deps.repository.findProductById(currentVariant.productId);
+      if (product === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Sản phẩm không tồn tại.' },
+        };
+      }
+
+      if (input.sku !== undefined) {
+        const skuNormalized = normalizeLookup(input.sku);
+        const duplicateSku = deps.repository.findVariantBySkuNormalized(skuNormalized);
+        if (duplicateSku !== undefined && duplicateSku.variantId !== currentVariant.variantId) {
+          return {
+            ok: false,
+            error: { code: 'DUPLICATE_SKU', message: 'SKU đã tồn tại.' },
+          };
+        }
+      }
+      if (input.barcode !== undefined) {
+        const barcodeNormalized = normalizeLookup(input.barcode);
+        const duplicateBarcode = deps.repository.findBarcodeByNormalized(barcodeNormalized);
+        if (duplicateBarcode !== undefined && duplicateBarcode.variantId !== currentVariant.variantId) {
+          return {
+            ok: false,
+            error: { code: 'DUPLICATE_BARCODE', message: 'Barcode đã tồn tại.' },
+          };
+        }
+      }
+
+      const updatedVariant: VariantDTO = {
+        ...currentVariant,
+        displayName: input.displayName?.trim() ?? currentVariant.displayName,
+        sku: input.sku?.trim() ?? currentVariant.sku,
+        skuNormalized:
+          input.sku === undefined ? currentVariant.skuNormalized : normalizeLookup(input.sku),
+        defaultUnitId: input.defaultUnitId?.trim() ?? currentVariant.defaultUnitId,
+        inventoryMode: input.inventoryMode ?? currentVariant.inventoryMode,
+        unitPriceVnd: input.unitPriceVnd ?? currentVariant.unitPriceVnd,
+        lotTracking: input.lotTracking ?? currentVariant.lotTracking,
+        serialTracking: input.serialTracking ?? currentVariant.serialTracking,
+      };
+      deps.repository.saveVariant(updatedVariant);
+
+      const currentUnit = findDefaultUnitVersion(deps.repository, currentVariant.variantId);
+      const nextUnit =
+        currentUnit === undefined
+          ? createUnitVersion({
+              unitVersionId: deps.newId('unit-version'),
+              tenantId: deps.tenantId,
+              variantId: currentVariant.variantId,
+              unitId: updatedVariant.defaultUnitId,
+              factor: input.unitFactor ?? 1,
+              saleEnabled: input.saleEnabled ?? true,
+              purchaseEnabled: input.purchaseEnabled ?? updatedVariant.inventoryMode === 'Tracked',
+              effectiveFrom: deps.now().toISOString(),
+            })
+          : {
+              ...currentUnit,
+              unitId: input.defaultUnitId?.trim() ?? currentUnit.unitId,
+              unitName: input.defaultUnitId?.trim() ?? currentUnit.unitName,
+              baseUnitId: input.defaultUnitId?.trim() ?? currentUnit.baseUnitId,
+              factor: input.unitFactor ?? currentUnit.factor,
+              saleEnabled: input.saleEnabled ?? currentUnit.saleEnabled,
+              purchaseEnabled: input.purchaseEnabled ?? currentUnit.purchaseEnabled,
+            };
+      deps.repository.saveUnitVersion(nextUnit);
+
+      const barcode =
+        input.barcode === undefined
+          ? activeBarcodeForVariant(deps.repository, currentVariant.variantId)
+          : upsertActiveBarcode({
+              repository: deps.repository,
+              newId: deps.newId,
+              tenantId: deps.tenantId,
+              variantId: currentVariant.variantId,
+              unitVersionId: nextUnit.unitVersionId,
+              barcode: input.barcode,
+            });
+
+      return {
+        ok: true,
+        data: { product, variant: updatedVariant, unit: nextUnit, barcode },
+      };
+    },
     setProductActive(input) {
       const product = deps.repository.findProductById(input.productId);
       if (product === undefined) {
@@ -298,6 +480,30 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
           product: updatedProduct,
           defaultVariant: updatedVariant,
         },
+      };
+    },
+    setVariantActive(input) {
+      const variant = deps.repository.findVariantById(input.variantId);
+      if (variant === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Biến thể không tồn tại.' },
+        };
+      }
+      const product = deps.repository.findProductById(variant.productId);
+      if (product === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Sản phẩm không tồn tại.' },
+        };
+      }
+
+      const updatedVariant: VariantDTO = { ...variant, isActive: input.isActive };
+      deps.repository.saveVariant(updatedVariant);
+
+      return {
+        ok: true,
+        data: { product, variant: updatedVariant },
       };
     },
     getPosProjection(input) {
@@ -418,6 +624,32 @@ function upsertActiveBarcode(input: {
   return nextBarcode;
 }
 
+function createUnitVersion(input: {
+  unitVersionId: string;
+  tenantId: string;
+  variantId: string;
+  unitId: string;
+  factor: number;
+  saleEnabled: boolean;
+  purchaseEnabled: boolean;
+  effectiveFrom: string;
+}): UnitConversionVersionDTO {
+  const unitId = input.unitId.trim();
+  return {
+    unitVersionId: input.unitVersionId,
+    tenantId: input.tenantId,
+    variantId: input.variantId,
+    unitId,
+    unitName: unitId,
+    baseUnitId: unitId,
+    factor: input.factor,
+    saleEnabled: input.saleEnabled,
+    purchaseEnabled: input.purchaseEnabled,
+    effectiveFrom: input.effectiveFrom,
+    isActive: true,
+  };
+}
+
 export function normalizeLookup(value: string): string {
   return value.trim().toLocaleUpperCase('vi-VN');
 }
@@ -435,5 +667,15 @@ function resolveInventoryMode(input: CatalogCreateProductRequest): InventoryMode
     return 'Bundle';
   }
 
+  return 'Tracked';
+}
+
+function resolveInventoryModeForProductType(
+  productType: ProductDTO['productType'],
+  requested: InventoryMode | undefined,
+): InventoryMode {
+  if (requested !== undefined) return requested;
+  if (productType === 'Service' || productType === 'NonStock') return 'NotTracked';
+  if (productType === 'Bundle') return 'Bundle';
   return 'Tracked';
 }

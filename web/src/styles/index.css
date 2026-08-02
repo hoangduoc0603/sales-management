@@ -1410,7 +1410,66 @@ input:focus-visible {
 }
 
 .cn-catalog-filter-bar {
-  grid-template-columns: minmax(260px, 1fr) minmax(260px, auto) auto;
+  grid-template-columns: minmax(260px, 1fr) 440px max-content;
+}
+
+.cn-catalog-filter-bar .cn-field:last-child {
+  justify-items: start;
+}
+
+.cn-catalog-filter-bar .cn-segment-row {
+  flex-wrap: nowrap;
+}
+
+.cn-catalog-filter-bar .cn-segment {
+  min-width: 84px;
+  white-space: nowrap;
+}
+
+.cn-catalog-master-detail .cn-table {
+  min-width: 900px;
+}
+
+.cn-catalog-view-tabs,
+.cn-editor-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cn-catalog-view-tab,
+.cn-editor-tab {
+  min-height: 40px;
+  border: 1px solid var(--cn-border);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-surface);
+  color: var(--cn-text-secondary);
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.cn-catalog-view-tab[aria-selected="true"],
+.cn-editor-tab[aria-selected="true"] {
+  border-color: color-mix(in oklab, var(--cn-primary), transparent 58%);
+  background: var(--cn-primary-subtle);
+  color: var(--cn-primary);
+}
+
+.cn-editor-tabs {
+  margin-bottom: 14px;
+}
+
+.cn-editor-card {
+  border: 1px solid var(--cn-border-subtle);
+  border-radius: var(--cn-radius-panel);
+  background: var(--cn-surface-subtle);
+  padding: 14px;
+}
+
+.cn-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .cn-catalog-form {
@@ -1450,6 +1509,10 @@ input:focus-visible {
   border-color: transparent;
   background: var(--cn-primary-subtle);
   color: var(--cn-primary-subtle-foreground);
+}
+
+.cn-action-row-between {
+  justify-content: space-between;
 }
 
 .cn-table-link {
@@ -4266,6 +4329,7 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   .cn-inventory-workbench-grid,
   .cn-pos-grid,
   .cn-product-grid,
+  .cn-editor-grid,
   .cn-pos-session-grid,
   .cn-pos-recovery-grid,
   .cn-state-grid {

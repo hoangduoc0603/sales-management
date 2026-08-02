@@ -30,4 +30,4 @@ Các artifact cũ đã bao phủ workspace tổng hợp cho Dashboard, POS, Sale
 
 - Open Design generation/refine cho 12 artifact mới.
 - Source QA: script parse, đủ hash routes, không native `<select>`, không gradient, không selector `.user span`, không còn chuỗi `Chọn tệp`.
-- Render QA: Open Design export render cho từng batch; Chrome headless local preview cho POS conflict desktop và Operations mobile. Operations mobile đã được refine riêng cho dropzone và responsive header.
+- Render QA: Open Design export render cho từng batch; Chrome headless chạy ứng dụng local cho POS conflict desktop và Operations mobile. Operations mobile đã được refine riêng cho dropzone và responsive header.

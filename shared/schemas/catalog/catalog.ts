@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import type {
   CatalogCreateProductRequest,
+  CatalogCreateVariantRequest,
   CatalogProductListRequest,
   CatalogPosProjectionRequest,
   CatalogQuoteRequest,
   CatalogSetProductActiveRequest,
+  CatalogSetVariantActiveRequest,
   CatalogUpdateProductRequest,
+  CatalogUpdateVariantRequest,
 } from '@shared/contracts/catalog/catalog';
 
 const nonEmptyTrimmed = z.string().trim().min(1);
@@ -60,6 +63,64 @@ export const catalogUpdateProductRequestSchema = z
 
 export function parseCatalogUpdateProductRequest(value: unknown): CatalogUpdateProductRequest {
   return catalogUpdateProductRequestSchema.parse(value);
+}
+
+const variantMutationBaseSchema = {
+  displayName: optionalNonEmptyTrimmed,
+  sku: optionalNonEmptyTrimmed,
+  barcode: optionalNonEmptyTrimmed,
+  defaultUnitId: optionalNonEmptyTrimmed,
+  unitPriceVnd: z.number().int().nonnegative().optional(),
+  inventoryMode: z.enum(['Tracked', 'NotTracked', 'Bundle']).optional(),
+  lotTracking: z.boolean().optional(),
+  serialTracking: z.boolean().optional(),
+  unitFactor: z.number().positive().optional(),
+  saleEnabled: z.boolean().optional(),
+  purchaseEnabled: z.boolean().optional(),
+};
+
+export const catalogCreateVariantRequestSchema = z
+  .object({
+    productId: nonEmptyTrimmed,
+    displayName: nonEmptyTrimmed,
+    sku: nonEmptyTrimmed,
+    barcode: optionalNonEmptyTrimmed,
+    defaultUnitId: nonEmptyTrimmed,
+    unitPriceVnd: z.number().int().nonnegative(),
+    inventoryMode: z.enum(['Tracked', 'NotTracked', 'Bundle']).optional(),
+    lotTracking: z.boolean().optional(),
+    serialTracking: z.boolean().optional(),
+    unitFactor: z.number().positive().optional(),
+    saleEnabled: z.boolean().optional(),
+    purchaseEnabled: z.boolean().optional(),
+  })
+  .strict();
+
+export function parseCatalogCreateVariantRequest(value: unknown): CatalogCreateVariantRequest {
+  return catalogCreateVariantRequestSchema.parse(value);
+}
+
+export const catalogUpdateVariantRequestSchema = z
+  .object({
+    variantId: nonEmptyTrimmed,
+    ...variantMutationBaseSchema,
+  })
+  .strict();
+
+export function parseCatalogUpdateVariantRequest(value: unknown): CatalogUpdateVariantRequest {
+  return catalogUpdateVariantRequestSchema.parse(value);
+}
+
+export const catalogSetVariantActiveRequestSchema = z
+  .object({
+    variantId: nonEmptyTrimmed,
+    isActive: z.boolean(),
+    reason: optionalNonEmptyTrimmed,
+  })
+  .strict();
+
+export function parseCatalogSetVariantActiveRequest(value: unknown): CatalogSetVariantActiveRequest {
+  return catalogSetVariantActiveRequestSchema.parse(value);
 }
 
 export const catalogSetProductActiveRequestSchema = z

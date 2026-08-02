@@ -8,7 +8,11 @@ describe('CatalogCrmHome', () => {
     const html = renderToStaticMarkup(createElement(CatalogCrmHome, { route: 'catalog' }));
 
     expect(html).toContain('Hàng hóa &amp; biến thể');
-    expect(html).toContain('Product / Variant');
+    expect(html).toContain('Catalog table');
+    expect(html).toContain('Product editor');
+    expect(html).toContain('Product master');
+    expect(html).toContain('Variant &amp; đơn vị');
+    expect(html).toContain('Barcode search');
     expect(html).toContain('Loại hàng');
     expect(html).toContain('Stocked');
     expect(html).toContain('Service');

@@ -5,6 +5,7 @@
 - Status: `Approved` — đã được người dùng duyệt, được dùng làm nguồn triển khai UI.
 - Design System: Cenio Core v0.7
 - Open Design: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b` / `catalog-crm-commercial.html`
+- Đường dẫn file Open Design: `/Users/hoangduoc/Library/Application Support/Open Design/namespaces/release-stable/data/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/catalog-crm-commercial.html`
 
 ## Hash/state cần verify
 

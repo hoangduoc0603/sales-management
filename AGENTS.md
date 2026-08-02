@@ -34,11 +34,11 @@ Khi hoàn thành task, đối chiếu test scenario/quality gate trong LLD. Nế
 
 ## Quy tắc triển khai UI từ Design
 
-Trước khi tạo hoặc sửa UI, phải đọc `docs/design/README.md`, `docs/design/open-design-registry.md`, `docs/design/design-system.md`, `docs/design/implementation-rules.md` và file handoff màn hình tương ứng trong `docs/design/screens/`. Xác nhận registry và handoff đều là `Approved`, kiểm tra trực tiếp Open Design để lấy phiên bản mới nhất của artifact theo `Open Design project` + `Artifact chính`, rồi mở `Local preview` để đối chiếu trước khi code và sau khi hoàn tất. Không code UI dựa trên screenshot, artifact cũ đã cache, hoặc UI hiện có trong source nếu khác artifact mới nhất.
+Trước khi tạo hoặc sửa UI, phải đọc `docs/design/README.md`, `docs/design/open-design-registry.md`, `docs/design/design-system.md`, `docs/design/implementation-rules.md` và file handoff màn hình tương ứng trong `docs/design/screens/`. Xác nhận registry và handoff đều là `Approved`, kiểm tra trực tiếp Open Design để lấy phiên bản mới nhất của artifact theo `Open Design project` + `Artifact chính`, rồi mở `Đường dẫn file Open Design` trong handoff để đối chiếu trước khi code và sau khi hoàn tất. Không code UI dựa trên screenshot, artifact cũ đã cache, hoặc UI hiện có trong source nếu khác artifact mới nhất.
 
 Nếu màn hình đã có Open Design artifact được duyệt, implementation phải follow artifact/handoff đó về layout, hierarchy, component behavior, state, responsive và theme. Không tự thay đổi UI pattern, token, component mapping hoặc nội dung hiển thị nếu khác với handoff.
 
-Khi design và SRS/ADR/LLD mâu thuẫn, dừng lại và nêu rõ điểm cần quyết định. Nếu Local preview không mở được, dùng project + artifact để lấy lại qua Open Design; nếu không đủ căn cứ visual thì dừng, không tự suy diễn UI. Khi design thay đổi trên Open Design, phải cập nhật registry/handoff tương ứng trong `docs/design/` trước hoặc trong cùng thay đổi code.
+Khi design và SRS/ADR/LLD mâu thuẫn, dừng lại và nêu rõ điểm cần quyết định. Đường dẫn file Open Design chỉ là shortcut trên máy hiện tại; nếu file không tồn tại hoặc không mở được, dùng `Open Design project` + `Artifact chính` để lấy lại qua Open Design. Nếu không đủ căn cứ visual thì dừng, không tự suy diễn UI. Khi design thay đổi trên Open Design, phải cập nhật registry/handoff tương ứng trong `docs/design/` trước hoặc trong cùng thay đổi code.
 
 ## Cấu trúc thư mục
 

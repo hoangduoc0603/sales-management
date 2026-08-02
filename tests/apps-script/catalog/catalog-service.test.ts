@@ -263,4 +263,182 @@ describe('CatalogService', () => {
       }),
     ).toMatchObject({ ok: true, data: { product: { isActive: true }, defaultVariant: { isActive: true } } });
   });
+
+  it('tạo biến thể độc lập cho product và đưa vào POS projection', () => {
+    const service = createService();
+
+    const created = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+
+    const variant = service.createVariant({
+      productId: created.data.product.productId,
+      displayName: 'Sữa hạt óc chó thùng 12 chai',
+      sku: 'SH-OC-BOX12',
+      barcode: '893000000012',
+      defaultUnitId: 'thùng',
+      unitPriceVnd: 480000,
+      unitFactor: 12,
+    });
+
+    expect(variant).toMatchObject({
+      ok: true,
+      data: {
+        variant: {
+          productId: created.data.product.productId,
+          sku: 'SH-OC-BOX12',
+          displayName: 'Sữa hạt óc chó thùng 12 chai',
+          defaultUnitId: 'thùng',
+          unitPriceVnd: 480000,
+        },
+        unit: {
+          factor: 12,
+          saleEnabled: true,
+          purchaseEnabled: true,
+        },
+        barcode: {
+          barcode: '893000000012',
+        },
+      },
+    });
+
+    expect(service.listProducts({ query: 'box12' }).items).toHaveLength(1);
+    expect(
+      service
+        .getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' })
+        .variants.map((item) => item.sku),
+    ).toEqual(['SH-OC-1L', 'SH-OC-BOX12']);
+  });
+
+  it('cập nhật biến thể độc lập và vẫn chặn SKU/barcode trùng', () => {
+    const service = createService();
+
+    const created = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    const variant = service.createVariant({
+      productId: created.data.product.productId,
+      displayName: 'Sữa hạt óc chó thùng 12 chai',
+      sku: 'SH-OC-BOX12',
+      barcode: '893000000012',
+      defaultUnitId: 'thùng',
+      unitPriceVnd: 480000,
+      unitFactor: 12,
+    });
+    if (!variant.ok) throw new Error('create variant failed');
+
+    expect(
+      service.updateVariant({
+        variantId: variant.data.variant.variantId,
+        sku: 'SH-OC-1L',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'DUPLICATE_SKU' } });
+    expect(
+      service.updateVariant({
+        variantId: variant.data.variant.variantId,
+        barcode: '893000000001',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'DUPLICATE_BARCODE' } });
+
+    const updated = service.updateVariant({
+      variantId: variant.data.variant.variantId,
+      displayName: 'Sữa hạt óc chó thùng 24 chai',
+      sku: 'SH-OC-BOX24',
+      barcode: '893000000024',
+      defaultUnitId: 'thùng',
+      unitPriceVnd: 920000,
+      unitFactor: 24,
+      purchaseEnabled: false,
+    });
+
+    expect(updated).toMatchObject({
+      ok: true,
+      data: {
+        variant: {
+          displayName: 'Sữa hạt óc chó thùng 24 chai',
+          sku: 'SH-OC-BOX24',
+          defaultUnitId: 'thùng',
+          unitPriceVnd: 920000,
+        },
+        unit: {
+          factor: 24,
+          purchaseEnabled: false,
+        },
+        barcode: {
+          barcode: '893000000024',
+        },
+      },
+    });
+    expect(service.listProducts({ query: 'box24' }).items).toHaveLength(1);
+  });
+
+  it('ngừng hoạt động biến thể độc lập không làm tắt product/default variant', () => {
+    const service = createService();
+
+    const created = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    const variant = service.createVariant({
+      productId: created.data.product.productId,
+      displayName: 'Sữa hạt óc chó thùng 12 chai',
+      sku: 'SH-OC-BOX12',
+      defaultUnitId: 'thùng',
+      unitPriceVnd: 480000,
+    });
+    if (!variant.ok) throw new Error('create variant failed');
+
+    expect(
+      service.setVariantActive({
+        variantId: variant.data.variant.variantId,
+        isActive: false,
+        reason: 'Ngừng bán theo thùng',
+      }),
+    ).toMatchObject({
+      ok: true,
+      data: {
+        product: { isActive: true },
+        variant: { isActive: false },
+      },
+    });
+
+    expect(service.listProducts({ status: 'Active' }).items.map((item) => item.sku)).toEqual([
+      'SH-OC-1L',
+    ]);
+    expect(service.listProducts({ status: 'Inactive' }).items.map((item) => item.sku)).toEqual([
+      'SH-OC-BOX12',
+    ]);
+    expect(
+      service
+        .getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' })
+        .variants.map((item) => item.sku),
+    ).toEqual(['SH-OC-1L']);
+
+    expect(
+      service.setVariantActive({
+        variantId: variant.data.variant.variantId,
+        isActive: true,
+      }),
+    ).toMatchObject({ ok: true, data: { variant: { isActive: true } } });
+  });
 });

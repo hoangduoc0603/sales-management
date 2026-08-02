@@ -7,6 +7,7 @@
 - Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
 - Artifact chính: `auth-first-run.html`
+- Đường dẫn file Open Design: `/Users/hoangduoc/Library/Application Support/Open Design/namespaces/release-stable/data/projects/7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b/auth-first-run.html`
 - Handoff trong Open Design: `auth-first-run.html`
 
 ## Hash/state cần verify
