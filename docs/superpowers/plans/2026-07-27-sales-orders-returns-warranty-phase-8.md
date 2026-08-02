@@ -119,6 +119,8 @@
 - [x] Run targeted tests and confirm failures.
 - [x] Wire Apps Script composition and permissions.
 - [x] Implement local fake backend seeded orders/returns/warranty and mutation behavior.
+- [x] Bổ sung local fake backend `sales.return.create` và `sales.return.resolve` để UI local test được return by source + resolve disposition.
+- [x] Bổ sung local fake backend `sales.warranty.open` và `sales.warranty.transition` để UI local test được warranty by source order/line.
 - [x] Run targeted tests and confirm pass.
 
 ## Task 4: Sales Orders / Returns UI shell
@@ -140,6 +142,112 @@
 - [x] Route AppShell `orders` to `SalesOrdersReturnsHome`.
 - [x] Run targeted tests and confirm pass.
 
+## Task 4B: Sales Orders UI API Wiring Extension
+
+**Bối cảnh:** Sau UI shell baseline, route `Đơn bán` vẫn còn dùng dữ liệu tĩnh trong component. Extension này nối màn vào API/local fake đã có để danh sách/detail/lifecycle online dùng được trên app thật.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/app/sales-management-app.tsx`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+
+- [x] Viết failing render test cho search input thật, empty-state copy và loại bỏ marker `Artifact Approved`.
+- [x] Nối `sales.order.list` theo Branch/Warehouse/source/status/query.
+- [x] Nối action lifecycle online `confirm`, `startPacking`, `ship`, `deliver` bằng command/idempotency key mới.
+- [x] Giữ fallback local/demo cho SSR/local khi không truyền API client.
+- [x] Chạy focused test, typecheck và lint.
+
+## Task 4C: Manual Fulfillment Detail UI Extension
+
+**Bối cảnh:** Artifact `manual-order-fulfillment-detail.html` đã `Approved`, nhưng UI React chỉ có detail chứng từ tối thiểu trong màn `Đơn bán`. Extension này bổ sung vùng detail fulfillment để thể hiện reservation, khách nhận, nghĩa vụ thanh toán, kiểm tra trước xác nhận, bàn giao và cancel guard theo state backend.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/styles/index.css`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+- Test: `tests/web/local-fake-backend.test.ts`
+
+- [x] Đọc handoff `manual-order-fulfillment-detail.md` và artifact mới nhất trên Open Design/local project.
+- [x] Viết failing render test cho các khối fulfillment detail bắt buộc.
+- [x] Bổ sung `Giao thành công` và nối `sales.online.deliver`.
+- [x] Nối `Hủy trước Shipped` vào `sales.online.cancel` với reason và deposit treatment mặc định an toàn.
+- [x] Bổ sung vùng `Chi tiết đơn nhập tay & fulfillment`: timeline, reservation, khách nhận, nghĩa vụ thanh toán, pre-confirm checks, bàn giao và cancel guard.
+- [x] Bổ sung CSS `.sr-only` và layout fulfillment responsive theo token Cenio Core.
+- [x] Bổ sung local fake backend regression cho fulfillment `confirm -> packing -> ship -> deliver` và cancel sau shipped bị chặn.
+- [x] Chạy focused tests, typecheck và lint.
+
+## Task 4D: Manual Order Composer UI Extension
+
+**Bối cảnh:** Artifact `sales-orders-returns.html` trạng thái `#manual` yêu cầu form “Tạo / sửa đơn nhập tay” có explicit save, không autosave, nguồn nhập tay nội bộ, khách nhận, thông tin giao/nhận, kho xuất/reservation và payment option. Backend/fake backend đã có `catalog.pos.getProjection` và `sales.draft.save`; UI cần nối vào API mà không preload catalog khi mở màn.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/styles/index.css`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+
+- [x] Đọc handoff `sales-orders-returns.md` và artifact `sales-orders-returns.html` trạng thái `#manual`.
+- [x] Viết failing render test cho composer explicit-save, nguồn nhập tay, khách nhận, SĐT, địa chỉ, kho xuất/reservation, payment options và không dùng native select.
+- [x] Bổ sung `ManualOrderComposer` dùng `Listbox`, input/textarea token Cenio Core, segmented payment và Button loading giữ nguyên label.
+- [x] Nối `Lưu nháp đơn` vào `catalog.pos.getProjection` lazy-on-click rồi `sales.draft.save` với `source: ManualOnline`; không gọi backend khi người dùng chỉ nhập liệu.
+- [x] Bổ sung guard `Lưu nháp trước khi xác nhận` và nối `Xác nhận đơn` tới `sales.online.confirm` cho draft vừa lưu.
+- [x] Giữ fallback demo khi không có `ApiClient/sessionToken`.
+- [x] Bổ sung CSS responsive cho composer ở desktop/tablet/mobile.
+- [x] Chạy focused test, typecheck và lint.
+
+## Task 4E: Source Return UI/API Wiring Extension
+
+**Bối cảnh:** Panel `Trả hàng theo đơn gốc` trong UI React còn là nội dung tĩnh. Sau khi local fake backend đã hỗ trợ `sales.return.create/resolve`, màn `Đơn bán` cần có entry point tạo phiếu trả từ đơn được chọn, đưa hàng vào Quarantine và hoàn tất kiểm hàng theo disposition.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/styles/index.css`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+
+- [x] Viết failing render test cho source-return workbench, điều kiện đơn hợp lệ, trạng thái chờ kiểm và action resolve.
+- [x] Bổ sung `SourceReturnPanel` thay panel tĩnh, hiển thị đơn đang chọn, guard `Completed/Shipped/Delivered`, fast-return restricted state.
+- [x] Nối `Tạo phiếu trả` vào `sales.order.get` lazy-on-click rồi `sales.return.create`; không fetch detail khi chỉ mở màn.
+- [x] Nối `Restock`, `KeepQuarantine`, `Scrap` vào `sales.return.resolve` cho return đang chờ kiểm.
+- [x] Giữ fallback demo khi không có `ApiClient/sessionToken`.
+- [x] Bổ sung CSS responsive/theme-safe cho vùng action trả hàng.
+- [x] Chạy focused test và typecheck.
+
+## Task 4F: Warranty UI/API Wiring Extension
+
+**Bối cảnh:** Panel `Bảo hành theo serial` trong UI React còn là nội dung tĩnh. Sau khi Apps Script production service đã có `sales.warranty.open/transition`, local fake backend và UI cần nối đủ để test local/AppScript theo source order, line, serial/IMEI và lifecycle ca bảo hành.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/lib/api/local-fake-backend.ts`
+- Modify: `web/src/styles/index.css`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+- Test: `tests/web/local-fake-backend.test.ts`
+
+- [x] Viết failing render test cho warranty workbench, Serial/IMEI, mô tả lỗi và action lifecycle.
+- [x] Viết failing local fake backend test cho `sales.warranty.open` và `sales.warranty.transition`.
+- [x] Bổ sung local fake backend open/transition warranty, idempotency và lưu vào `SalesOrderDetailResponse.warrantyCases`.
+- [x] Bổ sung `WarrantyPanel` thay panel tĩnh, nhập serial/issue, hiển thị source order và active warranty status.
+- [x] Nối `Mở bảo hành` vào `sales.order.get` lazy-on-click rồi `sales.warranty.open`; không fetch detail khi chỉ render màn.
+- [x] Nối `Chuyển InReview` và `Đóng bảo hành` vào `sales.warranty.transition`.
+- [x] Giữ fallback demo khi không có `ApiClient/sessionToken`.
+- [x] Bổ sung CSS responsive/theme-safe cho vùng warranty.
+- [x] Chạy focused tests.
+
+## Task 4G: Exchange UI/API Wiring Extension
+
+**Bối cảnh:** Panel `Đổi hàng & thanh toán chênh lệch` trong UI React còn là placeholder trong khi Phase 8B đã có `sales.exchange.create`. Màn `Đơn bán` cần có entry point tạo đổi hàng từ đơn gốc, quote hàng đổi mới và gọi command exchange lazy-on-click.
+
+**Files:**
+- Modify: `web/src/features/sales/sales-orders-returns-home.tsx`
+- Modify: `web/src/styles/index.css`
+- Test: `tests/web/sales-orders-returns-home.test.ts`
+
+- [x] Viết failing render test để bắt lỗi panel exchange bị giữ static placeholder.
+- [x] Bổ sung `ExchangePanel` hiển thị source order, hàng nhận lại, hàng đổi mới, thu/hoàn chênh lệch và action tạo đơn đổi hàng.
+- [x] Nối `Tạo đơn đổi hàng` vào `sales.order.get`, `catalog.pos.getProjection`, `catalog.quote.preview` và `sales.exchange.create` lazy-on-click.
+- [x] Giữ guard `Completed/Shipped/Delivered` và fallback demo khi không có `ApiClient/sessionToken`.
+- [x] Bổ sung CSS theme-safe cho vùng exchange.
+- [x] Chạy focused tests.
+
 ## Task 5: Full verification and tracking
 
 **Files:**
@@ -153,7 +261,7 @@
 
 ## Self-Review
 
-- Spec coverage: covers list/detail, online lifecycle baseline, reservation/issue/AR/deliver no duplicate ledger, cancel deposit credit/refund, return by source/fast-return guard/restock, warranty case baseline and UI shell. Phase 8B bổ sung return refund/customer credit, KeepQuarantine/Scrap và exchange net settlement.
+- Spec coverage: covers list/detail, online lifecycle baseline, reservation/issue/AR/deliver no duplicate ledger, cancel deposit credit/refund, return by source/fast-return guard/restock, warranty case baseline and UI shell. Task 4B nối UI list/lifecycle vào API thật/local fake thay vì chỉ render dữ liệu tĩnh. Phase 8B bổ sung return refund/customer credit, KeepQuarantine/Scrap và exchange net settlement.
 - Intentional gaps: attachment upload/download and full CRM policy reversal remain open for later slices.
 - Placeholder scan: no TBD/TODO placeholders.
 - Type consistency: service method and operation names use the `sales.<area>.<verb>` convention already used by Phase 7.

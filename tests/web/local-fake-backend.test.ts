@@ -210,6 +210,88 @@ describe('createLocalFakeBackendClient', () => {
     });
   });
 
+  it('hỗ trợ Catalog product list/create/update/setActive ở local fake backend', async () => {
+    const client = createLocalFakeBackendClient();
+    const login = await client.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    const create = await client.invoke({
+      operation: 'catalog.product.create',
+      requestId: 'req-product-create',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        productCode: 'SP-NEW',
+        name: 'Sản phẩm test',
+        productType: 'Stocked',
+        sku: 'TEST-SKU',
+        barcode: '899999999999',
+        defaultUnitId: 'cái',
+        unitPriceVnd: 99000,
+      },
+    });
+    expect(create).toMatchObject({ ok: true });
+    if (!create.ok) throw new Error('create failed');
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.product.list',
+        requestId: 'req-product-list',
+        sessionToken: login.data.sessionToken,
+        payload: { query: 'test', status: 'All' },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        items: [expect.objectContaining({ sku: 'TEST-SKU', displayName: 'Sản phẩm test' })],
+      },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.product.update',
+        requestId: 'req-product-update',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          productId: create.data.product.productId,
+          name: 'Sản phẩm test đã sửa',
+          productType: 'Service',
+          sku: 'TEST-SKU-2',
+          barcode: '899999999998',
+          inventoryMode: 'NotTracked',
+          defaultUnitId: 'lần',
+          unitPriceVnd: 109000,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        product: { productType: 'Service' },
+        defaultVariant: {
+          sku: 'TEST-SKU-2',
+          inventoryMode: 'NotTracked',
+          defaultUnitId: 'lần',
+          unitPriceVnd: 109000,
+        },
+      },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.product.setActive',
+        requestId: 'req-product-deactivate',
+        sessionToken: login.data.sessionToken,
+        payload: { productId: create.data.product.productId, isActive: false },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { product: { isActive: false }, defaultVariant: { isActive: false } },
+    });
+  });
+
   it('hỗ trợ Inventory balance summary ở local fake backend', async () => {
     const client = createLocalFakeBackendClient();
     const login = await client.invoke({
@@ -1118,6 +1200,225 @@ describe('createLocalFakeBackendClient', () => {
         order: { status: 'Cancelled', paidVnd: 20_000 },
         customerCredit: { customerId: 'customer-1', amountVnd: 20_000, sourceDocument: { sourceType: 'SaleOrder' } },
       },
+    });
+
+    const fulfillmentDraft = await client.invoke({
+      operation: 'sales.draft.save',
+      requestId: 'req-online-fulfillment-draft-local',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        commandId: 'cmd-online-fulfillment-draft-local',
+        idempotencyKey: 'idem-online-fulfillment-draft-local',
+        source: 'ManualOnline',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        customerId: 'customer-1',
+        recipient: {
+          name: 'Trần Thị Hồng Nhung',
+          phone: '0909482176',
+          address: '12 Nguyễn Trãi',
+          shippingMethod: 'Tự giao',
+          codVnd: variant.unitPriceVnd,
+        },
+        lines: [
+          {
+            lineId: 'line-fulfillment-1',
+            variantId: variant.variantId,
+            unitVersionId: variant.unitVersionId,
+            quantity: 1,
+            quantityMilli: 1_000,
+            unitPriceVnd: variant.unitPriceVnd,
+            lineDiscountVnd: 0,
+          },
+        ],
+        tenders: [],
+      },
+    });
+    expect(fulfillmentDraft).toMatchObject({ ok: true, data: { order: { status: 'Draft' } } });
+    if (!fulfillmentDraft.ok) throw new Error('fulfillment draft failed');
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.confirm',
+        requestId: 'req-online-fulfillment-confirm-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-fulfillment-confirm-local',
+          idempotencyKey: 'idem-online-fulfillment-confirm-local',
+          saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+          actorId: 'user-admin',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { order: { status: 'Confirmed' } } });
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.startPacking',
+        requestId: 'req-online-fulfillment-packing-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-fulfillment-packing-local',
+          idempotencyKey: 'idem-online-fulfillment-packing-local',
+          saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+          actorId: 'user-admin',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { order: { status: 'Packing' } } });
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.ship',
+        requestId: 'req-online-fulfillment-ship-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-fulfillment-ship-local',
+          idempotencyKey: 'idem-online-fulfillment-ship-local',
+          saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+          actorId: 'user-admin',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { order: { status: 'Shipped' } } });
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.cancel',
+        requestId: 'req-online-cancel-after-ship-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-cancel-after-ship-local',
+          idempotencyKey: 'idem-online-cancel-after-ship-local',
+          saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+          actorId: 'user-admin',
+          reason: 'Không được hủy sau khi đã xuất giao.',
+          depositTreatment: 'KeepCustomerCredit',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+
+    await expect(
+      client.invoke({
+        operation: 'sales.online.deliver',
+        requestId: 'req-online-fulfillment-deliver-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-online-fulfillment-deliver-local',
+          idempotencyKey: 'idem-online-fulfillment-deliver-local',
+          saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+          actorId: 'user-admin',
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { order: { status: 'Delivered' } } });
+
+    const deliveredDetail = await client.invoke({
+      operation: 'sales.order.get',
+      requestId: 'req-return-source-detail-local',
+      sessionToken: login.data.sessionToken,
+      payload: { saleOrderId: fulfillmentDraft.data.order.saleOrderId },
+    });
+    expect(deliveredDetail).toMatchObject({ ok: true, data: { order: { status: 'Delivered' }, lines: [expect.any(Object)] } });
+    if (!deliveredDetail.ok) throw new Error('delivered detail failed');
+    const sourceLine = deliveredDetail.data.lines[0];
+    if (sourceLine === undefined) throw new Error('missing delivered line');
+
+    const createdReturn = await client.invoke({
+      operation: 'sales.return.create',
+      requestId: 'req-return-create-local',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        commandId: 'cmd-return-create-local',
+        idempotencyKey: 'idem-return-create-local',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        actorId: 'user-admin',
+        customerId: 'customer-1',
+        sourceSaleOrderId: fulfillmentDraft.data.order.saleOrderId,
+        reason: 'Khách trả hàng lỗi.',
+        lines: [
+          {
+            sourceSaleLineId: sourceLine.saleOrderLineId,
+            variantId: sourceLine.variantId,
+            quantity: 1,
+            quantityMilli: 1_000,
+            disposition: 'Quarantine',
+            refundVnd: sourceLine.unitPriceVnd,
+          },
+        ],
+      },
+    });
+    expect(createdReturn).toMatchObject({
+      ok: true,
+      data: { returnOrder: { status: 'ReceivedForInspection', returnType: 'SourceReturn' } },
+    });
+    if (!createdReturn.ok) throw new Error('return create failed');
+
+    await expect(
+      client.invoke({
+        operation: 'sales.return.resolve',
+        requestId: 'req-return-resolve-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-return-resolve-local',
+          idempotencyKey: 'idem-return-resolve-local',
+          returnId: createdReturn.data.returnOrder.returnId,
+          actorId: 'user-admin',
+          lines: [
+            {
+              returnLineId: createdReturn.data.returnOrder.lines[0]?.returnLineId ?? 'missing-return-line',
+              disposition: 'Restock',
+            },
+          ],
+          financialAction: { treatment: 'CustomerCredit', amountVnd: sourceLine.unitPriceVnd },
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        returnOrder: { status: 'Resolved', lines: [expect.objectContaining({ disposition: 'Restock' })] },
+        customerCredit: { amountVnd: sourceLine.unitPriceVnd },
+      },
+    });
+
+    const warranty = await client.invoke({
+      operation: 'sales.warranty.open',
+      requestId: 'req-warranty-open-local',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        commandId: 'cmd-warranty-open-local',
+        idempotencyKey: 'idem-warranty-open-local',
+        actorId: 'user-admin',
+        customerId: 'customer-1',
+        saleOrderId: fulfillmentDraft.data.order.saleOrderId,
+        saleLineId: sourceLine.saleOrderLineId,
+        variantId: sourceLine.variantId,
+        serialId: 'SERIAL-LOCAL-001',
+        issue: 'Không lên nguồn.',
+        attachmentIds: ['attachment-local-1'],
+      },
+    });
+    expect(warranty).toMatchObject({
+      ok: true,
+      data: { warrantyCase: { status: 'Open', serialId: 'SERIAL-LOCAL-001', issue: 'Không lên nguồn.' } },
+    });
+    if (!warranty.ok) throw new Error('warranty open failed');
+
+    await expect(
+      client.invoke({
+        operation: 'sales.warranty.transition',
+        requestId: 'req-warranty-transition-local',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          commandId: 'cmd-warranty-transition-local',
+          idempotencyKey: 'idem-warranty-transition-local',
+          warrantyCaseId: warranty.data.warrantyCase.warrantyCaseId,
+          actorId: 'user-admin',
+          status: 'Resolved',
+          resolution: 'Đã đổi sản phẩm.',
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { warrantyCase: { status: 'Resolved', resolution: 'Đã đổi sản phẩm.' } },
     });
   });
 });

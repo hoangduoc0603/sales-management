@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseCatalogCreateProductRequest,
+  parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
+  parseCatalogSetProductActiveRequest,
+  parseCatalogUpdateProductRequest,
 } from '../../shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -13,10 +16,47 @@ import {
 describe('Catalog/CRM shared contracts', () => {
   it('đăng ký operation names cần cho Phase 4', () => {
     expect(operationNames).toContain('catalog.product.create');
+    expect(operationNames).toContain('catalog.product.list');
+    expect(operationNames).toContain('catalog.product.update');
+    expect(operationNames).toContain('catalog.product.setActive');
     expect(operationNames).toContain('catalog.pos.getProjection');
     expect(operationNames).toContain('catalog.quote.preview');
     expect(operationNames).toContain('crm.customer.quickCreate');
     expect(operationNames).toContain('crm.customer.search');
+  });
+
+  it('parse list/update/setActive product request cho màn Hàng hóa', () => {
+    expect(parseCatalogProductListRequest({ query: ' sữa ', status: 'All', limit: 20 })).toEqual({
+      query: 'sữa',
+      status: 'All',
+      limit: 20,
+    });
+    expect(() => parseCatalogProductListRequest({ limit: 0 })).toThrow();
+
+    expect(
+      parseCatalogUpdateProductRequest({
+        productId: 'product-1',
+        name: 'Sữa hạt óc chó 1L',
+        productType: 'Service',
+        sku: 'SH-OC-1L',
+        barcode: '893000000001',
+        inventoryMode: 'NotTracked',
+        defaultUnitId: 'lần',
+        unitPriceVnd: 42000,
+      }),
+    ).toMatchObject({
+      productId: 'product-1',
+      productType: 'Service',
+      sku: 'SH-OC-1L',
+      inventoryMode: 'NotTracked',
+      defaultUnitId: 'lần',
+    });
+    expect(() => parseCatalogUpdateProductRequest({ productId: '', sku: 'SKU' })).toThrow();
+
+    expect(parseCatalogSetProductActiveRequest({ productId: 'product-1', isActive: false })).toEqual({
+      productId: 'product-1',
+      isActive: false,
+    });
   });
 
   it('parse create product và từ chối SKU/barcode rỗng', () => {

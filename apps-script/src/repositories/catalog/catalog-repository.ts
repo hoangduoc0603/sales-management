@@ -9,6 +9,8 @@ import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import type { AppendOnlySheetRecordGateway } from '../platform/sheet-record-repository';
 
 export interface CatalogRepository {
+  findProductById(productId: string): ProductDTO | undefined;
+  findVariantById(variantId: string): VariantDTO | undefined;
   findVariantBySkuNormalized(skuNormalized: string): VariantDTO | undefined;
   findBarcodeByNormalized(barcodeNormalized: string): VariantBarcodeDTO | undefined;
   listProducts(): readonly ProductDTO[];
@@ -28,6 +30,14 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
   const unitVersions = new Map<string, UnitConversionVersionDTO>();
 
   return {
+    findProductById(productId) {
+      const product = products.get(productId);
+      return product === undefined ? undefined : clone(product);
+    },
+    findVariantById(variantId) {
+      const variant = variants.get(variantId);
+      return variant === undefined ? undefined : clone(variant);
+    },
     findVariantBySkuNormalized(skuNormalized) {
       return [...variants.values()].find((variant) => variant.skuNormalized === skuNormalized);
     },
@@ -90,6 +100,12 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
   });
 
   return {
+    findProductById(productId) {
+      return products.list().find((product) => product.productId === productId);
+    },
+    findVariantById(variantId) {
+      return variants.list().find((variant) => variant.variantId === variantId);
+    },
     findVariantBySkuNormalized(skuNormalized) {
       return variants.list().find((variant) => variant.skuNormalized === skuNormalized);
     },

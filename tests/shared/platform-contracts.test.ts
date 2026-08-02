@@ -18,4 +18,14 @@ describe('platform shared contracts', () => {
     });
     expect(() => parseAuthLoginRequest({ loginId: 'admin', password: '' })).toThrow();
   });
+
+  it('parse login request nhận lựa chọn ghi nhớ session 7 ngày', () => {
+    expect(
+      parseAuthLoginRequest({ loginId: 'admin', password: 'secret', rememberSession: true }),
+    ).toEqual({
+      loginId: 'admin',
+      password: 'secret',
+      rememberSession: true,
+    });
+  });
 });

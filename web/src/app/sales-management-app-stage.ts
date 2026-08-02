@@ -46,11 +46,11 @@ export function resolveSalesManagementAppStage({
     return 'auth';
   }
 
-  if (!actorReady || !sessionReady) {
+  if (!sessionReady) {
     return 'auth';
   }
 
-  if (bootstrapping || !scopeReady) {
+  if (bootstrapping || !actorReady || !scopeReady) {
     return 'bootstrapping';
   }
 

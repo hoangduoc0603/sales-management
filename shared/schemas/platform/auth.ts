@@ -5,6 +5,7 @@ export const authLoginRequestSchema = z
   .object({
     loginId: z.string().trim().min(1),
     password: z.string().min(1),
+    rememberSession: z.boolean().optional(),
   })
   .strict();
 

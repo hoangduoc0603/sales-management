@@ -34,6 +34,7 @@ Nếu design handoff mâu thuẫn với SRS, LLD hoặc ADR Accepted, dừng l�
 ## Mở artifact khi code UI
 
 - `Open Design project` + `Artifact chính` trong registry là định danh chuẩn để AI Agent lấy thiết kế hiện hành qua Open Design.
+- Mỗi lần code UI phải lấy lại artifact trực tiếp từ Open Design để dùng bản mới nhất tại thời điểm triển khai; không dùng bản đã cache trong session cũ, screenshot cũ hoặc implementation hiện có làm nguồn visual.
 - `Local preview` là link tiện dụng để mở trực tiếp artifact trên máy local, kể cả khi không mở cửa sổ ứng dụng Open Design. Dịch vụ Open Design local vẫn phải đang chạy.
 - Local URL không portable sang máy khác và có thể đổi port sau khi khởi động lại; nếu link hỏng, dùng project + artifact để lấy lại thay vì dựa vào screenshot hoặc tự suy diễn UI.
 - Không dùng screenshot làm nguồn triển khai. Screenshot chỉ phục vụ trao đổi hoặc review nhanh.

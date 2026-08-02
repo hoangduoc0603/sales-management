@@ -79,6 +79,7 @@ interface SessionServiceDependencies {
 
 const idleTtlMs = 60 * 60 * 1000;
 const absoluteTtlMs = 8 * 60 * 60 * 1000;
+const rememberedSessionTtlMs = 7 * 24 * 60 * 60 * 1000;
 const lockoutMs = 15 * 60 * 1000;
 const maxFailedAttempts = 5;
 const idleRefreshThresholdMs = 15 * 60 * 1000;
@@ -159,8 +160,10 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
       }
 
       const sessionToken = deps.idGenerator.newId('session');
-      const idleExpiresAt = new Date(now.getTime() + idleTtlMs).toISOString();
-      const absoluteExpiresAt = new Date(now.getTime() + absoluteTtlMs).toISOString();
+      const sessionTtlMs = input.rememberSession === true ? rememberedSessionTtlMs : idleTtlMs;
+      const absoluteSessionTtlMs = input.rememberSession === true ? rememberedSessionTtlMs : absoluteTtlMs;
+      const idleExpiresAt = new Date(now.getTime() + sessionTtlMs).toISOString();
+      const absoluteExpiresAt = new Date(now.getTime() + absoluteSessionTtlMs).toISOString();
       const saveSessionStartedAt = Date.now();
       deps.repository.saveSession({
         sessionId: deps.idGenerator.newId('sesrec'),
@@ -217,10 +220,11 @@ export function createSessionService(deps: SessionServiceDependencies): SessionS
 
       const shouldRefreshIdle =
         new Date(session.idleExpiresAt).getTime() - now.getTime() <= idleRefreshThresholdMs;
+      const absoluteExpiresAtMs = new Date(session.absoluteExpiresAt).getTime();
       const updatedSession = shouldRefreshIdle
         ? {
             ...session,
-            idleExpiresAt: new Date(now.getTime() + idleTtlMs).toISOString(),
+            idleExpiresAt: new Date(Math.min(now.getTime() + idleTtlMs, absoluteExpiresAtMs)).toISOString(),
           }
         : session;
       if (shouldRefreshIdle) {

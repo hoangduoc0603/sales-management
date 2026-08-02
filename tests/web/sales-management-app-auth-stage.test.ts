@@ -80,4 +80,17 @@ describe('resolveSalesManagementAppStage', () => {
       }),
     ).toBe('auth');
   });
+
+  it('không flash form login khi browser đã có session token và đang bootstrap actor/scope', () => {
+    expect(
+      resolveSalesManagementAppStage({
+        actorReady: false,
+        authMode: 'login',
+        bootstrapping: false,
+        installReadiness: 'installed',
+        scopeReady: false,
+        sessionReady: true,
+      }),
+    ).toBe('bootstrapping');
+  });
 });

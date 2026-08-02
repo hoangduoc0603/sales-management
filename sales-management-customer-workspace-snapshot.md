@@ -1,0 +1,64 @@
+- generic [ref=f2e3] [box=0,0,1440,1000]:
+  - complementary [ref=f2e4] [box=0,0,236,1000]:
+    - generic [ref=f2e5] [box=0,0,235,64]:
+      - generic [ref=f2e7] [box=76,16,95,31]:
+        - strong [ref=f2e8] [box=76,16,95,17]: Cenio Sales
+        - generic [ref=f2e9] [box=76,33,95,14]: Retail operations
+      - button "Thu gọn sidebar" [ref=f2e10] [box=185,17,30,30]
+    - navigation "Điều hướng chính" [ref=f2e13] [box=0,64,235,514]:
+      - generic [ref=f2e14] [box=12,80,211,209]:
+        - paragraph [ref=f2e15] [box=20,80,195,18]: Vận hành
+        - button "Tổng quan" [ref=f2e16] [box=12,104,211,37]
+        - button "Bán hàng" [ref=f2e23] [box=12,141,211,37]
+        - button "Đơn bán" [ref=f2e28] [box=12,178,211,37]
+        - button "Hàng hóa" [ref=f2e32] [box=12,215,211,37]
+        - button "Khách hàng" [active] [ref=f2e38] [box=12,252,211,37]
+      - generic [ref=f2e45] [box=12,309,211,172]:
+        - paragraph [ref=f2e46] [box=20,309,195,18]: Kiểm soát
+        - button "Kho" [ref=f2e47] [box=12,333,211,37]
+        - button "Mua hàng" [ref=f2e53] [box=12,370,211,37]
+        - button "Tài chính" [ref=f2e60] [box=12,407,211,37]
+        - button "Báo cáo" [ref=f2e65] [box=12,444,211,37]
+      - generic [ref=f2e68] [box=12,501,211,61]:
+        - paragraph [ref=f2e69] [box=20,501,195,18]: Hệ thống
+        - button "Quản trị" [ref=f2e70] [box=12,525,211,37]
+    - generic [ref=f2e75] [box=0,949,235,51]: Đồng bộ cục bộ sẵn sàng
+  - generic [ref=f2e77] [box=236,0,1204,1000]:
+    - banner [ref=f2e78] [box=236,0,1204,64]:
+      - generic [ref=f2e79] [box=260,12,555,40]:
+        - generic [ref=f2e80] [box=260,16,131,31]:
+          - strong [ref=f2e81] [box=260,16,131,17]: Cửa hàng mặc định
+          - generic [ref=f2e82] [box=260,33,131,14]: Không gian quản lý
+        - generic [ref=f2e83] [box=399,12,241,40]:
+          - generic [ref=f2e84] [box=410,23,58,18]: Chi nhánh
+          - button "Chi nhánh Chi nhánh mặc định" [ref=f2e86] [box=475,13,154,38]:
+            - generic [ref=f2e87] [box=475,21,130,21]: Chi nhánh mặc định
+        - generic [ref=f2e90] [box=649,12,166,40]:
+          - generic [ref=f2e91] [box=660,23,23,18]: Kho
+          - button "Kho Kho mặc định" [ref=f2e93] [box=689,13,114,38]:
+            - generic [ref=f2e94] [box=689,21,90,21]: Kho mặc định
+      - generic [ref=f2e97] [box=1189,10,227,44]:
+        - button "Chuyển sang giao diện tối" [ref=f2e98] [box=1189,12,40,40]
+        - button "Thông báo" [ref=f2e101] [box=1237,12,40,40]
+        - button "Admin Local Admin Local admin" [ref=f2e106] [box=1285,10,131,44]:
+          - generic "Admin Local" [ref=f2e107] [box=1292,16,32,32]: AL
+          - generic [ref=f2e108] [box=1332,15,73,33]:
+            - strong [ref=f2e109] [box=1332,15,73,14]: Admin Local
+            - generic [ref=f2e110] [box=1332,30,34,18]: admin
+    - main [ref=f2e111] [box=236,64,1204,828]:
+      - generic [ref=f2e455] [box=260,88,1156,780]:
+        - generic [ref=f2e456] [box=260,88,1156,89]:
+          - generic [ref=f2e457] [box=260,90,525,87]:
+            - paragraph [ref=f2e458] [box=260,96,525,18]: CRM / Khách hàng
+            - heading "Khách hàng & loyalty" [level=1] [ref=f2e459] [box=260,114,525,36]
+            - paragraph [ref=f2e460] [box=260,156,525,21]: Customer 360, cảnh báo trùng, nhóm khách và điểm thưởng theo quyền truy cập.
+          - generic [ref=f2e461] [box=1156,137,260,40]:
+            - generic [ref=f2e462] [box=1156,151,74,26]: Sẵn sàng
+            - button "Tạo nhanh khách hàng" [ref=f2e463] [box=1238,137,178,40]
+        - generic [ref=f2e465] [box=260,193,1156,675]:
+          - generic [ref=f2e466] [box=260,193,700,298]:
+            - generic [ref=f2e467] [box=261,194,698,69]
+            - generic [ref=f2e472] [box=261,263,698,227]
+          - generic [ref=f2e490] [box=976,193,440,675]:
+            - generic [ref=f2e492] [box=993,206,406,62]
+            - generic [ref=f2e496] [box=993,297,406,554]

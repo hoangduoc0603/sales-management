@@ -8,6 +8,7 @@ export type AuthFlowMode = 'login' | 'change-password-required';
 export interface LoginInput {
   loginId: string;
   password: string;
+  rememberSession?: boolean;
 }
 
 export interface ChangePasswordInput {
@@ -81,10 +82,11 @@ interface LoginFormProps {
 function LoginForm({ errorMessage, installWarning, isSubmitting, notice, onLogin }: LoginFormProps) {
   const [loginId, setLoginId] = useState('admin');
   const [password, setPassword] = useState('admin123');
+  const [rememberSession, setRememberSession] = useState(false);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void onLogin({ loginId, password });
+    void onLogin({ loginId, password, rememberSession });
   };
 
   return (
@@ -117,6 +119,18 @@ function LoginForm({ errorMessage, installWarning, isSubmitting, notice, onLogin
           type="password"
           value={password}
         />
+      </label>
+      <label className="cn-auth-remember">
+        <input
+          checked={rememberSession}
+          name="rememberSession"
+          onChange={(event) => setRememberSession(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>
+          <strong>Ghi nhớ đăng nhập trên thiết bị này trong 7 ngày</strong>
+          <small>Chỉ dùng trên thiết bị cá nhân. Bạn vẫn có thể đăng xuất bất cứ lúc nào.</small>
+        </span>
       </label>
       <Button isLoading={isSubmitting} type="submit" variant="primary">
         Đăng nhập

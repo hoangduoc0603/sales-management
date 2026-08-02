@@ -32,7 +32,7 @@ type ApiResult<T> =
   | { ok: false; error: ApiError; meta: ApiMeta };
 ```
 
-`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Login trả kèm `currentScope`; phiên đã có token dùng `platform.session.bootstrap` để lấy actor + current scope trong một round-trip, không gọi tách `session.me` rồi `scope.getCurrent` trong luồng mở app. Token không được đưa vào telemetry, error hoặc persisted command response.
+`OperationName` là union TypeScript tạo từ allowlist backend. Không có operation nhận table name, sheet name, filter raw hoặc service class từ browser. Login là operation công khai duy nhất; mọi operation khác cần session hợp lệ. Login trả kèm `currentScope`; payload login có thể gửi `rememberSession=true` khi người dùng tick ghi nhớ đăng nhập 7 ngày. Phiên đã có token dùng `platform.session.bootstrap` để lấy actor + current scope trong một round-trip, không gọi tách `session.me` rồi `scope.getCurrent` trong luồng mở app và không render form login trong lúc bootstrap token còn tồn tại. Token không được đưa vào telemetry, error hoặc persisted command response.
 
 ## 2. Operation registry và pipeline
 

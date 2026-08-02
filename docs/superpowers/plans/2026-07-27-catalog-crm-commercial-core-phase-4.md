@@ -174,8 +174,47 @@
 - [x] **Step 3:** Mark only completed Phase 4 checkboxes in this plan and master plan.
 - [x] **Step 4:** Report verification evidence and any intentionally deferred dependency on Inventory/Finance/Sales checkout.
 
+## Task 9: Product/Variant CRUD Completion Extension
+
+**Bối cảnh:** Sau khi Phase 4 core hoàn thành, màn Hàng hóa vẫn chỉ là shell tĩnh; chưa có list/search/create/update/ngừng bán/kích hoạt lại product/variant để dùng thực tế.
+
+**Files:**
+- Modify: `shared/contracts/catalog/catalog.ts`
+- Modify: `shared/schemas/catalog/catalog.ts`
+- Modify: `shared/contracts/platform/operations.ts`
+- Modify: `apps-script/src/repositories/catalog/catalog-repository.ts`
+- Modify: `apps-script/src/services/catalog/catalog-service.ts`
+- Modify: `apps-script/src/bootstrap/create-api-composition.ts`
+- Modify: `web/src/lib/api/local-fake-backend.ts`
+- Modify: `web/src/features/catalog/catalog-crm-home.tsx`
+- Modify: `web/src/app/sales-management-app.tsx`
+- Modify: `web/src/styles/index.css`
+- Tests: `tests/apps-script/catalog/catalog-service.test.ts`, `tests/shared/catalog-crm-contracts.test.ts`, `tests/web/catalog-crm-home.test.ts`, `tests/web/local-fake-backend.test.ts`
+
+- [x] **Step 1:** Đọc lại Approved artifact mới nhất `catalog-crm-commercial.html` và `catalog-product-editor-policy-builder.html` trên Open Design.
+- [x] **Step 2:** Bổ sung contract/schema/operation cho `catalog.product.list`, `catalog.product.update`, `catalog.product.setActive`, gồm Product Type, Inventory Mode và Default Unit trong Product Editor.
+- [x] **Step 3:** Implement service list/search/filter, update Product + Default Variant và unique guard SKU/barcode.
+- [x] **Step 4:** Implement ngừng bán/kích hoạt lại product kéo theo Default Variant và loại khỏi POS projection khi inactive.
+- [x] **Step 5:** Nối Apps Script API composition và local fake backend bằng cùng operation contract.
+- [x] **Step 6:** Cập nhật màn Hàng hóa từ shell tĩnh sang UI list/search/detail/form theo handoff mới nhất, có segmented controls cho Product Type/Inventory Mode, không dùng native select, có dark/light token.
+- [x] **Step 7:** Chạy targeted tests, typecheck và lint.
+
+## Task 10: Customer Workspace Completion Extension
+
+**Bối cảnh:** Route `Khách hàng` đã có contract/service cho `crm.customer.search` và `crm.customer.quickCreate`, nhưng UI trước đó còn là shell tĩnh. Lát cắt này nối UI cơ bản với API thật để có thể tìm kiếm và tạo nhanh khách hàng phục vụ POS/đơn bán.
+
+**Files:**
+- Modify: `web/src/features/catalog/catalog-crm-home.tsx`
+- Modify: `web/src/styles/index.css`
+- Tests: `tests/web/catalog-crm-home.test.ts`
+
+- [x] **Step 1:** Viết failing SSR test cho Customer workspace có search input, quick-create form, customer group segmented control, duplicate warning và restricted-safe copy.
+- [x] **Step 2:** Implement UI search/create thật qua `crm.customer.search` và `crm.customer.quickCreate`, có fallback local khi không có API client.
+- [x] **Step 3:** Không dùng native select; giữ group chọn bằng segmented control và không đưa công nợ/hạn mức nhạy cảm vào payload UI.
+- [x] **Step 4:** Chạy focused web test và typecheck.
+
 ## Self-Review
 
-- Spec coverage: Task 1–7 cover variant/unit/barcode, POS projection, quote determinism, promotion tie-break, customer quick create/search, POS cache loader/search and UI shell. Loyalty ledger, warranty case, commission ledger and checkout stale conflict effects are implemented with Sales/Returns phases because they require sale/return source documents and Inventory/Finance ledgers.
+- Spec coverage: Task 1–7 cover variant/unit/barcode, POS projection, quote determinism, promotion tie-break, customer quick create/search, POS cache loader/search and UI shell. Task 9 bổ sung Product/Variant CRUD completion theo yêu cầu dùng thực tế. Task 10 bổ sung Customer workspace search/create cơ bản theo API thật. Loyalty ledger, warranty case, commission ledger and checkout stale conflict effects are implemented with Sales/Returns phases because they require sale/return source documents and Inventory/Finance ledgers.
 - Placeholder scan: no TBD/TODO placeholders; each task has concrete files and verification commands.
 - Type consistency: operation names and DTO names are introduced in Task 1 and reused in later tasks.

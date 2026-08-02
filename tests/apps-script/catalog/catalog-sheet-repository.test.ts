@@ -119,6 +119,19 @@ describe('Sheet-backed CatalogRepository', () => {
 
   it('caches small POS catalog master reads and invalidates the table cache on save', () => {
     const gateway = new FakeSheetGateway({
+      Product: [
+        {
+          id: 'product-existing:v1',
+          tenantId: 'tenant-default',
+          schemaVersion: 1,
+          recordVersion: 1,
+          productId: 'product-existing',
+          productCode: 'SP-EXIST',
+          name: 'Hàng đã có',
+          productType: 'Stocked',
+          isActive: true,
+        },
+      ],
       Variant: [
         {
           id: 'variant-existing:v1',
@@ -186,8 +199,8 @@ describe('Sheet-backed CatalogRepository', () => {
     });
 
     expect(service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' }).variants).toHaveLength(1);
-    expect(gateway.readRequests).toEqual(['Variant', 'VariantBarcode', 'UnitConversionVersion']);
-    expect(cacheStore.ttls()).toEqual([21600, 21600, 21600]);
+    expect(gateway.readRequests).toEqual(['Product', 'Variant', 'VariantBarcode', 'UnitConversionVersion']);
+    expect(cacheStore.ttls()).toEqual([21600, 21600, 21600, 21600]);
 
     gateway.readRequests = [];
     expect(service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' }).variants).toHaveLength(1);

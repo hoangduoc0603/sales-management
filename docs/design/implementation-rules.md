@@ -12,11 +12,11 @@ Tài liệu này quy định cách AI Agent triển khai UI từ design đã duy
 6. Đọc file handoff màn hình trong `docs/design/screens/`.
 7. Đọc SRS/LLD/data dictionary/ADR được handoff dẫn chiếu.
 8. Xác nhận registry và handoff của màn hình đều là `Approved`; nếu không, không implement UI.
-9. Dùng `Open Design project` + `Artifact chính` trong registry để lấy artifact hiện hành qua Open Design.
+9. Dùng `Open Design project` + `Artifact chính` trong registry để lấy artifact hiện hành trực tiếp qua Open Design. Đây phải là bản mới nhất tại thời điểm code, không phải bản đã cache từ session trước.
 10. Mở `Local preview` của artifact để đối chiếu trực quan trước khi code và sau khi hoàn tất: layout, hierarchy, component behavior, state, responsive, light theme và dark theme.
 11. Sau khi code UI, chụp screenshot implementation ở desktop và các viewport/state handoff yêu cầu; đối chiếu ảnh với artifact/Local Preview trước khi báo hoàn tất.
 
-Không code UI chỉ từ screenshot. Local Preview là shortcut trên máy local, không phải định danh chuẩn. Nếu link local không mở được, lấy artifact bằng project + filename qua Open Design. Nếu cả artifact lẫn handoff không đủ để xác định thay đổi visual, dừng lại và nêu rõ khoảng trống; không tự suy diễn UI.
+Không code UI chỉ từ screenshot, source UI cũ, hay artifact đã đọc ở session trước. Local Preview là shortcut trên máy local, không phải định danh chuẩn. Nếu link local không mở được, lấy artifact bằng project + filename qua Open Design. Nếu cả artifact lẫn handoff không đủ để xác định thay đổi visual, dừng lại và nêu rõ khoảng trống; không tự suy diễn UI.
 
 ## Quy tắc screenshot sau code
 

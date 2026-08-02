@@ -111,4 +111,156 @@ describe('CatalogService', () => {
     expect(JSON.stringify(projection)).not.toContain('cost');
     expect(JSON.stringify(projection)).not.toContain('supplier');
   });
+
+  it('liệt kê, tìm kiếm và lọc product/variant theo trạng thái', () => {
+    const service = createService();
+
+    const milk = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó 1L',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    expect(milk).toMatchObject({ ok: true });
+    service.createProduct({
+      productCode: 'SP-002',
+      name: 'Nước giặt sinh học 3,6kg',
+      productType: 'Stocked',
+      sku: 'NG-SH-3600',
+      defaultUnitId: 'túi',
+      unitPriceVnd: 185000,
+    });
+    if (!milk.ok) throw new Error('create product failed');
+
+    expect(service.listProducts({}).items.map((item) => item.sku)).toEqual([
+      'NG-SH-3600',
+      'SH-OC-1L',
+    ]);
+    expect(service.listProducts({ query: 'óc chó' }).items).toHaveLength(1);
+    expect(service.listProducts({ query: '893000000001' }).items[0]?.productId).toBe(
+      milk.data.product.productId,
+    );
+
+    service.setProductActive({
+      productId: milk.data.product.productId,
+      isActive: false,
+      reason: 'Ngừng bán tạm thời',
+    });
+
+    expect(service.listProducts({ status: 'Active' }).items.map((item) => item.sku)).toEqual([
+      'NG-SH-3600',
+    ]);
+    expect(service.listProducts({ status: 'Inactive' }).items.map((item) => item.sku)).toEqual([
+      'SH-OC-1L',
+    ]);
+    expect(service.listProducts({ status: 'All' }).items).toHaveLength(2);
+  });
+
+  it('cập nhật product/default variant và vẫn chặn SKU/barcode trùng', () => {
+    const service = createService();
+
+    const milk = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó 1L',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    const detergent = service.createProduct({
+      productCode: 'SP-002',
+      name: 'Nước giặt sinh học 3,6kg',
+      productType: 'Stocked',
+      sku: 'NG-SH-3600',
+      barcode: '893000000002',
+      defaultUnitId: 'túi',
+      unitPriceVnd: 185000,
+    });
+    if (!milk.ok || !detergent.ok) throw new Error('create product failed');
+
+    expect(
+      service.updateProduct({
+        productId: milk.data.product.productId,
+        name: 'Sữa hạt óc chó 1L - mẫu mới',
+        sku: 'NG-SH-3600',
+        barcode: '893000000001',
+        unitPriceVnd: 45000,
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'DUPLICATE_SKU' } });
+
+    expect(
+      service.updateProduct({
+        productId: milk.data.product.productId,
+        name: 'Sữa hạt óc chó 1L - mẫu mới',
+        sku: 'SH-OC-NEW',
+        barcode: '893000000002',
+        unitPriceVnd: 45000,
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'DUPLICATE_BARCODE' } });
+
+    const updated = service.updateProduct({
+      productId: milk.data.product.productId,
+      productCode: 'SP-001A',
+      name: 'Sữa hạt óc chó 1L - mẫu mới',
+      productType: 'Service',
+      sku: 'SH-OC-NEW',
+      barcode: '893000000099',
+      inventoryMode: 'NotTracked',
+      defaultUnitId: 'lần',
+      unitPriceVnd: 45000,
+    });
+
+    expect(updated).toMatchObject({ ok: true });
+    expect(service.listProducts({ query: 'mẫu mới' }).items[0]).toMatchObject({
+      productCode: 'SP-001A',
+      productType: 'Service',
+      displayName: 'Sữa hạt óc chó 1L - mẫu mới',
+      sku: 'SH-OC-NEW',
+      barcode: '893000000099',
+      inventoryMode: 'NotTracked',
+      defaultUnitId: 'lần',
+      unitPriceVnd: 45000,
+    });
+  });
+
+  it('ngừng hoạt động product kéo theo default variant ra khỏi POS projection và có thể kích hoạt lại', () => {
+    const service = createService();
+
+    const created = service.createProduct({
+      productCode: 'SP-001',
+      name: 'Sữa hạt óc chó 1L',
+      productType: 'Stocked',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+
+    expect(
+      service.setProductActive({
+        productId: created.data.product.productId,
+        isActive: false,
+        reason: 'Ngừng kinh doanh',
+      }),
+    ).toMatchObject({ ok: true, data: { product: { isActive: false }, defaultVariant: { isActive: false } } });
+
+    expect(
+      service.getPosProjection({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+      }).variants,
+    ).toHaveLength(0);
+
+    expect(
+      service.setProductActive({
+        productId: created.data.product.productId,
+        isActive: true,
+      }),
+    ).toMatchObject({ ok: true, data: { product: { isActive: true }, defaultVariant: { isActive: true } } });
+  });
 });

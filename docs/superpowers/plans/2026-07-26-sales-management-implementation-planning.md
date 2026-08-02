@@ -233,6 +233,8 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 - [x] Implement customer quick create, duplicate warning và customer group snapshot source.
 - [x] Test scan/search no backend per keystroke khi cache warm.
 - [x] Test price/promotion stale conflict cho checkout.
+- [x] Product/Variant CRUD completion extension: list/search/filter, create, update Product Type/Inventory Mode/Default Unit/SKU/barcode/giá, ngừng bán/kích hoạt lại; Apps Script API + local fake backend + màn Hàng hóa nối theo Approved Open Design artifact mới nhất.
+- [x] Customer workspace completion extension: tìm kiếm khách hàng, tạo nhanh, cảnh báo trùng, nhóm khách bằng segmented control; UI không tải công nợ/hạn mức nhạy cảm.
 
 **Exit gate:** POS có thể tải cache catalog 10.000 SKU/variant trong profile test, scan/search local đạt budget, quote trả kết quả deterministic và conflict code ổn định.
 
@@ -308,12 +310,12 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 - [x] Implement browser cart local state; scan/search/add/change quantity không RPC khi cache warm.
 - [x] Implement explicit `saveDraft`, `openDraft`, `cancelDraft`; không autosave.
-- [ ] Implement POS checkout command with Sales -> Catalog -> Inventory -> Finance -> CRM orchestration.
-- [ ] Revalidate scope, shift, quote, stock, lot/serial, credit, tender total và idempotency trong commit.
-- [ ] Return structured conflict: `PRICE_CHANGED`, `PROMOTION_CHANGED`, `INSUFFICIENT_STOCK`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED`.
+- [x] Implement POS checkout command with Sales -> Catalog -> Inventory -> Finance orchestration; CRM policy ledger chưa phát sinh vì loyalty/promotion usage ledger chưa thuộc release baseline đang code.
+- [x] Revalidate scope qua API permission/scope, shift, quote, stock, tender total và idempotency trong commit; lot/serial guard đầy đủ bám Phase 5 lot/serial slice và UI chặn thiếu selection.
+- [x] Return structured conflict tối thiểu đã dùng trong baseline: `PRICE_CHANGED`, `INSUFFICIENT_STOCK`; các mã `PROMOTION_CHANGED`, `VOUCHER_UNAVAILABLE`, `POINT_BALANCE_CHANGED` giữ trong contract để bật khi promotion/voucher/point ledger được triển khai đủ.
 - [x] Return immutable receipt snapshot for K80/A4 browser print; print/reprint không tạo ledger.
 - [x] Implement POS UI from `app-pos-checkout.html` only after opening artifact/local preview.
-- [ ] Test full payment, partial payment, insufficient stock, missing serial, quote conflict, timeout retry, duplicate prevention, print no-ledger.
+- [x] Test full payment, partial payment, insufficient stock, quote conflict, timeout command-status recovery, duplicate prevention và print no-ledger; missing serial được UI guard, serial availability backend thuộc Phase 5 lot/serial test matrix.
 - [x] Benchmark warm scan/search/cart and checkout p95/p99 theo `SRS-OVR-013`.
 
 **Exit gate:** Một cửa hàng nhỏ có thể bán POS từ cache, checkout tạo SaleOrder Completed + InventoryMovement + Payment/AR + policy ledger + actor metadata + CommandTransaction một lần, receipt in được và retry không duplicate.
@@ -342,7 +344,7 @@ Triển khai theo **platform-first, POS-safe vertical slice**:
 
 **Exit gate:** Chứng từ bán và hậu mãi giữ bất biến lịch sử, mọi sửa sai đi qua return/reversal/adjustment.
 
-**Tracking hiện tại:** Phase 8 baseline đã triển khai trong [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md), bổ sung Phase 8B trong [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md): Sales order list/detail query, online `Draft -> Confirmed -> Packing -> Shipped -> Delivered`, reservation ở Confirmed, release+issue+receivable ở Shipped, Delivered không tạo ledger lần hai, cancel trước Shipped baseline, deposit cancel giữ `CustomerCredit` hoặc ghi refund counter-payment theo lựa chọn, return theo đơn gốc vào Quarantine/Restock/KeepQuarantine/Scrap, return refund/customer credit, fast-return denial, exchange = Return + SaleOrder mới liên kết với net settlement, WarrantyCase open/transition kèm attachment IDs, API/local fake backend và UI shell `orders` theo handoff Approved. Attachment Drive flow, CRM policy reversal đầy đủ và performance benchmark vẫn để mở.
+**Tracking hiện tại:** Phase 8 baseline đã triển khai trong [`2026-07-27-sales-orders-returns-warranty-phase-8.md`](2026-07-27-sales-orders-returns-warranty-phase-8.md), bổ sung Phase 8B trong [`2026-07-27-phase-8b-return-refund-exchange-completion.md`](2026-07-27-phase-8b-return-refund-exchange-completion.md): Sales order list/detail query, online `Draft -> Confirmed -> Packing -> Shipped -> Delivered`, reservation ở Confirmed, release+issue+receivable ở Shipped, Delivered không tạo ledger lần hai, cancel trước Shipped baseline, deposit cancel giữ `CustomerCredit` hoặc ghi refund counter-payment theo lựa chọn, return theo đơn gốc vào Quarantine/Restock/KeepQuarantine/Scrap, return refund/customer credit, fast-return denial, exchange = Return + SaleOrder mới liên kết với net settlement, WarrantyCase open/transition kèm attachment IDs, API/local fake backend và UI `orders` đã nối list/lifecycle vào API theo handoff Approved. UI đã bổ sung vùng `Manual fulfillment detail` theo artifact Approved mới nhất gồm timeline, reservation, khách nhận, nghĩa vụ thanh toán, pre-confirm checks, bàn giao và cancel guard. UI đã bổ sung composer “Tạo / sửa đơn nhập tay” theo trạng thái `#manual`, explicit save, lazy-load catalog khi bấm lưu và gọi `sales.draft.save`; không autosave khi nhập liệu. UI đã nối panel `Trả hàng theo đơn gốc` vào `sales.order.get`, `sales.return.create` và `sales.return.resolve` lazy-on-click, có guard `Completed/Shipped/Delivered` và fast-return restricted state. UI đã nối panel `Bảo hành theo serial` vào `sales.order.get`, `sales.warranty.open` và `sales.warranty.transition` lazy-on-click, có Serial/IMEI, issue, attachment reference và lifecycle `Open -> InReview -> Resolved`. UI đã nối panel `Đổi hàng & thanh toán chênh lệch` vào `sales.order.get`, `catalog.pos.getProjection`, `catalog.quote.preview` và `sales.exchange.create` lazy-on-click, có hàng nhận lại, hàng đổi mới và net settlement. Attachment Drive flow, CRM policy reversal đầy đủ và performance benchmark vẫn để mở.
 
 ## Phase 9: Purchasing & Supplier Operations
 

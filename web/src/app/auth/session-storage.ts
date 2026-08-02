@@ -6,27 +6,60 @@ export interface BrowserStorageAdapter {
 
 export interface SessionStoragePort {
   read(): string | undefined;
-  write(sessionToken: string): void;
+  write(sessionToken: string, options?: { rememberSession?: boolean }): void;
   clear(): void;
 }
 
-const sessionTokenKey = 'sales-management.sessionToken.v1';
+export interface BrowserSessionStorageAdapters {
+  session: BrowserStorageAdapter;
+  persistent?: BrowserStorageAdapter;
+}
 
-export function createSessionStorage(adapter?: BrowserStorageAdapter): SessionStoragePort {
-  const storage = adapter ?? getBrowserSessionStorage();
+const sessionTokenKey = 'sales-management.sessionToken.v1';
+const rememberedSessionTokenKey = 'sales-management.rememberedSessionToken.v1';
+
+export function createSessionStorage(
+  adapter?: BrowserStorageAdapter | BrowserSessionStorageAdapters,
+): SessionStoragePort {
+  const storage = toStorageAdapters(adapter);
 
   return {
     read() {
-      const value = storage?.getItem(sessionTokenKey)?.trim();
-      return value && value.length > 0 ? value : undefined;
+      return readToken(storage.session, sessionTokenKey) ?? readToken(storage.persistent, rememberedSessionTokenKey);
     },
-    write(sessionToken) {
-      storage?.setItem(sessionTokenKey, sessionToken);
+    write(sessionToken, options) {
+      if (options?.rememberSession) {
+        storage.session?.removeItem(sessionTokenKey);
+        storage.persistent?.setItem(rememberedSessionTokenKey, sessionToken);
+        return;
+      }
+
+      storage.persistent?.removeItem(rememberedSessionTokenKey);
+      storage.session?.setItem(sessionTokenKey, sessionToken);
     },
     clear() {
-      storage?.removeItem(sessionTokenKey);
+      storage.session?.removeItem(sessionTokenKey);
+      storage.persistent?.removeItem(rememberedSessionTokenKey);
     },
   };
+}
+
+function toStorageAdapters(
+  adapter?: BrowserStorageAdapter | BrowserSessionStorageAdapters,
+): { session?: BrowserStorageAdapter; persistent?: BrowserStorageAdapter } {
+  if (adapter !== undefined && 'session' in adapter) {
+    return adapter;
+  }
+
+  return {
+    session: adapter ?? getBrowserSessionStorage(),
+    persistent: getBrowserPersistentStorage(),
+  };
+}
+
+function readToken(storage: BrowserStorageAdapter | undefined, key: string): string | undefined {
+  const value = storage?.getItem(key)?.trim();
+  return value && value.length > 0 ? value : undefined;
 }
 
 function getBrowserSessionStorage(): BrowserStorageAdapter | undefined {
@@ -35,4 +68,12 @@ function getBrowserSessionStorage(): BrowserStorageAdapter | undefined {
   }
 
   return window.sessionStorage;
+}
+
+function getBrowserPersistentStorage(): BrowserStorageAdapter | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  return window.localStorage;
 }

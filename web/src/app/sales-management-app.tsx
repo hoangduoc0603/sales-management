@@ -255,7 +255,9 @@ export function SalesManagementApp({
         return;
       }
 
-      sessionStorage.write(result.data.sessionToken);
+      sessionStorage.write(result.data.sessionToken, {
+        rememberSession: input.rememberSession === true,
+      });
       setNotice(undefined);
       setIsSubmitting(false);
     },
@@ -484,12 +486,15 @@ export function SalesManagementApp({
         />
       ) : route === 'orders' ? (
         <SalesOrdersReturnsHome
+          actorId={actor.userId}
+          apiClient={client}
           scope={scope}
           selectedBranchId={selectedBranchId}
           selectedWarehouseId={selectedWarehouseId}
+          sessionToken={sessionToken}
         />
       ) : route === 'catalog' || route === 'customers' ? (
-        <CatalogCrmHome route={route} />
+        <CatalogCrmHome apiClient={client} route={route} sessionToken={sessionToken} />
       ) : route === 'inventory' || route === 'purchasing' ? (
         <InventoryHome route={route} />
       ) : route === 'finance' ? (

@@ -35,6 +35,67 @@ describe('SessionService', () => {
     });
   });
 
+  it('cho phép session remembered tồn tại 7 ngày khi login chọn ghi nhớ đăng nhập', () => {
+    const service = createSessionServiceForTest({ nowIso: '2026-07-26T00:00:00.000Z' });
+    const login = service.login({
+      loginId: 'admin',
+      password: 'admin123',
+      rememberSession: true,
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    expect(login.data.idleExpiresAt).toBe('2026-08-02T00:00:00.000Z');
+    expect(login.data.absoluteExpiresAt).toBe('2026-08-02T00:00:00.000Z');
+
+    service.setNow('2026-08-01T23:59:59.000Z');
+    expect(service.validateSession(login.data.sessionToken)).toMatchObject({ ok: true });
+
+    service.setNow('2026-08-02T00:00:01.000Z');
+    expect(service.validateSession(login.data.sessionToken)).toMatchObject({
+      ok: false,
+      error: { code: 'SESSION_EXPIRED' },
+    });
+  });
+
+  it('vẫn thu hồi remembered session khi authVersion của user thay đổi', () => {
+    const service = createSessionServiceForTest({ nowIso: '2026-07-26T00:00:00.000Z' });
+    const login = service.login({
+      loginId: 'admin',
+      password: 'admin123',
+      rememberSession: true,
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    service.setNow('2026-07-27T00:00:00.000Z');
+    service.bumpAuthVersion('user-admin');
+
+    expect(service.validateSession(login.data.sessionToken)).toMatchObject({
+      ok: false,
+      error: { code: 'SESSION_EXPIRED' },
+    });
+  });
+
+  it('không refresh idle expiry vượt quá absolute expiry của remembered session', () => {
+    const service = createSessionServiceForTest({ nowIso: '2026-07-26T00:00:00.000Z' });
+    const login = service.login({
+      loginId: 'admin',
+      password: 'admin123',
+      rememberSession: true,
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    service.setNow('2026-08-01T23:50:00.000Z');
+    const validated = service.validateSession(login.data.sessionToken);
+
+    expect(validated).toMatchObject({
+      ok: true,
+      data: {
+        idleExpiresAt: '2026-08-02T00:00:00.000Z',
+        absoluteExpiresAt: '2026-08-02T00:00:00.000Z',
+      },
+    });
+  });
+
   it('từ chối session khi authVersion của user thay đổi', () => {
     const service = createSessionServiceForTest({ nowIso: '2026-07-26T00:00:00.000Z' });
     const login = service.login({ loginId: 'admin', password: 'admin123' });

@@ -125,7 +125,7 @@ Màn này không bao gồm danh sách/chi tiết đơn, đơn online nhập tay,
 - [ ] Có tạo/chọn khách, đơn vị, lô/serial, giá/giảm, promotion/voucher/điểm theo quyền và dữ liệu nghiệp vụ.
 - [x] Có payment/tender, bán chịu, tiền thừa hoặc còn phải thu theo cấu hình.
 - [x] Có action tường minh lưu/mở/hủy Draft; không autosave giỏ.
-- [ ] Checkout xử lý loading, lỗi validation, timeout/idempotency và cache conflict không tạo chứng từ trùng.
+- [x] Checkout xử lý loading, lỗi validation, timeout/idempotency qua `platform.command.getStatus` và cache conflict không tạo chứng từ trùng.
 - [x] Hoàn tất trả receipt snapshot; print/reprint là action riêng.
 - [x] Light/dark theme hoạt động; không hiển thị COGS/lợi nhuận nếu thiếu quyền.
 - [ ] Responsive tablet/mobile không che ô scan, giỏ, tổng tiền hoặc CTA hoàn tất.

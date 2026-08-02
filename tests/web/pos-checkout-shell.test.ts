@@ -5,7 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CurrentScopeResponse } from '@shared/contracts/platform/administration';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type { ApiMeta, ApiResult } from '@shared/contracts/api';
+import type { SalesPosCompleteResponse } from '@shared/contracts/sales/sales';
 import { PosCheckoutShell } from '../../web/src/features/pos/pos-checkout-shell';
+import { completePosCheckoutWithRecovery } from '../../web/src/features/pos/pos-complete-command';
+import type { ApiClient } from '../../web/src/lib/api/client';
 
 const scope: CurrentScopeResponse = {
   tenant: {
@@ -243,8 +247,141 @@ describe('PosCheckoutShell', () => {
     expect(html).toContain('không tạo ledger mới');
     expect(html).not.toContain('<select');
   });
+
+  it('recover POS checkout timeout bằng command status với cùng commandId/idempotencyKey', async () => {
+    const calls: string[] = [];
+    const response = createReceiptResponse('SO-260801-0007');
+    const apiClient: ApiClient = {
+      async invoke(request) {
+        calls.push(`${request.operation}:${(request.payload as { commandId?: string }).commandId ?? ''}`);
+        if (request.operation === 'sales.pos.complete') {
+          return errorResult('TRANSPORT_ERROR', 'Mất kết nối khi hoàn tất.');
+        }
+        if (request.operation === 'platform.command.getStatus') {
+          expect(request.payload).toEqual({
+            commandId: 'cmd-pos-retry-1',
+            idempotencyKey: 'idem-pos-retry-1',
+          });
+          return okResult({
+            command: {
+              commandId: 'cmd-pos-retry-1',
+              idempotencyKey: 'idem-pos-retry-1',
+              status: 'Committed',
+              resultJson: JSON.stringify({ ok: true, data: response }),
+              updatedAt: '2026-08-01T09:00:03.000Z',
+            },
+          });
+        }
+        throw new Error(`Unexpected operation ${request.operation}`);
+      },
+    };
+
+    const result = await completePosCheckoutWithRecovery({
+      apiClient,
+      sessionToken: 'session-1',
+      requestId: 'req-pos-complete',
+      command: {
+        commandId: 'cmd-pos-retry-1',
+        idempotencyKey: 'idem-pos-retry-1',
+      },
+      payload: {
+        commandId: 'cmd-pos-retry-1',
+        idempotencyKey: 'idem-pos-retry-1',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        cashDrawerId: 'drawer-main',
+        shiftId: 'shift-local-open',
+        quoteVersion: 'quote-1',
+        receiptFormat: 'K80',
+        lines: [],
+        tenders: [],
+      },
+    });
+
+    expect(result).toEqual({ ok: true, data: response, recoveredFromCommandStatus: true });
+    expect(calls).toEqual(['sales.pos.complete:cmd-pos-retry-1', 'platform.command.getStatus:cmd-pos-retry-1']);
+  });
 });
 
 function readText(relativePath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8');
+}
+
+function createReceiptResponse(businessNumber: string): SalesPosCompleteResponse {
+  return {
+    order: {
+      saleOrderId: 'sale-order-1',
+      tenantId: 'tenant-default',
+      businessNumber,
+      source: 'POS',
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      status: 'Completed',
+      paymentStatus: 'Paid',
+      cashierId: 'user-admin',
+      subtotalVnd: 42_000,
+      discountVnd: 0,
+      taxVnd: 0,
+      shippingFeeVnd: 0,
+      totalVnd: 42_000,
+      paidVnd: 42_000,
+      receivableVnd: 0,
+      draftVersion: 1,
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+      completedAt: '2026-08-01T09:00:00.000Z',
+    },
+    lines: [],
+    receipt: {
+      receiptId: 'receipt-1',
+      saleOrderId: 'sale-order-1',
+      businessNumber,
+      receiptFormat: 'K80',
+      createdAt: '2026-08-01T09:00:00.000Z',
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      cashierId: 'user-admin',
+      lines: [],
+      totals: {
+        subtotalVnd: 42_000,
+        discountVnd: 0,
+        taxVnd: 0,
+        shippingFeeVnd: 0,
+        totalVnd: 42_000,
+        paidVnd: 42_000,
+        receivableVnd: 0,
+        changeVnd: 0,
+      },
+    },
+    inventoryMovements: [],
+    conflicts: [],
+  };
+}
+
+function okResult<T>(data: T): ApiResult<T> {
+  return {
+    ok: true,
+    data,
+    meta: meta('test.ok'),
+  };
+}
+
+function errorResult<T>(code: ApiResult<T> extends { ok: false; error: infer E } ? E extends { code: infer C } ? C : never : never, message: string): ApiResult<T> {
+  return {
+    ok: false,
+    error: { code, message },
+    meta: meta('test.error'),
+  } as ApiResult<T>;
+}
+
+function meta(operation: string): ApiMeta {
+  return {
+    requestId: `req-${operation}`,
+    operation,
+    serverTime: '2026-08-01T09:00:00.000Z',
+    durationMs: 1,
+    stages: {},
+    io: {},
+  };
 }

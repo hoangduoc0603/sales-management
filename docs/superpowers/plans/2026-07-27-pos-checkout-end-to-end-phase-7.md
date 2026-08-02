@@ -28,6 +28,7 @@
 - Create: `apps-script/src/repositories/sales/sales-repository.ts`
 - Create: `apps-script/src/services/sales/sales-service.ts`
 - Create: `web/src/features/pos/pos-cart-state.ts`
+- Create: `web/src/features/pos/pos-complete-command.ts`
 - Create: `tests/shared/sales-contracts.test.ts`
 - Create: `tests/apps-script/sales/sales-service.test.ts`
 - Create: `tests/apps-script/sales/sales-composition.test.ts`
@@ -105,6 +106,7 @@
 - [x] Replace static POS shell with interactive local cache/cart/tender/draft/checkout behavior while preserving approved layout hierarchy.
 - [x] Keep submit button label stable and show only loading icon.
 - [x] Show empty, no result, conflict, insufficient stock, missing shift and success/receipt states.
+- [x] Recover timeout/transport uncertainty by querying `platform.command.getStatus` with the same `commandId`/`idempotencyKey` before showing retry state.
 - [x] Run POS UI tests.
 
 ## Task 6: Verification and tracking

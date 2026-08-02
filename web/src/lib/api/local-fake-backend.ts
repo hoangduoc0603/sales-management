@@ -13,9 +13,22 @@ import type {
   InstallStatusResponse,
 } from '@shared/contracts/platform/install';
 import type {
+  CatalogCreateProductRequest,
+  CatalogCreateProductResponse,
+  CatalogProductListItemDTO,
+  CatalogProductListRequest,
+  CatalogProductListResponse,
   CatalogPosProjectionResponse,
   CatalogQuoteRequest,
   CatalogQuoteResponse,
+  CatalogSetProductActiveRequest,
+  CatalogSetProductActiveResponse,
+  CatalogUpdateProductRequest,
+  CatalogUpdateProductResponse,
+  ProductDTO,
+  UnitConversionVersionDTO,
+  VariantBarcodeDTO,
+  VariantDTO,
 } from '@shared/contracts/catalog/catalog';
 import type {
   CustomerDTO,
@@ -94,13 +107,22 @@ import type {
   SalesPosCompleteRequest,
   SalesPosCompleteResponse,
   SalesPosPrewarmCheckoutContextResponse,
+  SalesReturnCreateResponse,
+  SalesReturnDTO,
+  SalesReturnResolveResponse,
+  SalesWarrantyResponse,
+  WarrantyCaseDTO,
 } from '@shared/contracts/sales/sales';
 import type { CommandStatusResponse } from '@shared/contracts/platform/command';
 import type { TableDefinitionDTO, TableDefinitionsResponse } from '@shared/contracts/platform/registry';
 import { parseApiRequest } from '@shared/schemas/api';
 import {
+  parseCatalogCreateProductRequest,
+  parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
+  parseCatalogSetProductActiveRequest,
+  parseCatalogUpdateProductRequest,
 } from '@shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -169,6 +191,10 @@ import {
   parseSalesOrderListRequest,
   parseSalesPosCompleteRequest,
   parseSalesPosPrewarmCheckoutContextRequest,
+  parseSalesReturnCreateRequest,
+  parseSalesReturnResolveRequest,
+  parseSalesWarrantyOpenRequest,
+  parseSalesWarrantyTransitionRequest,
 } from '@shared/schemas/sales/sales';
 import { createApiClient, type ApiClient, type ApiInvoker } from './client';
 
@@ -222,6 +248,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
   });
 
   let warehouseStatus: 'Active' | 'Disabled' = 'Active';
+  const catalogProducts = new Map<string, CatalogProductListItemDTO>(createLocalCatalogProducts());
   const customers = new Map<string, CustomerDTO>();
   const purchasingSuppliers = new Map<string, SupplierDTO>();
   const purchaseOrders = new Map<string, PurchasingPoResponse>();
@@ -470,6 +497,66 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
               return { disabled: true, blockers: [] };
             },
           );
+        case 'catalog.product.list':
+          try {
+            parseCatalogProductListRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogProductListResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => listLocalCatalogProducts(apiRequest.payload as CatalogProductListRequest, catalogProducts, now),
+          );
+        case 'catalog.product.create':
+          try {
+            parseCatalogCreateProductRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogCreateProductResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalCatalogProduct(apiRequest.payload as CatalogCreateProductRequest, catalogProducts, nextId),
+          );
+        case 'catalog.product.update':
+          try {
+            parseCatalogUpdateProductRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogUpdateProductResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => updateLocalCatalogProduct(apiRequest.payload as CatalogUpdateProductRequest, catalogProducts),
+          );
+        case 'catalog.product.setActive':
+          try {
+            parseCatalogSetProductActiveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogSetProductActiveResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => setLocalCatalogProductActive(apiRequest.payload as CatalogSetProductActiveRequest, catalogProducts),
+          );
         case 'catalog.pos.getProjection':
           try {
             parseCatalogPosProjectionRequest(apiRequest.payload);
@@ -483,7 +570,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             sessions,
             now,
             user,
-            () => createLocalCatalogProjection(),
+            () => createLocalCatalogProjection(catalogProducts, now),
           );
         case 'catalog.quote.preview':
           try {
@@ -498,7 +585,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             sessions,
             now,
             user,
-            () => createLocalQuote(apiRequest.payload as CatalogQuoteRequest),
+            () => createLocalQuote(apiRequest.payload as CatalogQuoteRequest, catalogProducts, now),
           );
         case 'crm.customer.quickCreate':
           try {
@@ -1135,7 +1222,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             sessions,
             now,
             user,
-            () => saveLocalSalesDraft(apiRequest.payload, salesDrafts, salesOrders, nextId, now),
+            () => saveLocalSalesDraft(apiRequest.payload, salesDrafts, salesOrders, catalogProducts, nextId, now),
           );
         case 'sales.draft.list':
           try {
@@ -1188,7 +1275,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             sessions,
             now,
             user,
-            () => completeLocalPosSale(apiRequest.payload, salesOrders, commandResults, nextId, now),
+            () => completeLocalPosSale(apiRequest.payload, salesOrders, commandResults, catalogProducts, nextId, now),
           );
         case 'sales.order.list':
           try {
@@ -1253,6 +1340,66 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             user,
             () => transitionLocalOnlineSale(apiRequest.operation, apiRequest.payload, salesDrafts, salesOrders, commandResults, now),
           );
+        case 'sales.return.create':
+          try {
+            parseSalesReturnCreateRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, SalesReturnCreateResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => createLocalSalesReturn(apiRequest.payload, salesOrders, commandResults, nextId, now),
+          );
+        case 'sales.return.resolve':
+          try {
+            parseSalesReturnResolveRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, SalesReturnResolveResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => resolveLocalSalesReturn(apiRequest.payload, salesOrders, commandResults, now),
+          );
+        case 'sales.warranty.open':
+          try {
+            parseSalesWarrantyOpenRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, SalesWarrantyResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => openLocalWarranty(apiRequest.payload, salesOrders, commandResults, nextId, now),
+          );
+        case 'sales.warranty.transition':
+          try {
+            parseSalesWarrantyTransitionRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, SalesWarrantyResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => transitionLocalWarranty(apiRequest.payload, salesOrders, commandResults, now),
+          );
         case 'sales.exchange.create':
           try {
             parseSalesExchangeCreateRequest(apiRequest.payload);
@@ -1266,7 +1413,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             sessions,
             now,
             user,
-            () => createLocalExchange(apiRequest.payload, salesOrders, commandResults, nextId, now),
+            () => createLocalExchange(apiRequest.payload, salesOrders, commandResults, catalogProducts, nextId, now),
           );
         default:
           return errorResult<T>('OPERATION_NOT_SUPPORTED', 'Thao tác chưa được hỗ trợ.', meta);
@@ -1292,12 +1439,14 @@ function handleLogin<T>(
   const currentTime = now().getTime();
   const sessionToken = nextId('session');
   const actor = createLocalAdminActor(user.authVersion);
+  const sessionTtlMs = payload.rememberSession === true ? 7 * 24 * 60 * 60 * 1000 : idleTtlMs;
+  const absoluteSessionTtlMs = payload.rememberSession === true ? 7 * 24 * 60 * 60 * 1000 : absoluteTtlMs;
   const session: LocalSession = {
     sessionToken,
     actor,
     issuedAtMs: currentTime,
-    idleExpiresAtMs: currentTime + idleTtlMs,
-    absoluteExpiresAtMs: currentTime + absoluteTtlMs,
+    idleExpiresAtMs: currentTime + sessionTtlMs,
+    absoluteExpiresAtMs: currentTime + absoluteSessionTtlMs,
     revoked: false,
   };
   sessions.set(sessionToken, session);
@@ -1463,79 +1612,340 @@ export function createLocalDebugActor(): ActorContextDTO {
   return createLocalAdminActor(1);
 }
 
-function createLocalCatalogProjection(): CatalogPosProjectionResponse {
+function createLocalCatalogProducts(): [string, CatalogProductListItemDTO][] {
+  return [
+    createLocalCatalogProductItem({
+      productId: 'product-milk',
+      productCode: 'SP-001',
+      productName: 'Sữa hạt óc chó 1L',
+      variantId: 'variant-milk-1l',
+      sku: 'SH-OC-1L',
+      barcode: '893000000001',
+      defaultUnitId: 'chai',
+      unitPriceVnd: 42000,
+      serialTracking: false,
+    }),
+    createLocalCatalogProductItem({
+      productId: 'product-laundry',
+      productCode: 'SP-002',
+      productName: 'Nước giặt sinh học hương hoa 3,6kg',
+      variantId: 'variant-laundry-36',
+      sku: 'NG-SH-3600',
+      barcode: '893000000002',
+      defaultUnitId: 'túi',
+      unitPriceVnd: 185000,
+      serialTracking: false,
+    }),
+    createLocalCatalogProductItem({
+      productId: 'product-filter',
+      productCode: 'SP-003',
+      productName: 'Lõi lọc nước gia dụng',
+      variantId: 'variant-filter-210',
+      sku: 'GD-FL-210',
+      barcode: '893000000003',
+      defaultUnitId: 'Bộ',
+      unitPriceVnd: 285000,
+      serialTracking: true,
+    }),
+    createLocalCatalogProductItem({
+      productId: 'product-shirt',
+      productCode: 'SP-004',
+      productName: 'Áo thun cổ tròn basic',
+      variantId: 'variant-shirt-basic',
+      sku: 'FA-TS-018',
+      barcode: '893000000004',
+      defaultUnitId: 'Cái',
+      unitPriceVnd: 159000,
+      serialTracking: false,
+    }),
+  ].map((item) => [item.productId, item]);
+}
+
+function createLocalCatalogProductItem(input: {
+  productId: string;
+  productCode: string;
+  productName: string;
+  variantId: string;
+  sku: string;
+  barcode?: string;
+  defaultUnitId: string;
+  unitPriceVnd: number;
+  serialTracking: boolean;
+}): CatalogProductListItemDTO {
   return {
-    projectionVersion: 'local-catalog-v1',
-    branchId: 'branch-default',
-    warehouseId: 'warehouse-default',
-    generatedAt: '2026-07-27T00:00:00.000Z',
-    variants: [
-      {
-        variantId: 'variant-milk-1l',
-        productId: 'product-milk',
-        sku: 'SH-OC-1L',
-        displayName: 'Sữa hạt óc chó 1L',
-        barcode: '893000000001',
-        unitVersionId: 'unit-bottle-v1',
-        unitName: 'chai',
-        unitPriceVnd: 42000,
-        saleEnabled: true,
-        inventoryMode: 'Tracked',
-        lotTracking: false,
-        serialTracking: false,
-        isActive: true,
-      },
-      {
-        variantId: 'variant-laundry-36',
-        productId: 'product-laundry',
-        sku: 'NG-SH-3600',
-        displayName: 'Nước giặt sinh học hương hoa 3,6kg',
-        barcode: '893000000002',
-        unitVersionId: 'unit-bag-v1',
-        unitName: 'túi',
-        unitPriceVnd: 185000,
-        saleEnabled: true,
-        inventoryMode: 'Tracked',
-        lotTracking: false,
-        serialTracking: false,
-        isActive: true,
-      },
-      {
-        variantId: 'variant-filter-210',
-        productId: 'product-filter',
-        sku: 'GD-FL-210',
-        displayName: 'Lõi lọc nước gia dụng',
-        barcode: '893000000003',
-        unitVersionId: 'unit-set-v1',
-        unitName: 'Bộ',
-        unitPriceVnd: 285000,
-        saleEnabled: true,
-        inventoryMode: 'Tracked',
-        lotTracking: false,
-        serialTracking: true,
-        isActive: true,
-      },
-      {
-        variantId: 'variant-shirt-basic',
-        productId: 'product-shirt',
-        sku: 'FA-TS-018',
-        displayName: 'Áo thun cổ tròn basic',
-        barcode: '893000000004',
-        unitVersionId: 'unit-piece-v1',
-        unitName: 'Cái',
-        unitPriceVnd: 159000,
-        saleEnabled: true,
-        inventoryMode: 'Tracked',
-        lotTracking: false,
-        serialTracking: false,
-        isActive: true,
-      },
-    ],
+    ...input,
+    productType: 'Stocked',
+    displayName: input.productName,
+    inventoryMode: 'Tracked',
+    lotTracking: false,
+    isActive: true,
   };
 }
 
-function createLocalQuote(input: CatalogQuoteRequest): CatalogQuoteResponse {
-  const projection = createLocalCatalogProjection();
+function createLocalCatalogProjection(
+  products: Map<string, CatalogProductListItemDTO>,
+  now: () => Date,
+): CatalogPosProjectionResponse {
+  return {
+    projectionVersion: `local-catalog-v${products.size}`,
+    branchId: 'branch-default',
+    warehouseId: 'warehouse-default',
+    generatedAt: now().toISOString(),
+    variants: [...products.values()]
+      .filter((product) => product.isActive)
+      .map((product) => ({
+        variantId: product.variantId,
+        productId: product.productId,
+        sku: product.sku,
+        displayName: product.displayName,
+        barcode: product.barcode,
+        unitVersionId: `unit-${product.variantId}-v1`,
+        unitName: product.defaultUnitId,
+        unitPriceVnd: product.unitPriceVnd,
+        saleEnabled: true,
+        inventoryMode: product.inventoryMode,
+        lotTracking: product.lotTracking,
+        serialTracking: product.serialTracking,
+        isActive: product.isActive,
+      })),
+  };
+}
+
+function listLocalCatalogProducts(
+  input: CatalogProductListRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  now: () => Date,
+): CatalogProductListResponse {
+  const status = input.status ?? 'Active';
+  const query = input.query?.trim().toLocaleUpperCase('vi-VN');
+  const items = [...products.values()]
+    .filter((item) => {
+      if (status === 'Active' && !item.isActive) return false;
+      if (status === 'Inactive' && item.isActive) return false;
+      if (!query) return true;
+      return [
+        item.productCode,
+        item.productName,
+        item.displayName,
+        item.sku,
+        item.barcode ?? '',
+        item.defaultUnitId,
+      ].some((value) => value.toLocaleUpperCase('vi-VN').includes(query));
+    })
+    .sort((left, right) => left.displayName.localeCompare(right.displayName, 'vi-VN'))
+    .slice(0, input.limit ?? 100);
+
+  return {
+    generatedAt: now().toISOString(),
+    items,
+  };
+}
+
+function createLocalCatalogProduct(
+  input: CatalogCreateProductRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  nextId: (prefix: string) => string,
+): CatalogCreateProductResponse | ApiResult<CatalogCreateProductResponse> {
+  const skuNormalized = input.sku.trim().toLocaleUpperCase('vi-VN');
+  const barcodeNormalized = input.barcode?.trim().toLocaleUpperCase('vi-VN');
+  if ([...products.values()].some((item) => item.sku.toLocaleUpperCase('vi-VN') === skuNormalized)) {
+    return localCatalogError('DUPLICATE_SKU', 'SKU đã tồn tại.');
+  }
+  if (
+    barcodeNormalized &&
+    [...products.values()].some((item) => item.barcode?.toLocaleUpperCase('vi-VN') === barcodeNormalized)
+  ) {
+    return localCatalogError('DUPLICATE_BARCODE', 'Barcode đã tồn tại.');
+  }
+
+  const productId = nextId('product');
+  const variantId = nextId('variant');
+  const item: CatalogProductListItemDTO = {
+    productId,
+    productCode: input.productCode.trim(),
+    productName: input.name.trim(),
+    productType: input.productType,
+    variantId,
+    sku: input.sku.trim(),
+    displayName: input.name.trim(),
+    barcode: input.barcode?.trim(),
+    defaultUnitId: input.defaultUnitId.trim(),
+    unitPriceVnd: input.unitPriceVnd,
+    inventoryMode: input.inventoryMode ?? (input.productType === 'Service' || input.productType === 'NonStock' ? 'NotTracked' : input.productType === 'Bundle' ? 'Bundle' : 'Tracked'),
+    lotTracking: input.lotTracking ?? false,
+    serialTracking: input.serialTracking ?? false,
+    isActive: true,
+  };
+  products.set(productId, item);
+
+  return catalogItemToCreateResponse(item);
+}
+
+function updateLocalCatalogProduct(
+  input: CatalogUpdateProductRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+): CatalogUpdateProductResponse | ApiResult<CatalogUpdateProductResponse> {
+  const current = products.get(input.productId);
+  if (current === undefined) {
+    return localCatalogError('INVALID_INPUT', 'Sản phẩm không tồn tại.');
+  }
+
+  const nextSku = input.sku?.trim() ?? current.sku;
+  const nextBarcode = input.barcode?.trim() ?? current.barcode;
+  const skuNormalized = nextSku.toLocaleUpperCase('vi-VN');
+  const barcodeNormalized = nextBarcode?.toLocaleUpperCase('vi-VN');
+  if (
+    [...products.values()].some(
+      (item) => item.productId !== current.productId && item.sku.toLocaleUpperCase('vi-VN') === skuNormalized,
+    )
+  ) {
+    return localCatalogError('DUPLICATE_SKU', 'SKU đã tồn tại.');
+  }
+  if (
+    barcodeNormalized &&
+    [...products.values()].some(
+      (item) =>
+        item.productId !== current.productId &&
+        item.barcode?.toLocaleUpperCase('vi-VN') === barcodeNormalized,
+    )
+  ) {
+    return localCatalogError('DUPLICATE_BARCODE', 'Barcode đã tồn tại.');
+  }
+
+  const nextName = input.name?.trim() ?? current.displayName;
+  const updated: CatalogProductListItemDTO = {
+    ...current,
+    productCode: input.productCode?.trim() ?? current.productCode,
+    productName: nextName,
+    productType: input.productType ?? current.productType,
+    displayName: nextName,
+    sku: nextSku,
+    barcode: nextBarcode,
+    defaultUnitId: input.defaultUnitId?.trim() ?? current.defaultUnitId,
+    inventoryMode: input.inventoryMode ?? current.inventoryMode,
+    unitPriceVnd: input.unitPriceVnd ?? current.unitPriceVnd,
+    lotTracking: input.lotTracking ?? current.lotTracking,
+    serialTracking: input.serialTracking ?? current.serialTracking,
+  };
+  products.set(updated.productId, updated);
+
+  return catalogItemToUpdateResponse(updated);
+}
+
+function setLocalCatalogProductActive(
+  input: CatalogSetProductActiveRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+): CatalogSetProductActiveResponse | ApiResult<CatalogSetProductActiveResponse> {
+  const current = products.get(input.productId);
+  if (current === undefined) {
+    return localCatalogError('INVALID_INPUT', 'Sản phẩm không tồn tại.');
+  }
+
+  const updated: CatalogProductListItemDTO = { ...current, isActive: input.isActive };
+  products.set(updated.productId, updated);
+
+  return {
+    product: catalogItemToProduct(updated),
+    defaultVariant: catalogItemToVariant(updated),
+  };
+}
+
+function catalogItemToCreateResponse(item: CatalogProductListItemDTO): CatalogCreateProductResponse {
+  return {
+    product: catalogItemToProduct(item),
+    defaultVariant: catalogItemToVariant(item),
+    defaultUnit: catalogItemToUnit(item),
+    barcode: item.barcode ? catalogItemToBarcode(item) : undefined,
+  };
+}
+
+function catalogItemToUpdateResponse(item: CatalogProductListItemDTO): CatalogUpdateProductResponse {
+  return {
+    product: catalogItemToProduct(item),
+    defaultVariant: catalogItemToVariant(item),
+    barcode: item.barcode ? catalogItemToBarcode(item) : undefined,
+  };
+}
+
+function catalogItemToProduct(item: CatalogProductListItemDTO): ProductDTO {
+  return {
+    productId: item.productId,
+    tenantId: 'tenant-default',
+    productCode: item.productCode,
+    name: item.productName,
+    productType: item.productType,
+    isActive: item.isActive,
+  };
+}
+
+function catalogItemToVariant(item: CatalogProductListItemDTO): VariantDTO {
+  return {
+    variantId: item.variantId,
+    tenantId: 'tenant-default',
+    productId: item.productId,
+    sku: item.sku,
+    skuNormalized: item.sku.toLocaleUpperCase('vi-VN'),
+    displayName: item.displayName,
+    inventoryMode: item.inventoryMode,
+    lotTracking: item.lotTracking,
+    serialTracking: item.serialTracking,
+    defaultUnitId: item.defaultUnitId,
+    isActive: item.isActive,
+    unitPriceVnd: item.unitPriceVnd,
+  };
+}
+
+function catalogItemToUnit(item: CatalogProductListItemDTO): UnitConversionVersionDTO {
+  return {
+    unitVersionId: `unit-${item.variantId}-v1`,
+    tenantId: 'tenant-default',
+    variantId: item.variantId,
+    unitId: item.defaultUnitId,
+    unitName: item.defaultUnitId,
+    baseUnitId: item.defaultUnitId,
+    factor: 1,
+    saleEnabled: true,
+    purchaseEnabled: item.inventoryMode === 'Tracked',
+    effectiveFrom: '2026-07-27T00:00:00.000Z',
+    isActive: item.isActive,
+  };
+}
+
+function catalogItemToBarcode(item: CatalogProductListItemDTO): VariantBarcodeDTO | undefined {
+  if (!item.barcode) return undefined;
+  return {
+    barcodeId: `barcode-${item.variantId}`,
+    tenantId: 'tenant-default',
+    variantId: item.variantId,
+    unitVersionId: `unit-${item.variantId}-v1`,
+    barcode: item.barcode,
+    barcodeNormalized: item.barcode.toLocaleUpperCase('vi-VN'),
+    barcodeKind: 'Manufacturer',
+    isActive: item.isActive,
+  };
+}
+
+function localCatalogError<T>(code: ApiErrorCode, message: string): ApiResult<T> {
+  return {
+    ok: false,
+    error: { code, message },
+    meta: {
+      requestId: 'local-catalog-inline',
+      operation: 'local.catalog',
+      serverTime: '2026-07-27T00:00:00.000Z',
+      durationMs: 0,
+      stages: {},
+      io: {},
+    },
+  };
+}
+
+function createLocalQuote(
+  input: CatalogQuoteRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  now: () => Date,
+): CatalogQuoteResponse {
+  const projection = createLocalCatalogProjection(products, now);
   const lines = input.lines.map((line) => {
     const variant = projection.variants.find((candidate) => candidate.variantId === line.variantId);
     const unitPriceVnd = variant?.unitPriceVnd ?? 0;
@@ -1568,22 +1978,27 @@ function saveLocalSalesDraft(
   payload: unknown,
   drafts: Map<string, SalesDraftSaveResponse>,
   orders: Map<string, SalesOrderDetailResponse>,
+  catalogProducts: Map<string, CatalogProductListItemDTO>,
   nextId: (prefix: string) => string,
   now: () => Date,
 ): SalesDraftSaveResponse {
   const input = parseSalesDraftSaveRequest(payload);
   const draftId = input.draftId ?? nextId('sale-draft');
-  const quote = createLocalQuote({
-    branchId: input.branchId,
-    warehouseId: input.warehouseId,
-    customerId: input.customerId,
-    lines: input.lines.map((line) => ({
-      lineId: line.lineId,
-      variantId: line.variantId,
-      unitVersionId: line.unitVersionId,
-      quantity: line.quantity,
-    })),
-  });
+  const quote = createLocalQuote(
+    {
+      branchId: input.branchId,
+      warehouseId: input.warehouseId,
+      customerId: input.customerId,
+      lines: input.lines.map((line) => ({
+        lineId: line.lineId,
+        variantId: line.variantId,
+        unitVersionId: line.unitVersionId,
+        quantity: line.quantity,
+      })),
+    },
+    catalogProducts,
+    now,
+  );
   const response: SalesDraftSaveResponse = {
     order: {
       saleOrderId: draftId,
@@ -1609,7 +2024,7 @@ function saveLocalSalesDraft(
       updatedAt: now().toISOString(),
       recipient: input.recipient,
     },
-    lines: input.lines.map((line) => toLocalSaleLine(draftId, line)),
+    lines: input.lines.map((line) => toLocalSaleLine(draftId, line, catalogProducts, now)),
     tenders: input.tenders.map((tender) => ({
       ...tender,
       saleOrderId: draftId,
@@ -1812,6 +2227,262 @@ function resolveLocalOnlineNextStatus(
   return undefined;
 }
 
+function createLocalSalesReturn(
+  payload: unknown,
+  orders: Map<string, SalesOrderDetailResponse>,
+  commandResults: Map<string, unknown>,
+  nextId: (prefix: string) => string,
+  now: () => Date,
+): ApiResult<SalesReturnCreateResponse> | SalesReturnCreateResponse {
+  const input = parseSalesReturnCreateRequest(payload);
+  const existing = commandResults.get(input.idempotencyKey);
+  if (existing !== undefined) return existing as SalesReturnCreateResponse;
+
+  const sourceDetail = input.sourceSaleOrderId === undefined ? undefined : orders.get(input.sourceSaleOrderId);
+  if (input.fastReturn === true && input.fastReturnApproved !== true) {
+    return localOperationError('PERMISSION_DENIED', 'Fast return cần quyền phê duyệt riêng.', 'sales.return.create', now);
+  }
+  if (input.sourceSaleOrderId !== undefined && sourceDetail === undefined) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy đơn gốc để trả hàng.', 'sales.return.create', now);
+  }
+  if (sourceDetail !== undefined && !['Completed', 'Shipped', 'Delivered'].includes(sourceDetail.order.status)) {
+    return localOperationError('INVALID_INPUT', 'Chỉ trả hàng cho đơn đã hoàn tất hoặc đã xuất giao.', 'sales.return.create', now);
+  }
+
+  const returnId = nextId('sale-return');
+  const sourceLinesById = new Map(sourceDetail?.lines.map((line) => [line.saleOrderLineId, line]) ?? []);
+  const lines = input.lines.map((line) => {
+    const sourceLine = line.sourceSaleLineId === undefined ? undefined : sourceLinesById.get(line.sourceSaleLineId);
+    if (line.sourceSaleLineId !== undefined && sourceLine === undefined) {
+      throw new Error(`Missing local source line ${line.sourceSaleLineId}`);
+    }
+    return {
+      ...line,
+      returnId,
+      returnLineId: nextId('sale-return-line'),
+      refundVnd: line.refundVnd ?? Math.round((sourceLine?.unitPriceVnd ?? 0) * line.quantity),
+      unitCostVnd: line.unitCostVnd ?? sourceLine?.costVnd ?? 0,
+    };
+  });
+  const returnOrder: SalesReturnDTO = {
+    returnId,
+    tenantId: 'tenant-default',
+    branchId: input.branchId,
+    warehouseId: input.warehouseId,
+    customerId: input.customerId ?? sourceDetail?.order.customerId,
+    sourceSaleOrderId: input.sourceSaleOrderId,
+    status: 'ReceivedForInspection',
+    returnType: input.fastReturn === true ? 'FastReturn' : 'SourceReturn',
+    reason: input.reason,
+    receivedAt: now().toISOString(),
+    actorId: input.actorId,
+    lines,
+  };
+  const response: SalesReturnCreateResponse = { returnOrder, inventoryMovements: [] };
+  if (sourceDetail !== undefined) {
+    orders.set(sourceDetail.order.saleOrderId, {
+      ...sourceDetail,
+      returns: [...sourceDetail.returns, returnOrder],
+    });
+  }
+  commandResults.set(input.idempotencyKey, response);
+  return response;
+}
+
+function resolveLocalSalesReturn(
+  payload: unknown,
+  orders: Map<string, SalesOrderDetailResponse>,
+  commandResults: Map<string, unknown>,
+  now: () => Date,
+): ApiResult<SalesReturnResolveResponse> | SalesReturnResolveResponse {
+  const input = parseSalesReturnResolveRequest(payload);
+  const existing = commandResults.get(input.idempotencyKey);
+  if (existing !== undefined) return existing as SalesReturnResolveResponse;
+
+  const found = findLocalReturn(input.returnId, orders);
+  if (found === undefined) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy phiếu trả hàng.', 'sales.return.resolve', now);
+  }
+  if (found.returnOrder.status !== 'ReceivedForInspection') {
+    return localOperationError('INVALID_INPUT', 'Phiếu trả hàng không còn ở trạng thái chờ xử lý.', 'sales.return.resolve', now);
+  }
+
+  const dispositions = new Map(input.lines.map((line) => [line.returnLineId, line.disposition]));
+  const nextReturnOrder: SalesReturnDTO = {
+    ...found.returnOrder,
+    status: 'Resolved',
+    resolvedAt: now().toISOString(),
+    lines: found.returnOrder.lines.map((line) => ({
+      ...line,
+      disposition: dispositions.get(line.returnLineId) ?? line.disposition,
+    })),
+  };
+  const nextDetail: SalesOrderDetailResponse = {
+    ...found.detail,
+    returns: found.detail.returns.map((returnOrder) =>
+      returnOrder.returnId === nextReturnOrder.returnId ? nextReturnOrder : returnOrder,
+    ),
+  };
+  orders.set(nextDetail.order.saleOrderId, nextDetail);
+
+  const response: SalesReturnResolveResponse = {
+    returnOrder: nextReturnOrder,
+    inventoryMovements: [],
+  };
+  if (input.financialAction?.treatment === 'CustomerCredit' && input.financialAction.amountVnd > 0) {
+    response.customerCredit = {
+      creditId: `local-return-credit-${nextReturnOrder.returnId}`,
+      tenantId: nextReturnOrder.tenantId,
+      branchId: nextReturnOrder.branchId,
+      customerId: nextReturnOrder.customerId ?? 'walk-in',
+      sourcePaymentId: nextReturnOrder.returnId,
+      sourceDocument: { sourceType: 'SaleReturn', sourceId: nextReturnOrder.returnId },
+      amountVnd: input.financialAction.amountVnd,
+      consumedAmountVnd: 0,
+      status: 'Open',
+    } satisfies CustomerCreditDTO;
+  }
+  if (input.financialAction?.treatment === 'Refund' && input.financialAction.amountVnd > 0) {
+    const sourceDocument = { sourceType: 'SaleReturn' as const, sourceId: nextReturnOrder.returnId };
+    const payment: PaymentDTO = {
+      paymentId: `local-return-refund-payment-${nextReturnOrder.returnId}`,
+      tenantId: nextReturnOrder.tenantId,
+      branchId: nextReturnOrder.branchId,
+      cashDrawerId: input.financialAction.cashDrawerId ?? 'drawer-main',
+      paymentMethodId: input.financialAction.paymentMethodId ?? 'cash',
+      amountVnd: -input.financialAction.amountVnd,
+      payerType: nextReturnOrder.customerId === undefined ? 'Other' : 'Customer',
+      payerId: nextReturnOrder.customerId,
+      sourceDocument,
+      status: 'Approved',
+      effectiveAt: now().toISOString(),
+    };
+    response.financeResult = {
+      payment,
+      cashTransaction: {
+        cashTransactionId: `local-return-refund-cash-${nextReturnOrder.returnId}`,
+        tenantId: nextReturnOrder.tenantId,
+        branchId: nextReturnOrder.branchId,
+        cashDrawerId: payment.cashDrawerId,
+        transactionType: 'Refund',
+        amountVnd: payment.amountVnd,
+        effectiveAt: payment.effectiveAt,
+        paymentId: payment.paymentId,
+        sourceDocument,
+        actorId: input.financialAction.approverId ?? input.actorId,
+        approverId: input.financialAction.approverId,
+        idempotencyKey: `${input.idempotencyKey}-refund`,
+      },
+      allocations: [],
+      obligations: [],
+    } satisfies FinancePaymentRecordResponse;
+  }
+
+  commandResults.set(input.idempotencyKey, response);
+  return response;
+}
+
+function findLocalReturn(
+  returnId: string,
+  orders: Map<string, SalesOrderDetailResponse>,
+): { detail: SalesOrderDetailResponse; returnOrder: SalesReturnDTO } | undefined {
+  for (const detail of orders.values()) {
+    const returnOrder = detail.returns.find((candidate) => candidate.returnId === returnId);
+    if (returnOrder !== undefined) return { detail, returnOrder };
+  }
+  return undefined;
+}
+
+function openLocalWarranty(
+  payload: unknown,
+  orders: Map<string, SalesOrderDetailResponse>,
+  commandResults: Map<string, unknown>,
+  nextId: (prefix: string) => string,
+  now: () => Date,
+): ApiResult<SalesWarrantyResponse> | SalesWarrantyResponse {
+  const input = parseSalesWarrantyOpenRequest(payload);
+  const existing = commandResults.get(input.idempotencyKey);
+  if (existing !== undefined) return existing as SalesWarrantyResponse;
+
+  const detail = orders.get(input.saleOrderId);
+  if (detail === undefined) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy đơn bán gốc để mở bảo hành.', 'sales.warranty.open', now);
+  }
+
+  const sourceLine = detail.lines.find((line) => line.saleOrderLineId === input.saleLineId);
+  if (sourceLine === undefined || sourceLine.variantId !== input.variantId) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy dòng hàng/serial để bảo hành.', 'sales.warranty.open', now);
+  }
+
+  const warrantyCase: WarrantyCaseDTO = {
+    warrantyCaseId: nextId('warranty-case'),
+    tenantId: 'tenant-default',
+    customerId: input.customerId,
+    saleOrderId: input.saleOrderId,
+    saleLineId: input.saleLineId,
+    variantId: input.variantId,
+    serialId: input.serialId,
+    policyVersionId: input.policyVersionId,
+    receivedAt: now().toISOString(),
+    status: 'Open',
+    issue: input.issue,
+    attachmentIds: [...(input.attachmentIds ?? [])],
+  };
+  const response: SalesWarrantyResponse = { warrantyCase };
+
+  orders.set(detail.order.saleOrderId, {
+    ...detail,
+    warrantyCases: [...detail.warrantyCases, warrantyCase],
+  });
+  commandResults.set(input.idempotencyKey, response);
+  return response;
+}
+
+function transitionLocalWarranty(
+  payload: unknown,
+  orders: Map<string, SalesOrderDetailResponse>,
+  commandResults: Map<string, unknown>,
+  now: () => Date,
+): ApiResult<SalesWarrantyResponse> | SalesWarrantyResponse {
+  const input = parseSalesWarrantyTransitionRequest(payload);
+  const existing = commandResults.get(input.idempotencyKey);
+  if (existing !== undefined) return existing as SalesWarrantyResponse;
+
+  const found = findLocalWarranty(input.warrantyCaseId, orders);
+  if (found === undefined) {
+    return localOperationError('INVALID_INPUT', 'Không tìm thấy ca bảo hành.', 'sales.warranty.transition', now);
+  }
+
+  const nextWarrantyCase: WarrantyCaseDTO = {
+    ...found.warrantyCase,
+    status: input.status,
+    resolution: input.resolution ?? found.warrantyCase.resolution,
+    attachmentIds: input.attachmentIds ?? found.warrantyCase.attachmentIds,
+  };
+
+  orders.set(found.detail.order.saleOrderId, {
+    ...found.detail,
+    warrantyCases: found.detail.warrantyCases.map((warrantyCase) =>
+      warrantyCase.warrantyCaseId === nextWarrantyCase.warrantyCaseId ? nextWarrantyCase : warrantyCase,
+    ),
+  });
+
+  const response: SalesWarrantyResponse = { warrantyCase: nextWarrantyCase };
+  commandResults.set(input.idempotencyKey, response);
+  return response;
+}
+
+function findLocalWarranty(
+  warrantyCaseId: string,
+  orders: Map<string, SalesOrderDetailResponse>,
+): { detail: SalesOrderDetailResponse; warrantyCase: WarrantyCaseDTO } | undefined {
+  for (const detail of orders.values()) {
+    const warrantyCase = detail.warrantyCases.find((candidate) => candidate.warrantyCaseId === warrantyCaseId);
+    if (warrantyCase !== undefined) return { detail, warrantyCase };
+  }
+  return undefined;
+}
+
 function localOperationError<T>(
   code: ApiErrorCode,
   message: string,
@@ -1836,6 +2507,7 @@ function completeLocalPosSale(
   payload: unknown,
   orders: Map<string, SalesOrderDetailResponse>,
   commandResults: Map<string, unknown>,
+  catalogProducts: Map<string, CatalogProductListItemDTO>,
   nextId: (prefix: string) => string,
   now: () => Date,
 ): ApiResult<SalesPosCompleteResponse> | SalesPosCompleteResponse {
@@ -1843,17 +2515,21 @@ function completeLocalPosSale(
   const existing = commandResults.get(input.idempotencyKey);
   if (existing !== undefined) return existing as SalesPosCompleteResponse;
 
-  const quote = createLocalQuote({
-    branchId: input.branchId,
-    warehouseId: input.warehouseId,
-    customerId: input.customerId,
-    lines: input.lines.map((line) => ({
-      lineId: line.lineId,
-      variantId: line.variantId,
-      unitVersionId: line.unitVersionId,
-      quantity: line.quantity,
-    })),
-  });
+  const quote = createLocalQuote(
+    {
+      branchId: input.branchId,
+      warehouseId: input.warehouseId,
+      customerId: input.customerId,
+      lines: input.lines.map((line) => ({
+        lineId: line.lineId,
+        variantId: line.variantId,
+        unitVersionId: line.unitVersionId,
+        quantity: line.quantity,
+      })),
+    },
+    catalogProducts,
+    now,
+  );
   if (quote.quoteVersion !== input.quoteVersion) {
     return {
       ok: false,
@@ -1875,7 +2551,7 @@ function completeLocalPosSale(
   const orderId = nextId('sale-order');
   const paidVnd = tenderTotal(input.tenders);
   const receivableVnd = Math.max(0, quote.totalVnd - paidVnd);
-  const lines = input.lines.map((line) => toLocalSaleLine(orderId, line));
+  const lines = input.lines.map((line) => toLocalSaleLine(orderId, line, catalogProducts, now));
   const response: SalesPosCompleteResponse = {
     order: {
       saleOrderId: orderId,
@@ -1943,6 +2619,7 @@ function createLocalExchange(
   payload: unknown,
   orders: Map<string, SalesOrderDetailResponse>,
   commandResults: Map<string, unknown>,
+  catalogProducts: Map<string, CatalogProductListItemDTO>,
   nextId: (prefix: string) => string,
   now: () => Date,
 ): ApiResult<SalesExchangeCreateResponse> | SalesExchangeCreateResponse {
@@ -1955,17 +2632,21 @@ function createLocalExchange(
     return localOperationError('INVALID_INPUT', 'Không tìm thấy đơn bán gốc để đổi hàng.', 'sales.exchange.create', now);
   }
 
-  const quote = createLocalQuote({
-    branchId: input.branchId,
-    warehouseId: input.warehouseId,
-    customerId: input.customerId,
-    lines: input.exchangeLines.map((line) => ({
-      lineId: line.lineId,
-      variantId: line.variantId,
-      unitVersionId: line.unitVersionId,
-      quantity: line.quantity,
-    })),
-  });
+  const quote = createLocalQuote(
+    {
+      branchId: input.branchId,
+      warehouseId: input.warehouseId,
+      customerId: input.customerId,
+      lines: input.exchangeLines.map((line) => ({
+        lineId: line.lineId,
+        variantId: line.variantId,
+        unitVersionId: line.unitVersionId,
+        quantity: line.quantity,
+      })),
+    },
+    catalogProducts,
+    now,
+  );
   if (quote.quoteVersion !== input.quoteVersion) {
     return localOperationError('PRICE_CHANGED', 'Giá hoặc khuyến mãi đã thay đổi.', 'sales.exchange.create', now);
   }
@@ -1990,7 +2671,9 @@ function createLocalExchange(
   const cashTenderVnd = tenderTotal(input.tenders);
   const netSettlementVnd = quote.totalVnd - returnValueVnd;
   const paidVnd = Math.min(quote.totalVnd, returnValueVnd + cashTenderVnd);
-  const exchangeLines = input.exchangeLines.map((line) => toLocalSaleLine(exchangeOrderId, line));
+  const exchangeLines = input.exchangeLines.map((line) =>
+    toLocalSaleLine(exchangeOrderId, line, catalogProducts, now),
+  );
   const timestamp = now().toISOString();
   const returnOrder: SalesExchangeCreateResponse['returnOrder'] = {
     returnId,
@@ -2092,8 +2775,12 @@ function createLocalExchange(
 function toLocalSaleLine(
   saleOrderId: string,
   line: SalesPosCompleteRequest['lines'][number],
+  catalogProducts: Map<string, CatalogProductListItemDTO>,
+  now: () => Date,
 ): SalesPosCompleteResponse['lines'][number] {
-  const variant = createLocalCatalogProjection().variants.find((candidate) => candidate.variantId === line.variantId);
+  const variant = createLocalCatalogProjection(catalogProducts, now).variants.find(
+    (candidate) => candidate.variantId === line.variantId,
+  );
   const lineSubtotalVnd = Math.round(line.unitPriceVnd * line.quantity);
   return {
     ...line,

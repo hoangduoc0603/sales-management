@@ -4,6 +4,7 @@ import type { CurrentScopeResponse } from './administration';
 export interface AuthLoginRequest {
   loginId: string;
   password: string;
+  rememberSession?: boolean;
 }
 
 export interface AuthLoginResponse {

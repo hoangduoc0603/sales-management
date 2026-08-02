@@ -22,6 +22,7 @@ import {
 } from './catalog-cache/load-pos-catalog-projection';
 import type { CatalogPosProjectionResponse } from './catalog-cache/pos-catalog-cache';
 import { createPosCatalogCache } from './catalog-cache/pos-catalog-cache';
+import { completePosCheckoutWithRecovery } from './pos-complete-command';
 import type { PosCartLine } from './pos-cart-state';
 import { printReceiptSnapshot, type ReceiptPrintContext } from './pos-receipt-print';
 
@@ -453,28 +454,34 @@ export function PosCheckoutShell({
     setIsCompleting(true);
     const command = pendingCompleteCommandRef.current ?? createPosCompleteCommand();
     pendingCompleteCommandRef.current = command;
-    const result = await apiClient.invoke<SalesPosCompleteResponse>({
-      operation: 'sales.pos.complete',
+    const payload = {
+      commandId: command.commandId,
+      idempotencyKey: command.idempotencyKey,
+      branchId: selectedBranchId,
+      warehouseId: selectedWarehouseId,
+      cashierId: activeActor.userId,
+      cashDrawerId: 'drawer-main',
+      shiftId: 'shift-local-open',
+      quoteVersion: `quote-${selectedBranchId}-${totals.totalVnd}-0`,
+      receiptFormat: 'K80' as const,
+      lines: toSalesLineInputs(cartLines),
+      tenders: toTenderInputs(selectedTenderId, receivedAmountVnd),
+    };
+    const result = await completePosCheckoutWithRecovery({
+      apiClient,
       requestId: `pos-complete-${Date.now()}`,
       sessionToken,
-      payload: {
-        commandId: command.commandId,
-        idempotencyKey: command.idempotencyKey,
-        branchId: selectedBranchId,
-        warehouseId: selectedWarehouseId,
-        cashierId: activeActor.userId,
-        cashDrawerId: 'drawer-main',
-        shiftId: 'shift-local-open',
-        quoteVersion: `quote-${selectedBranchId}-${totals.totalVnd}-0`,
-        receiptFormat: 'K80',
-        lines: toSalesLineInputs(cartLines),
-        tenders: toTenderInputs(selectedTenderId, receivedAmountVnd),
-      },
+      command,
+      payload,
     });
     setIsCompleting(false);
     if (!result.ok) {
-      setActiveStateId(result.error.code === 'SHIFT_NOT_OPEN' ? 'shift' : 'conflict');
-      setMessage(result.error.message);
+      setActiveStateId(result.commandPending ? 'timeout' : result.error.code === 'SHIFT_NOT_OPEN' ? 'shift' : 'conflict');
+      setMessage(
+        result.commandPending
+          ? `${result.error.message} Đang tra cứu commandId trước khi cho phép retry.`
+          : result.error.message,
+      );
       return;
     }
     setReceipt(result.data.receipt);

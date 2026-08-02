@@ -1,8 +1,11 @@
 import type { AuthChangeOwnPasswordRequest, AuthLoginRequest } from '@shared/contracts/platform/auth';
 import type {
   CatalogCreateProductRequest,
+  CatalogProductListRequest,
   CatalogPosProjectionRequest,
   CatalogQuoteRequest,
+  CatalogSetProductActiveRequest,
+  CatalogUpdateProductRequest,
 } from '@shared/contracts/catalog/catalog';
 import type {
   CustomerQuickCreateRequest,
@@ -102,8 +105,11 @@ import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap
 import { parseCommandStatusRequest } from '@shared/schemas/platform/command';
 import {
   parseCatalogCreateProductRequest,
+  parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
+  parseCatalogSetProductActiveRequest,
+  parseCatalogUpdateProductRequest,
 } from '@shared/schemas/catalog/catalog';
 import {
   parseCustomerQuickCreateRequest,
@@ -521,11 +527,32 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       handler: (input) => administrationService.disableWarehouse(input as DisableWarehouseRequest),
     },
     {
+      name: 'catalog.product.list',
+      kind: 'query',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogProductListRequest,
+      handler: (input) => catalogService.listProducts(input as CatalogProductListRequest),
+    },
+    {
       name: 'catalog.product.create',
       kind: 'mutation',
       requiredAction: 'catalog.product.configure',
       parsePayload: parseCatalogCreateProductRequest,
       handler: (input) => catalogService.createProduct(input as CatalogCreateProductRequest),
+    },
+    {
+      name: 'catalog.product.update',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogUpdateProductRequest,
+      handler: (input) => catalogService.updateProduct(input as CatalogUpdateProductRequest),
+    },
+    {
+      name: 'catalog.product.setActive',
+      kind: 'mutation',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogSetProductActiveRequest,
+      handler: (input) => catalogService.setProductActive(input as CatalogSetProductActiveRequest),
     },
     {
       name: 'catalog.pos.getProjection',

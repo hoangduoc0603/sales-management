@@ -77,6 +77,68 @@ export interface CatalogCreateProductResponse {
   barcode?: VariantBarcodeDTO;
 }
 
+export const catalogProductListStatuses = ['Active', 'Inactive', 'All'] as const;
+export type CatalogProductListStatus = (typeof catalogProductListStatuses)[number];
+
+export interface CatalogProductListRequest {
+  query?: string;
+  status?: CatalogProductListStatus;
+  limit?: number;
+}
+
+export interface CatalogProductListItemDTO {
+  productId: string;
+  productCode: string;
+  productName: string;
+  productType: ProductType;
+  variantId: string;
+  sku: string;
+  displayName: string;
+  barcode?: string;
+  defaultUnitId: string;
+  unitPriceVnd: number;
+  inventoryMode: InventoryMode;
+  lotTracking: boolean;
+  serialTracking: boolean;
+  isActive: boolean;
+}
+
+export interface CatalogProductListResponse {
+  generatedAt: string;
+  items: readonly CatalogProductListItemDTO[];
+}
+
+export interface CatalogUpdateProductRequest {
+  productId: string;
+  productCode?: string;
+  name?: string;
+  productType?: ProductType;
+  sku?: string;
+  barcode?: string;
+  defaultUnitId?: string;
+  inventoryMode?: InventoryMode;
+  unitPriceVnd?: number;
+  lotTracking?: boolean;
+  serialTracking?: boolean;
+}
+
+export interface CatalogUpdateProductResponse {
+  product: ProductDTO;
+  defaultVariant: VariantDTO;
+  barcode?: VariantBarcodeDTO;
+}
+
+export interface CatalogSetProductActiveRequest {
+  productId: string;
+  isActive: boolean;
+  reason?: string;
+}
+
+export interface CatalogSetProductActiveResponse {
+  product: ProductDTO;
+  defaultVariant: VariantDTO;
+}
+
 export interface CatalogPosProjectionRequest {
   branchId: string;
   warehouseId: string;

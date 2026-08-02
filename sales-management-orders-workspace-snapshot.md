@@ -1,0 +1,65 @@
+- generic [ref=f5e3] [box=0,0,1440,1464]:
+  - complementary [ref=f5e4] [box=0,0,236,1000]:
+    - generic [ref=f5e5] [box=0,0,235,64]:
+      - generic [ref=f5e7] [box=76,16,95,31]:
+        - strong [ref=f5e8] [box=76,16,95,17]: Cenio Sales
+        - generic [ref=f5e9] [box=76,33,95,14]: Retail operations
+      - button "Thu gọn sidebar" [ref=f5e10] [box=185,17,30,30]
+    - navigation "Điều hướng chính" [ref=f5e13] [box=0,64,235,514]:
+      - generic [ref=f5e14] [box=12,80,211,209]:
+        - paragraph [ref=f5e15] [box=20,80,195,18]: Vận hành
+        - button "Tổng quan" [ref=f5e16] [box=12,104,211,37]
+        - button "Bán hàng" [ref=f5e23] [box=12,141,211,37]
+        - button "Đơn bán" [active] [ref=f5e28] [box=12,178,211,37]
+        - button "Hàng hóa" [ref=f5e32] [box=12,215,211,37]
+        - button "Khách hàng" [ref=f5e38] [box=12,252,211,37]
+      - generic [ref=f5e45] [box=12,309,211,172]:
+        - paragraph [ref=f5e46] [box=20,309,195,18]: Kiểm soát
+        - button "Kho" [ref=f5e47] [box=12,333,211,37]
+        - button "Mua hàng" [ref=f5e53] [box=12,370,211,37]
+        - button "Tài chính" [ref=f5e60] [box=12,407,211,37]
+        - button "Báo cáo" [ref=f5e65] [box=12,444,211,37]
+      - generic [ref=f5e68] [box=12,501,211,61]:
+        - paragraph [ref=f5e69] [box=20,501,195,18]: Hệ thống
+        - button "Quản trị" [ref=f5e70] [box=12,525,211,37]
+    - generic [ref=f5e75] [box=0,949,235,51]: Đồng bộ cục bộ sẵn sàng
+  - generic [ref=f5e77] [box=236,0,1204,1464]:
+    - banner [ref=f5e78] [box=236,0,1204,64]:
+      - generic [ref=f5e79] [box=260,12,555,40]:
+        - generic [ref=f5e80] [box=260,16,131,31]:
+          - strong [ref=f5e81] [box=260,16,131,17]: Cửa hàng mặc định
+          - generic [ref=f5e82] [box=260,33,131,14]: Không gian quản lý
+        - generic [ref=f5e83] [box=399,12,241,40]:
+          - generic [ref=f5e84] [box=410,23,58,18]: Chi nhánh
+          - button "Chi nhánh Chi nhánh mặc định" [ref=f5e86] [box=475,13,154,38]
+        - generic [ref=f5e90] [box=649,12,166,40]:
+          - generic [ref=f5e91] [box=660,23,23,18]: Kho
+          - button "Kho Kho mặc định" [ref=f5e93] [box=689,13,114,38]
+      - generic [ref=f5e97] [box=1189,10,227,44]:
+        - button "Chuyển sang giao diện tối" [ref=f5e98] [box=1189,12,40,40]
+        - button "Thông báo" [ref=f5e101] [box=1237,12,40,40]
+        - button "Admin Local Admin Local admin" [ref=f5e106] [box=1285,10,131,44]:
+          - generic "Admin Local" [ref=f5e107] [box=1292,16,32,32]: AL
+          - generic [ref=f5e108] [box=1332,15,73,33]
+    - main [ref=f5e111] [box=236,64,1204,1400]:
+      - generic [ref=f5e455] [box=260,88,1156,1352]:
+        - generic [ref=f5e456] [box=260,88,1156,89]:
+          - generic [ref=f5e457] [box=260,90,709,87]
+          - generic [ref=f5e461] [box=1097,137,319,40]
+        - generic "Bộ lọc đơn bán" [ref=f5e467] [box=260,193,1156,96]:
+          - generic [ref=f5e468] [box=275,208,220,66]
+          - generic [ref=f5e475] [box=507,208,220,66]
+          - search [ref=f5e482] [box=739,210,662,64]
+        - generic [ref=f5e487] [box=260,305,1156,130]:
+          - article [ref=f5e488] [box=260,305,280,130]
+          - article [ref=f5e492] [box=552,305,280,130]
+          - article [ref=f5e496] [box=844,305,280,130]
+          - article [ref=f5e500] [box=1136,305,280,130]
+        - generic [ref=f5e504] [box=260,451,1156,298]:
+          - generic [ref=f5e505] [box=260,451,741,188]
+          - generic [ref=f5e528] [box=1017,451,399,298]
+        - generic [ref=f5e538] [box=260,765,1156,675]:
+          - generic [ref=f5e539] [box=260,765,741,288]
+          - generic [ref=f5e563] [box=1017,765,399,340]
+          - generic [ref=f5e573] [box=260,1121,741,168]
+          - generic [ref=f5e585] [box=1017,1121,399,319]
