@@ -253,20 +253,22 @@ function SidebarPanel({
           <strong>Cenio Sales</strong>
           <span>Retail operations</span>
         </div>
-        {showToggle ? (
-          <button
-            aria-controls="cn-sidebar-navigation"
-            aria-expanded={!isCollapsed}
-            aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            className="cn-sidebar-toggle"
-            onClick={onSidebarToggle}
-            title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            type="button"
-          >
-            <AppIcon name="chevronRight" />
-          </button>
-        ) : null}
       </div>
+      {showToggle && onSidebarToggle ? (
+        <button
+          aria-controls="cn-sidebar-navigation"
+          aria-expanded={!isCollapsed}
+          aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+          className="cn-sidebar-rail-toggle"
+          onClick={onSidebarToggle}
+          title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+          type="button"
+        >
+          <span aria-hidden="true" className="cn-sidebar-rail-handle">
+            <AppIcon name="chevronRight" />
+          </span>
+        </button>
+      ) : null}
       <nav className="cn-nav" id={showToggle ? 'cn-sidebar-navigation' : undefined} aria-label="Điều hướng chính">
         {navigationGroups.map((group) => (
           <div className="cn-nav-group" key={group.label}>

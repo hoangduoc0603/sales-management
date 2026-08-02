@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -81,6 +82,9 @@ describe('AppShell', () => {
     expect(html).toContain('aria-label="Thu gọn sidebar"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-controls="cn-sidebar-navigation"');
+    expect(html).toContain('cn-sidebar-rail-toggle');
+    expect(html).toContain('cn-sidebar-rail-handle');
+    expect(html).not.toContain('cn-sidebar-toggle');
     expect(html).not.toContain('<select');
   });
 
@@ -106,6 +110,9 @@ describe('AppShell', () => {
     expect(html).toContain('data-sidebar-collapsed="true"');
     expect(html).toContain('aria-label="Mở rộng sidebar"');
     expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('cn-sidebar-rail-toggle');
+    expect(html).toContain('cn-sidebar-rail-handle');
+    expect(html).not.toContain('cn-sidebar-toggle');
     expect(html).toContain('aria-label="Bán hàng"');
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('class="cn-nav-text">Bán hàng</span>');
@@ -143,6 +150,16 @@ describe('AppShell', () => {
     expect(html).toContain('cn-mobile-sidebar');
     expect(html).toContain('Kho');
     expect(html).toContain('aria-current="page"');
+  });
+
+  it('desktop collapse trigger dùng edge rail handle thay vì nút vuông nổi trong brand', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    expect(css).toContain('.cn-sidebar-rail-toggle');
+    expect(css).toContain('.cn-sidebar-rail-handle');
+    expect(css).not.toContain('.cn-sidebar-toggle');
+    expect(css).toMatch(/\.cn-sidebar-rail-toggle\s*\{[^}]*height:\s*100%;[^}]*border:\s*0;[^}]*background:\s*transparent;/s);
+    expect(css).toMatch(/\.cn-sidebar-rail-handle\s*\{[^}]*border-radius:\s*999px;/s);
   });
 });
 

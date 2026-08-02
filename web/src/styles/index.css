@@ -666,34 +666,63 @@ input:focus-visible {
   font-size: 12px;
 }
 
-.cn-sidebar-toggle {
-  display: inline-grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  place-items: center;
-  margin-left: auto;
-  border: 1px solid var(--cn-border);
-  border-radius: var(--cn-radius-control);
-  background: var(--cn-surface);
-  color: var(--cn-text-secondary);
-  box-shadow: var(--cn-shadow-xs);
-  transition: background-color var(--cn-motion-base) var(--cn-ease), border-color var(--cn-motion-base) var(--cn-ease), color var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), box-shadow var(--cn-motion-base) var(--cn-ease);
+.cn-sidebar-rail-toggle {
+  position: absolute;
+  top: 0;
+  right: -11px;
+  z-index: 5;
+  display: flex;
+  width: 22px;
+  height: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 18px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--cn-text-muted);
+  cursor: pointer;
 }
 
-.cn-sidebar-toggle:hover {
-  background: var(--cn-surface-subtle);
+.cn-sidebar-rail-handle {
+  display: grid;
+  width: 22px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cn-text-muted);
+  opacity: 0.58;
+  transition: background-color var(--cn-motion-base) var(--cn-ease), border-color var(--cn-motion-base) var(--cn-ease), color var(--cn-motion-base) var(--cn-ease), opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), box-shadow var(--cn-motion-base) var(--cn-ease);
+}
+
+.cn-sidebar:hover .cn-sidebar-rail-handle,
+.cn-sidebar-rail-toggle:focus-visible .cn-sidebar-rail-handle {
+  border-color: var(--cn-border);
+  background: var(--cn-surface-elevated);
+  color: var(--cn-text-secondary);
+  opacity: 1;
+  box-shadow: var(--cn-shadow-xs);
+}
+
+.cn-sidebar-rail-toggle:hover .cn-sidebar-rail-handle {
   border-color: color-mix(in oklab, var(--cn-primary), var(--cn-border) 58%);
   color: var(--cn-text);
+  transform: translateX(1px);
 }
 
-.cn-sidebar-toggle:active {
-  transform: translateY(1px);
+.cn-sidebar-rail-toggle:active .cn-sidebar-rail-handle {
+  transform: translateX(1px) scale(0.96);
 }
 
-.cn-sidebar-toggle svg {
-  width: 15px;
-  height: 15px;
+.cn-sidebar-rail-toggle:focus-visible {
+  outline: 2px solid var(--cn-ring);
+  outline-offset: 2px;
+}
+
+.cn-sidebar-rail-toggle svg {
+  width: 14px;
+  height: 14px;
   transform: rotate(180deg);
   transition: transform var(--cn-motion-base) var(--cn-ease);
 }
@@ -710,15 +739,7 @@ input:focus-visible {
   height: 36px;
 }
 
-.cn-app-shell-collapsed .cn-sidebar-toggle {
-  position: absolute;
-  top: 15px;
-  right: -17px;
-  margin-left: 0;
-  background: var(--cn-surface-elevated);
-}
-
-.cn-app-shell-collapsed .cn-sidebar-toggle svg {
+.cn-app-shell-collapsed .cn-sidebar-rail-toggle svg {
   transform: none;
 }
 
