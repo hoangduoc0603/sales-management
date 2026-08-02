@@ -52,11 +52,11 @@
 
 **Produces:** Artifact Catalog có các state import `#import`, `#import-validating`, `#import-validated`, `#import-confirm`, `#import-committing`, `#import-completed`, `#import-failed`, `#import-restricted`; handoff đủ điều kiện để review/approve.
 
-- [ ] **Step 1: Mở artifact và xác nhận state cũ chưa đủ**
+- [x] **Step 1: Mở artifact và xác nhận state cũ chưa đủ**
 
   Kiểm tra `#import` hiện có: chỉ dropzone/preview tối giản, không có progress, retry, restricted state, radio valid-only hay mobile card preview.
 
-- [ ] **Step 2: Refine đúng một artifact trên Open Design**
+- [x] **Step 2: Refine đúng một artifact trên Open Design**
 
   Thiết kế modal rộng desktop/full-screen mobile theo specification. Giữ Catalog UI đã có, chỉ thay khu vực import. Trong state có lỗi, dùng copy chính xác:
 
@@ -68,11 +68,11 @@
 
   Tạo interactive controls để test chuyển state. Không thêm Customer/CRM vào artifact.
 
-- [ ] **Step 3: Cập nhật handoff và registry**
+- [x] **Step 3: Cập nhật handoff và registry**
 
   Bổ sung hash/state, CTA, trạng thái error/retry/restricted, detail responsive và quy tắc create-only. Giữ `Status: Review` cho đến khi chủ dự án duyệt artifact; registry không được đánh `Approved` thay người dùng.
 
-- [ ] **Step 4: Verify artifact**
+- [x] **Step 4: Verify artifact**
 
   Mở direct local path artifact; kiểm desktop light/dark, mobile, click-outside/Escape trước commit, disabled AllOrNothing khi còn lỗi, progress/result/restricted state. Đối chiếu với specification.
 
