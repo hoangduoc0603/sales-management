@@ -9,6 +9,7 @@ import type {
   CatalogQuoteResponse,
   CatalogPosProjectionRequest,
   CatalogPosProjectionResponse,
+  CatalogPosVariantDTO,
   InventoryMode,
   ProductDTO,
   CatalogSetProductActiveRequest,
@@ -337,36 +338,38 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
           .map((unit) => [unit.variantId, unit]),
       );
 
+      const projectionVariants = variants
+        .filter((variant) => variant.isActive)
+        .filter((variant) => activeProductIds.has(variant.productId))
+        .flatMap((variant) => {
+          const unit = unitVersionsByVariantId.get(variant.variantId);
+          if (unit === undefined) return [];
+
+          return [
+            {
+              variantId: variant.variantId,
+              productId: variant.productId,
+              sku: variant.sku,
+              displayName: variant.displayName,
+              barcode: barcodesByVariantId.get(variant.variantId)?.barcode,
+              unitVersionId: unit.unitVersionId,
+              unitName: unit.unitName,
+              unitPriceVnd: variant.unitPriceVnd,
+              saleEnabled: unit.saleEnabled,
+              inventoryMode: variant.inventoryMode,
+              lotTracking: variant.lotTracking,
+              serialTracking: variant.serialTracking,
+              isActive: variant.isActive,
+            },
+          ];
+        });
+
       return {
-        projectionVersion: `catalog-pos-${variants.length}`,
+        projectionVersion: createPosProjectionVersion(input, projectionVariants),
         branchId: input.branchId,
         warehouseId: input.warehouseId,
         generatedAt: deps.now().toISOString(),
-        variants: variants
-          .filter((variant) => variant.isActive)
-          .filter((variant) => activeProductIds.has(variant.productId))
-          .flatMap((variant) => {
-            const unit = unitVersionsByVariantId.get(variant.variantId);
-            if (unit === undefined) return [];
-
-            return [
-              {
-                variantId: variant.variantId,
-                productId: variant.productId,
-                sku: variant.sku,
-                displayName: variant.displayName,
-                barcode: barcodesByVariantId.get(variant.variantId)?.barcode,
-                unitVersionId: unit.unitVersionId,
-                unitName: unit.unitName,
-                unitPriceVnd: variant.unitPriceVnd,
-                saleEnabled: unit.saleEnabled,
-                inventoryMode: variant.inventoryMode,
-                lotTracking: variant.lotTracking,
-                serialTracking: variant.serialTracking,
-                isActive: variant.isActive,
-              },
-            ];
-          }),
+        variants: projectionVariants,
       };
     },
     quotePosLines(input) {
@@ -424,6 +427,38 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
       };
     },
   };
+}
+
+function createPosProjectionVersion(
+  input: CatalogPosProjectionRequest,
+  variants: readonly CatalogPosVariantDTO[],
+): string {
+  const content = JSON.stringify({
+    branchId: input.branchId,
+    warehouseId: input.warehouseId,
+    variants: [...variants]
+      .sort((left, right) => left.variantId.localeCompare(right.variantId) || left.unitVersionId.localeCompare(right.unitVersionId))
+      .map((variant) => [
+        variant.variantId,
+        variant.productId,
+        variant.sku,
+        variant.displayName,
+        variant.barcode,
+        variant.unitVersionId,
+        variant.unitName,
+        variant.unitPriceVnd,
+        variant.saleEnabled,
+        variant.inventoryMode,
+        variant.lotTracking,
+        variant.serialTracking,
+        variant.isActive,
+      ]),
+  });
+  let hash = 2_166_136_261;
+  for (let index = 0; index < content.length; index += 1) {
+    hash = Math.imul(hash ^ content.charCodeAt(index), 16_777_619);
+  }
+  return `catalog-pos-${(hash >>> 0).toString(36)}`;
 }
 
 function matchesProductQuery(item: CatalogProductListItemDTO, query: string): boolean {

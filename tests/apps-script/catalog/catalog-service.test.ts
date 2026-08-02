@@ -73,6 +73,28 @@ describe('CatalogService', () => {
     ).toMatchObject({ ok: false, error: { lineId: 'line-quote-inactive', reason: 'PRODUCT_INACTIVE' } });
   });
 
+  it('changes POS projectionVersion when price changes without changing the visible variant count', () => {
+    const repository = createInMemoryCatalogRepository();
+    const service = createService(repository);
+    const created = service.createProduct({
+      productCode: 'SP-PROJECTION-VERSION',
+      name: 'Hàng đổi giá',
+      productType: 'Stocked',
+      sku: 'PROJECTION-VERSION',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    const before = service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' });
+
+    repository.saveVariant({ ...created.data.defaultVariant, unitPriceVnd: 43000 });
+    const after = service.getPosProjection({ branchId: 'branch-default', warehouseId: 'warehouse-default' });
+
+    expect(after.variants).toHaveLength(before.variants.length);
+    expect(after.variants[0]?.unitPriceVnd).toBe(43000);
+    expect(after.projectionVersion).not.toBe(before.projectionVersion);
+  });
+
   it('tạo product đơn giản với Default Variant là đơn vị giao dịch', () => {
     const service = createService();
 
