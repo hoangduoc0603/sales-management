@@ -15,6 +15,7 @@ import { TextAvatar } from '../../components/ui/text-avatar';
 import type { ApiClient } from '../../lib/api/client';
 import {
   loadPosCatalogProjection,
+  prewarmPosCheckoutContext,
   readCachedPosCatalogProjectionEntry,
   shouldRefreshCachedPosCatalogProjection,
   writeCachedPosCatalogProjection,
@@ -22,6 +23,7 @@ import {
 import type { CatalogPosProjectionResponse } from './catalog-cache/pos-catalog-cache';
 import { createPosCatalogCache } from './catalog-cache/pos-catalog-cache';
 import type { PosCartLine } from './pos-cart-state';
+import { printReceiptSnapshot, type ReceiptPrintContext } from './pos-receipt-print';
 
 type PosTheme = 'light' | 'dark';
 type PosShellMode = 'standalone' | 'embedded';
@@ -264,6 +266,41 @@ export function PosCheckoutShell({
   const isStandaloneShell = shellMode === 'standalone';
   const MainTag = isStandaloneShell ? 'main' : 'div';
   const catalogCacheNamespace = `${activeActor.tenantId}:${activeActor.userId}:v${activeActor.authVersion}`;
+  const receiptPrintContext = useMemo<ReceiptPrintContext>(
+    () => ({
+      branchName: branch?.name,
+      warehouseName: warehouse?.name,
+      cashierName: activeActor.displayName,
+    }),
+    [activeActor.displayName, branch?.name, warehouse?.name],
+  );
+  const prewarmRequestKeyRef = useRef<string | undefined>(undefined);
+  const prewarmCheckoutContext = useCallback(
+    (sourceProjection: CatalogPosProjectionResponse) => {
+      if (apiClient === undefined || sessionToken === undefined) return;
+      const variantIds = sourceProjection.variants
+        .filter((variant) => variant.inventoryMode === 'Tracked')
+        .slice(0, 6)
+        .map((variant) => variant.variantId);
+      const requestKey = `${selectedBranchId}:${selectedWarehouseId}:${activeActor.userId}:shift-local-open:${variantIds.join(',')}`;
+      if (prewarmRequestKeyRef.current === requestKey) return;
+      prewarmRequestKeyRef.current = requestKey;
+
+      void prewarmPosCheckoutContext({
+        apiClient,
+        requestId: `pos-prewarm-${Date.now()}`,
+        sessionToken,
+        branchId: selectedBranchId,
+        warehouseId: selectedWarehouseId,
+        cashierId: activeActor.userId,
+        shiftId: 'shift-local-open',
+        variantIds,
+      }).catch(() => {
+        prewarmRequestKeyRef.current = undefined;
+      });
+    },
+    [activeActor.userId, apiClient, selectedBranchId, selectedWarehouseId, sessionToken],
+  );
 
   useEffect(() => {
     if (apiClient === undefined || sessionToken === undefined) {
@@ -281,6 +318,7 @@ export function PosCheckoutShell({
     if (cachedProjection !== undefined) {
       setActiveProjection(cachedProjection);
       setMessage(`Dữ liệu hàng hóa đã sẵn sàng từ cache phiên bản ${cachedProjection.projectionVersion}.`);
+      prewarmCheckoutContext(cachedProjection);
     }
 
     if (
@@ -310,6 +348,7 @@ export function PosCheckoutShell({
           projection: nextProjection,
           warehouseId: selectedWarehouseId,
         });
+        prewarmCheckoutContext(nextProjection);
         if (isActive) {
           setActiveProjection(nextProjection);
           setMessage(`Dữ liệu hàng hóa đã cập nhật phiên bản ${nextProjection.projectionVersion}.`);
@@ -327,7 +366,15 @@ export function PosCheckoutShell({
     return () => {
       isActive = false;
     };
-  }, [apiClient, catalogCacheNamespace, projection, selectedBranchId, selectedWarehouseId, sessionToken]);
+  }, [
+    apiClient,
+    catalogCacheNamespace,
+    prewarmCheckoutContext,
+    projection,
+    selectedBranchId,
+    selectedWarehouseId,
+    sessionToken,
+  ]);
 
   useEffect(() => {
     pendingCompleteCommandRef.current = undefined;
@@ -829,13 +876,14 @@ export function PosCheckoutShell({
                 </button>
               ))}
             </div>
-            <RecoveryStateContent activeState={activeState} receipt={receipt} />
+            <RecoveryStateContent activeState={activeState} printContext={receiptPrintContext} receipt={receipt} />
           </section>
         ) : (
           <PosContextDrawer
             activeState={activeState}
             message={message}
             onClose={() => setActiveStateId('empty')}
+            printContext={receiptPrintContext}
             receipt={receipt}
           />
         )}
@@ -846,11 +894,18 @@ export function PosCheckoutShell({
 
 function RecoveryStateContent({
   activeState,
+  printContext,
   receipt,
 }: {
   activeState: (typeof recoveryStates)[number];
+  printContext?: ReceiptPrintContext;
   receipt?: SalesPosCompleteResponse['receipt'];
 }) {
+  const handlePrintReceipt = useCallback(() => {
+    if (receipt === undefined) return;
+    printReceiptSnapshot(receipt, printContext);
+  }, [printContext, receipt]);
+
   return (
     <div className={`cn-state-content cn-state-${activeState.tone}`} role="tabpanel">
       <span className="cn-state-symbol">
@@ -868,11 +923,11 @@ function RecoveryStateContent({
       </div>
       {activeState.id === 'success' && receipt ? (
         <div className="cn-receipt-actions">
-          <Button variant="primary">
+          <Button onClick={handlePrintReceipt} variant="primary">
             <AppIcon name="print" />
             In biên lai
           </Button>
-          <Button variant="secondary">In lại</Button>
+          <Button onClick={handlePrintReceipt} variant="secondary">In lại</Button>
           <span className="cn-pos-chip info">Mẫu {receipt.receiptFormat}</span>
         </div>
       ) : (
@@ -913,11 +968,13 @@ function PosContextDrawer({
   activeState,
   message,
   onClose,
+  printContext,
   receipt,
 }: {
   activeState: (typeof recoveryStates)[number];
   message: string;
   onClose(): void;
+  printContext?: ReceiptPrintContext;
   receipt?: SalesPosCompleteResponse['receipt'];
 }) {
   const isOpen = activeState.id !== 'empty';
@@ -940,7 +997,7 @@ function PosContextDrawer({
           </IconButton>
         </header>
         <div className="cn-pos-context-drawer-body">
-          <RecoveryStateContent activeState={activeState} receipt={receipt} />
+          <RecoveryStateContent activeState={activeState} printContext={printContext} receipt={receipt} />
           <div className="cn-pos-context-drawer-note">{message}</div>
           <section className="cn-pos-context-reference" aria-label="Các trạng thái phục hồi POS">
             <h3>Dữ liệu bán đã thay đổi</h3>

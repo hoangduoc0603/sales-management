@@ -5,6 +5,7 @@ import type {
   SalesExchangeCreateRequest,
   SalesOrderDetailRequest,
   SalesOrderListRequest,
+  SalesPosPrewarmCheckoutContextRequest,
   SalesReturnCreateRequest,
   SalesReturnResolveRequest,
   SalesDraftCancelRequest,
@@ -135,6 +136,22 @@ export const salesPosCompleteRequestSchema = commandBaseSchema.extend({
 
 export function parseSalesPosCompleteRequest(value: unknown): SalesPosCompleteRequest {
   return salesPosCompleteRequestSchema.parse(value);
+}
+
+export const salesPosPrewarmCheckoutContextRequestSchema = z
+  .object({
+    branchId: nonEmptyTrimmed,
+    warehouseId: nonEmptyTrimmed,
+    cashierId: nonEmptyTrimmed,
+    shiftId: optionalNonEmptyTrimmed,
+    variantIds: z.array(nonEmptyTrimmed).max(20).default([]),
+  })
+  .strict();
+
+export function parseSalesPosPrewarmCheckoutContextRequest(
+  value: unknown,
+): SalesPosPrewarmCheckoutContextRequest {
+  return salesPosPrewarmCheckoutContextRequestSchema.parse(value);
 }
 
 export const salesOrderListRequestSchema = z

@@ -27,6 +27,9 @@ export function verifyArtifact(artifactDirectory) {
   if (hasExternalAssetReference(html)) {
     throw new Error('index.html không được chứa asset URL ngoài.');
   }
+  if (hasRawReceiptPrintDocumentInInlineBundle(html)) {
+    throw new Error('index.html không được chứa raw receipt print HTML document trong inline bundle.');
+  }
 
   const code = readFileSync(path.join(artifactDirectory, 'code.js'), 'utf8');
   if (/(^|\n)\s*(import|export)\s/m.test(code)) {
@@ -61,6 +64,11 @@ export function verifyArtifact(artifactDirectory) {
 
 function hasExternalAssetReference(html) {
   return /<script\b[^>]*\bsrc\s*=/i.test(html) || /<link\b[^>]*\bhref\s*=/i.test(html) || /(?:\/|\.\/)?assets\//i.test(html);
+}
+
+function hasRawReceiptPrintDocumentInInlineBundle(html) {
+  const doctypeCount = html.match(/<!doctype html>/gi)?.length ?? 0;
+  return doctypeCount > 1 || /<main class=(?:"|`|\$\{)[^>]*receipt/i.test(html);
 }
 
 const isDirectExecution = process.argv[1] === fileURLToPath(import.meta.url);

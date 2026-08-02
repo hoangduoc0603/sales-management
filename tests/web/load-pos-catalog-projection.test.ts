@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ApiClient } from '../../web/src/lib/api/client';
 import {
   loadPosCatalogProjection,
+  prewarmPosCheckoutContext,
   readCachedPosCatalogProjection,
   readCachedPosCatalogProjectionEntry,
   shouldRefreshCachedPosCatalogProjection,
@@ -59,6 +60,60 @@ describe('loadPosCatalogProjection', () => {
         },
       },
     ]);
+  });
+
+  it('gọi prewarm checkout context ở nền với payload nhỏ và không trả business data', async () => {
+    const calls: unknown[] = [];
+    const client: ApiClient = {
+      async invoke(request) {
+        calls.push(request);
+
+        return {
+          ok: true,
+          data: {
+            warmed: { shift: true, balances: 2 },
+            generatedAt: '2026-08-02T08:00:00.000Z',
+          },
+          meta: {
+            requestId: request.requestId,
+            operation: request.operation,
+            serverTime: '2026-08-02T08:00:00.000Z',
+            durationMs: 0,
+            stages: {},
+            io: {},
+          },
+        };
+      },
+    };
+
+    await expect(
+      prewarmPosCheckoutContext({
+        apiClient: client,
+        requestId: 'req-pos-prewarm',
+        sessionToken: 'session-token',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        shiftId: 'shift-local-open',
+        variantIds: ['variant-1', 'variant-2', 'variant-1'],
+      }),
+    ).resolves.toEqual({ warmed: { shift: true, balances: 2 }, generatedAt: '2026-08-02T08:00:00.000Z' });
+
+    expect(calls).toEqual([
+      {
+        operation: 'sales.pos.prewarmCheckoutContext',
+        requestId: 'req-pos-prewarm',
+        sessionToken: 'session-token',
+        payload: {
+          branchId: 'branch-default',
+          warehouseId: 'warehouse-default',
+          cashierId: 'user-admin',
+          shiftId: 'shift-local-open',
+          variantIds: ['variant-1', 'variant-2'],
+        },
+      },
+    ]);
+    expect(JSON.stringify(calls)).not.toContain('admin123');
   });
 
   it('lưu và đọc browser cache theo namespace + Branch/Warehouse mà không lưu session token', () => {

@@ -46,6 +46,26 @@ export interface SheetGateway {
 
 export interface GoogleSheetsAdvancedService {
   Spreadsheets: {
+    batchUpdate?(
+      resource: {
+        requests: Array<{
+          appendCells: {
+            sheetId: number;
+            rows: Array<{
+              values: Array<{
+                userEnteredValue: {
+                  boolValue?: boolean;
+                  numberValue?: number;
+                  stringValue?: string;
+                };
+              }>;
+            }>;
+            fields: 'userEnteredValue';
+          };
+        }>;
+      },
+      spreadsheetId: string,
+    ): unknown;
     Values: {
       batchUpdate(
         resource: {
@@ -67,6 +87,12 @@ interface PendingAppendGroup {
   sheetName: string;
   startRow: number;
   columnCount: number;
+  rows: unknown[][];
+}
+
+interface PendingAppendCellsGroup {
+  spreadsheetId: string;
+  sheetId: number;
   rows: unknown[][];
 }
 
@@ -97,6 +123,7 @@ interface SheetLike {
     };
   };
   appendRow(row: unknown[]): void;
+  getSheetId?(): number;
 }
 
 export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway {
@@ -105,14 +132,17 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
   const tableRecordCache = new Map<string, Record<string, unknown>[]>();
   const findRecordCache = new Map<string, Record<string, unknown>[]>();
   const pendingAppends = new Map<string, PendingAppendGroup>();
+  const pendingAppendCells = new Map<string, PendingAppendCellsGroup>();
   const appendSheetStateCache = new Map<string, AppendSheetState>();
 
   const flushPendingAppends = () => {
-    if (pendingAppends.size === 0) return;
+    if (pendingAppends.size === 0 && pendingAppendCells.size === 0) return;
 
     const startedAt = Date.now();
     const groups = [...pendingAppends.values()];
+    const appendCellsGroups = [...pendingAppendCells.values()];
     pendingAppends.clear();
+    pendingAppendCells.clear();
 
     const groupsBySpreadsheet = new Map<string, PendingAppendGroup[]>();
     for (const group of groups) {
@@ -139,6 +169,36 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         spreadsheetGroups.reduce((total, group) => total + group.rows.length, 0),
       );
       recordIo('sheetBatchAppendFlushRanges', spreadsheetGroups.length);
+    }
+
+    const appendCellsGroupsBySpreadsheet = new Map<string, PendingAppendCellsGroup[]>();
+    for (const group of appendCellsGroups) {
+      const existing = appendCellsGroupsBySpreadsheet.get(group.spreadsheetId) ?? [];
+      existing.push(group);
+      appendCellsGroupsBySpreadsheet.set(group.spreadsheetId, existing);
+    }
+
+    for (const [spreadsheetId, spreadsheetGroups] of appendCellsGroupsBySpreadsheet) {
+      deps.sheetsAdvancedService?.Spreadsheets.batchUpdate?.(
+        {
+          requests: spreadsheetGroups.map((group) => ({
+            appendCells: {
+              sheetId: group.sheetId,
+              rows: group.rows.map((row) => ({
+                values: row.map((cell) => ({ userEnteredValue: toUserEnteredValue(cell) })),
+              })),
+              fields: 'userEnteredValue',
+            },
+          })),
+        },
+        spreadsheetId,
+      );
+      recordIo('sheetAppendCellsFlushCount');
+      recordIo(
+        'sheetAppendCellsFlushRows',
+        spreadsheetGroups.reduce((total, group) => total + group.rows.length, 0),
+      );
+      recordIo('sheetAppendCellsFlushRanges', spreadsheetGroups.length);
     }
 
     recordStage('sheet.flushAppendsMs', Date.now() - startedAt);
@@ -298,60 +358,83 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
 
       const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
       const sheetKey = `${location.spreadsheetId}:${location.sheetName}`;
-      const appendState = ensureHeaders(sheet, request.table, created, appendSheetStateCache, sheetKey);
 
       const serializedRows = request.rows.map((row) =>
         request.table.headers.map((column) => serializeCell(row[column.name], column)),
       );
       recordIo('sheetAppendCount');
       recordIo('sheetAppendRows', serializedRows.length);
-      if (
+      const appendCellsSheetId = sheet.getSheetId?.();
+      const canUseAppendCellsFastPath =
         serializedRows.length > 0 &&
-        sheet.getLastRow !== undefined &&
+        !created &&
         deps.deferAppends === true &&
-        deps.sheetsAdvancedService !== undefined
-      ) {
-        const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
-        const existingGroup = pendingAppends.get(sheetKey);
+        deps.sheetsAdvancedService?.Spreadsheets.batchUpdate !== undefined &&
+        appendCellsSheetId !== undefined;
+
+      if (canUseAppendCellsFastPath) {
+        const existingGroup = pendingAppendCells.get(sheetKey);
         if (existingGroup === undefined) {
-          pendingAppends.set(sheetKey, {
+          pendingAppendCells.set(sheetKey, {
             spreadsheetId: location.spreadsheetId,
-            sheetName: location.sheetName,
-            startRow: appendState.lastRow + 1,
-            columnCount: request.table.headers.length,
+            sheetId: appendCellsSheetId,
             rows: serializedRows,
           });
         } else {
           existingGroup.rows.push(...serializedRows);
         }
-        appendState.lastRow += serializedRows.length;
-        recordIo('sheetAppendDeferredCount');
-        recordIo('sheetAppendDeferredRows', serializedRows.length);
-      } else if (
-        serializedRows.length > 0 &&
-        sheet.getLastRow !== undefined &&
-        sheet.getRange !== undefined
-      ) {
-        const startRow = appendState.lastRow + 1;
-        const targetRange = sheet.getRange(
-          startRow,
-          1,
-          serializedRows.length,
-          request.table.headers.length,
-        );
-        if (targetRange.setValues !== undefined) {
-          targetRange.setValues(serializedRows);
+        recordIo('sheetAppendCellsDeferredCount');
+        recordIo('sheetAppendCellsDeferredRows', serializedRows.length);
+      } else {
+        const appendState = ensureHeaders(sheet, request.table, created, appendSheetStateCache, sheetKey);
+        if (
+          serializedRows.length > 0 &&
+          sheet.getLastRow !== undefined &&
+          deps.deferAppends === true &&
+          deps.sheetsAdvancedService !== undefined
+        ) {
+          const location = deps.tableLocator({ table: request.table, partitionKey: request.partitionKey });
+          const existingGroup = pendingAppends.get(sheetKey);
+          if (existingGroup === undefined) {
+            pendingAppends.set(sheetKey, {
+              spreadsheetId: location.spreadsheetId,
+              sheetName: location.sheetName,
+              startRow: appendState.lastRow + 1,
+              columnCount: request.table.headers.length,
+              rows: serializedRows,
+            });
+          } else {
+            existingGroup.rows.push(...serializedRows);
+          }
+          appendState.lastRow += serializedRows.length;
+          recordIo('sheetAppendDeferredCount');
+          recordIo('sheetAppendDeferredRows', serializedRows.length);
+        } else if (
+          serializedRows.length > 0 &&
+          sheet.getLastRow !== undefined &&
+          sheet.getRange !== undefined
+        ) {
+          const startRow = appendState.lastRow + 1;
+          const targetRange = sheet.getRange(
+            startRow,
+            1,
+            serializedRows.length,
+            request.table.headers.length,
+          );
+          if (targetRange.setValues !== undefined) {
+            targetRange.setValues(serializedRows);
+          } else {
+            for (const row of serializedRows) {
+              sheet.appendRow(row);
+            }
+          }
+          appendState.lastRow += serializedRows.length;
         } else {
           for (const row of serializedRows) {
             sheet.appendRow(row);
           }
+          appendState.lastRow += serializedRows.length;
         }
-        appendState.lastRow += serializedRows.length;
-      } else {
-        for (const row of serializedRows) {
-          sheet.appendRow(row);
-        }
-        appendState.lastRow += serializedRows.length;
       }
 
       const tableKey = getTableCacheKey(deps, request.table, request.partitionKey);
@@ -556,6 +639,16 @@ export function serializeCell(value: unknown, column: ColumnDefinitionDTO): unkn
   if (column.type === 'boolean') return Boolean(value);
   if (column.type === 'integer') return Number(value);
   return String(value);
+}
+
+function toUserEnteredValue(value: unknown): {
+  boolValue?: boolean;
+  numberValue?: number;
+  stringValue?: string;
+} {
+  if (typeof value === 'boolean') return { boolValue: value };
+  if (typeof value === 'number' && Number.isFinite(value)) return { numberValue: value };
+  return { stringValue: String(value ?? '') };
 }
 
 export function deserializeCell(value: unknown, column: ColumnDefinitionDTO): unknown {

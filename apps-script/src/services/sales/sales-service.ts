@@ -38,6 +38,8 @@ import type {
   SalesExchangeCreateResponse,
   SalesPosCompleteRequest,
   SalesPosCompleteResponse,
+  SalesPosPrewarmCheckoutContextRequest,
+  SalesPosPrewarmCheckoutContextResponse,
   SalesWarrantyOpenRequest,
   SalesWarrantyResponse,
   SalesWarrantyTransitionRequest,
@@ -62,6 +64,9 @@ export interface SalesService {
   saveDraft(input: SalesDraftSaveRequest): SalesServiceResult<SalesDraftSaveResponse>;
   listDrafts(input: SalesDraftOpenRequest): SalesDraftListResponse;
   cancelDraft(input: SalesDraftCancelRequest): SalesServiceResult<SalesDraftCancelResponse>;
+  prewarmPosCheckoutContext(
+    input: SalesPosPrewarmCheckoutContextRequest,
+  ): SalesServiceResult<SalesPosPrewarmCheckoutContextResponse>;
   completePosSale(input: SalesPosCompleteRequest): SalesServiceResult<SalesPosCompleteResponse>;
   listOrders(input: SalesOrderListRequest): SalesOrderListResponse;
   getOrder(input: SalesOrderDetailRequest): SalesOrderDetailResponse | undefined;
@@ -136,6 +141,44 @@ export function createSalesService(deps: SalesServiceDependencies): SalesService
         },
         { actorId: 'system', action: 'sales.draft.cancel' },
       );
+    },
+    prewarmPosCheckoutContext(input) {
+      const measure = <T>(stage: string, operation: () => T): T => {
+        const startedAt = Date.now();
+        try {
+          return operation();
+        } finally {
+          recordStage(stage, Date.now() - startedAt);
+        }
+      };
+      const shift = measure('sales.pos.prewarmShiftMs', () =>
+        input.shiftId === undefined
+          ? undefined
+          : deps.financeRepository.getShift(input.shiftId),
+      );
+      const shiftMatchesScope =
+        shift !== undefined &&
+        shift.status === 'Open' &&
+        shift.branchId === input.branchId &&
+        shift.warehouseId === input.warehouseId &&
+        shift.cashierId === input.cashierId;
+      const balances = measure('sales.pos.prewarmBalancesMs', () =>
+        deps.inventoryService.warmBalances({
+          warehouseId: input.warehouseId,
+          variantIds: input.variantIds,
+        }),
+      );
+
+      return {
+        ok: true,
+        data: {
+          warmed: {
+            shift: shiftMatchesScope,
+            balances,
+          },
+          generatedAt: deps.now().toISOString(),
+        },
+      };
     },
     completePosSale(input) {
       return deps.commandCoordinator.run(

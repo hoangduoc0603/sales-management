@@ -80,6 +80,7 @@ export interface InventoryService {
   submitStocktake(input: InventoryStocktakeSubmitRequest): InventoryServiceResult<InventoryStocktakeResponse>;
   approveStocktake(input: InventoryStocktakeApproveRequest): InventoryServiceResult<InventoryStocktakeResponse>;
   checkAvailability(input: InventoryAvailabilityCheckInput): readonly InventoryAvailabilityConflict[];
+  warmBalances(input: { warehouseId: string; variantIds: readonly string[] }): number;
   getAverageUnitCostVnd(warehouseId: string, variantId: string): number;
   getBalanceSummary(input: InventoryBalanceSummaryRequest): InventoryBalanceSummaryResponse;
 }
@@ -128,9 +129,14 @@ export function createInventoryService(deps: InventoryServiceDependencies): Inve
         requiredByVariantId.set(line.variantId, current);
       }
 
+      const balancesByVariantId = new Map(
+        deps.repository
+          .getBalances(input.warehouseId, [...requiredByVariantId.keys()])
+          .map((balance) => [balance.variantId, balance.availableMilli]),
+      );
       const conflicts: InventoryAvailabilityConflict[] = [];
       for (const [variantId, required] of requiredByVariantId.entries()) {
-        const availableMilli = deps.repository.getBalance(input.warehouseId, variantId)?.availableMilli ?? 0;
+        const availableMilli = balancesByVariantId.get(variantId) ?? 0;
         if (availableMilli < required.quantityMilli) {
           conflicts.push({
             variantId,
@@ -141,6 +147,11 @@ export function createInventoryService(deps: InventoryServiceDependencies): Inve
         }
       }
       return conflicts;
+    },
+    warmBalances(input) {
+      const variantIds = [...new Set(input.variantIds)].slice(0, 20);
+      deps.repository.getBalances(input.warehouseId, variantIds);
+      return variantIds.length;
     },
     receive(input) {
       if (input.sourceDocument.sourceType === 'OpeningBalance' && hasMovementHistory(deps, input.warehouseId, input.variantId)) {

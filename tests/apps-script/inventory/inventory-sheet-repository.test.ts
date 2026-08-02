@@ -10,6 +10,7 @@ import type {
   StockTransferLineDTO,
 } from '../../../shared/contracts/inventory/inventory';
 import type { TableDefinitionDTO } from '../../../shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../../apps-script/src/infrastructure/platform/cache';
 import { createSheetInventoryRepository } from '../../../apps-script/src/repositories/inventory/inventory-repository';
 import { createPlatformTableDefinitions } from '../../../apps-script/src/services/platform/registry/table-registry';
 
@@ -130,6 +131,83 @@ describe('Sheet-backed InventoryRepository', () => {
       ['InventoryBalance', 'balanceId', 'balance-warehouse-1-variant-1'],
       ['InventoryMovement', 'id', 'movement-2'],
     ]);
+  });
+
+  it('caches inventory balance by balanceId for hot POS checkout reads and refreshes cache on projection write', () => {
+    const cacheStore = new FakePlatformCacheStore();
+    const gateway = new FakeSheetGateway({}, { supportFindRowsByColumn: true });
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+      cacheStore,
+    });
+
+    repository.applyProjection(balanceFixture);
+    gateway.findRequests = [];
+    gateway.readCount = 0;
+
+    const nextRequestRepository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+      cacheStore,
+    });
+
+    expect(nextRequestRepository.getBalance('warehouse-1', 'variant-1')).toEqual(balanceFixture);
+    expect(gateway.findRequests).toEqual([]);
+    expect(gateway.readCount).toBe(0);
+    expect(cacheStore.ttls()).toEqual([300]);
+  });
+
+  it('bulk-loads multiple balances through one warehouse lookup and reuses balance cache on hot paths', () => {
+    const cacheStore = new FakePlatformCacheStore();
+    const gateway = new FakeSheetGateway(
+      {
+        InventoryBalance: [
+          { ...balanceRowFixture, id: 'balance-warehouse-1-variant-1:v1', recordVersion: 1, availableMilli: 1000 },
+          {
+            ...balanceRowFixture,
+            id: 'balance-warehouse-1-variant-2:v1',
+            recordVersion: 1,
+            balanceId: 'balance-warehouse-1-variant-2',
+            variantId: 'variant-2',
+            availableMilli: 2000,
+          },
+          {
+            ...balanceRowFixture,
+            id: 'balance-warehouse-2-variant-3:v1',
+            recordVersion: 1,
+            balanceId: 'balance-warehouse-2-variant-3',
+            warehouseId: 'warehouse-2',
+            variantId: 'variant-3',
+            availableMilli: 3000,
+          },
+        ],
+      },
+      { supportFindRowsByColumn: true },
+    );
+    const repository = createSheetInventoryRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+      transactionPartitionKey: 'FY2026-P01',
+      cacheStore,
+    });
+
+    expect(repository.getBalances('warehouse-1', ['variant-1', 'variant-2', 'variant-1'])).toEqual([
+      expect.objectContaining({ variantId: 'variant-1', availableMilli: 1000 }),
+      expect.objectContaining({ variantId: 'variant-2', availableMilli: 2000 }),
+    ]);
+    expect(gateway.findRequests.map((request) => [request.tableName, request.columnName, request.value])).toEqual([
+      ['InventoryBalance', 'warehouseId', 'warehouse-1'],
+    ]);
+
+    gateway.findRequests = [];
+    expect(repository.getBalances('warehouse-1', ['variant-2', 'variant-1'])).toEqual([
+      expect.objectContaining({ variantId: 'variant-2', availableMilli: 2000 }),
+      expect.objectContaining({ variantId: 'variant-1', availableMilli: 1000 }),
+    ]);
+    expect(gateway.findRequests).toEqual([]);
   });
 
   it('appends service-generated new movements without duplicate preflight lookup', () => {
@@ -392,6 +470,26 @@ class FakeSheetGateway {
       this.rowsByTable.set(tableName, rows);
     }
     return rows;
+  }
+}
+
+class FakePlatformCacheStore implements PlatformCacheStore {
+  private readonly entries = new Map<string, { value: string; ttl: number }>();
+
+  get(key: string): string | undefined {
+    return this.entries.get(key)?.value;
+  }
+
+  put(key: string, value: string, expirationInSeconds: number): void {
+    this.entries.set(key, { value, ttl: expirationInSeconds });
+  }
+
+  remove(key: string): void {
+    this.entries.delete(key);
+  }
+
+  ttls(): number[] {
+    return [...this.entries.values()].map((entry) => entry.ttl);
   }
 }
 

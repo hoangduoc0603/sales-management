@@ -83,6 +83,7 @@ import type {
   SalesOrderListRequest,
   SalesPosCompleteRequest,
   SalesPosCompleteResponse,
+  SalesPosPrewarmCheckoutContextRequest,
   SalesReturnCreateRequest,
   SalesReturnResolveRequest,
   SalesWarrantyOpenRequest,
@@ -182,6 +183,7 @@ import {
   parseSalesOrderDetailRequest,
   parseSalesOrderListRequest,
   parseSalesPosCompleteRequest,
+  parseSalesPosPrewarmCheckoutContextRequest,
   parseSalesReturnCreateRequest,
   parseSalesReturnResolveRequest,
   parseSalesWarrantyOpenRequest,
@@ -237,6 +239,7 @@ import { ensureCurrentDashboardBaselineProjections } from '../services/reporting
 import { createReportingPartitionCoverageResolver } from '../services/reporting/reporting-partition-coverage';
 import { createOperationsService } from '../services/operations/operations-service';
 import type { AttachmentStorage } from '../services/operations/operations-service';
+import type { PlatformCacheStore } from '../infrastructure/platform/cache';
 import { createSalesService } from '../services/sales/sales-service';
 import type { ProductionRepositories } from './create-production-repositories';
 
@@ -254,6 +257,7 @@ export interface ApiCompositionDependencies {
   seedDemoReadModels?: boolean;
   afterInvoke?: () => void;
   attachmentStorage?: AttachmentStorage;
+  platformCacheStore?: PlatformCacheStore;
 }
 
 export function createApiComposition(clock: Clock) {
@@ -306,6 +310,7 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   );
   const administrationService = createAdministrationService({
     repository: administrationRepository,
+    cacheStore: input.platformCacheStore,
   });
   const catalogRepository = input.repositories?.catalogRepository ?? createInMemoryCatalogRepository();
   const customerRepository = input.repositories?.customerRepository ?? createInMemoryCustomerRepository();
@@ -831,6 +836,13 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       requiredAction: 'sales.draft.manage',
       parsePayload: parseSalesDraftCancelRequest,
       handler: (input) => salesService.cancelDraft(input as SalesDraftCancelRequest),
+    },
+    {
+      name: 'sales.pos.prewarmCheckoutContext',
+      kind: 'query',
+      requiredAction: 'sales.pos.complete',
+      parsePayload: parseSalesPosPrewarmCheckoutContextRequest,
+      handler: (input) => salesService.prewarmPosCheckoutContext(input as SalesPosPrewarmCheckoutContextRequest),
     },
     {
       name: 'sales.pos.complete',

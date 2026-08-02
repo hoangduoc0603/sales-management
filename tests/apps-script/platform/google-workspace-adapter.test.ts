@@ -347,6 +347,72 @@ describe('Google Workspace adapter seams', () => {
     });
   });
 
+  it('uses Advanced Sheets appendCells fast path without reading last row when the target sheet already exists', () => {
+    const sheet = new FakeSheet('UserAccount', [['id', 'status', 'detailsJson']], {
+      sheetId: 987,
+      supportsRangeLookup: true,
+    });
+    const spreadsheetApp = new FakeSpreadsheetApp({
+      'spreadsheet-core': new FakeSpreadsheet({ UserAccount: sheet }),
+    });
+    const sheetsAdvancedService = new FakeSheetsAdvancedService({ supportAppendCells: true });
+    const gateway = createSheetGateway({
+      spreadsheetApp,
+      sheetsAdvancedService,
+      deferAppends: true,
+      tableLocator: () => ({
+        spreadsheetId: 'spreadsheet-core',
+        sheetName: 'UserAccount',
+      }),
+    });
+
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-2', status: 'Active', detailsJson: { displayName: 'Admin' } }],
+    });
+    gateway.appendRows({
+      table: userAccountTable,
+      rows: [{ id: 'user-3', status: 'Disabled', detailsJson: { displayName: 'Disabled' } }],
+    });
+
+    expect(sheet.lastRowReadCount).toBe(0);
+    expect(sheet.appendedRows).toEqual([]);
+
+    gateway.flushPendingAppends?.();
+
+    expect(sheetsAdvancedService.spreadsheetBatchUpdates).toEqual([
+      {
+        spreadsheetId: 'spreadsheet-core',
+        resource: {
+          requests: [
+            {
+              appendCells: {
+                sheetId: 987,
+                rows: [
+                  {
+                    values: [
+                      { userEnteredValue: { stringValue: 'user-2' } },
+                      { userEnteredValue: { stringValue: 'Active' } },
+                      { userEnteredValue: { stringValue: '{"displayName":"Admin"}' } },
+                    ],
+                  },
+                  {
+                    values: [
+                      { userEnteredValue: { stringValue: 'user-3' } },
+                      { userEnteredValue: { stringValue: 'Disabled' } },
+                      { userEnteredValue: { stringValue: '{"displayName":"Disabled"}' } },
+                    ],
+                  },
+                ],
+                fields: 'userEnteredValue',
+              },
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('creates private tenant Drive folders without public URLs', () => {
     const driveApp = new FakeDriveApp();
     const gateway = createDriveGateway({
@@ -524,8 +590,12 @@ class FakeSheet {
   constructor(
     readonly name: string,
     private readonly values: unknown[][],
-    private readonly options: { supportsRangeLookup?: boolean } = { supportsRangeLookup: true },
+    private readonly options: { sheetId?: number; supportsRangeLookup?: boolean } = { supportsRangeLookup: true },
   ) {}
+
+  getSheetId(): number {
+    return this.options.sheetId ?? 123;
+  }
 
   getDataRange() {
     return {
@@ -593,14 +663,28 @@ class FakeSheet {
 
 class FakeSheetsAdvancedService {
   readonly batchUpdates: Array<{ resource: unknown; spreadsheetId: string }> = [];
-
-  readonly Spreadsheets = {
-    Values: {
-      batchUpdate: (resource: unknown, spreadsheetId: string) => {
-        this.batchUpdates.push({ resource, spreadsheetId });
-      },
-    },
+  readonly spreadsheetBatchUpdates: Array<{ resource: unknown; spreadsheetId: string }> = [];
+  readonly Spreadsheets: {
+    batchUpdate?: (resource: unknown, spreadsheetId: string) => void;
+    Values: { batchUpdate: (resource: unknown, spreadsheetId: string) => void };
   };
+
+  constructor(options: { supportAppendCells?: boolean } = {}) {
+    this.Spreadsheets = {
+      ...(options.supportAppendCells === true
+        ? {
+            batchUpdate: (resource: unknown, spreadsheetId: string) => {
+              this.spreadsheetBatchUpdates.push({ resource, spreadsheetId });
+            },
+          }
+        : {}),
+      Values: {
+        batchUpdate: (resource: unknown, spreadsheetId: string) => {
+          this.batchUpdates.push({ resource, spreadsheetId });
+        },
+      },
+    };
+  }
 }
 
 class FakeDriveApp {

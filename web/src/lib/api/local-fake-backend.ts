@@ -93,6 +93,7 @@ import type {
   SalesOrderListResponse,
   SalesPosCompleteRequest,
   SalesPosCompleteResponse,
+  SalesPosPrewarmCheckoutContextResponse,
 } from '@shared/contracts/sales/sales';
 import type { CommandStatusResponse } from '@shared/contracts/platform/command';
 import type { TableDefinitionDTO, TableDefinitionsResponse } from '@shared/contracts/platform/registry';
@@ -167,6 +168,7 @@ import {
   parseSalesOrderDetailRequest,
   parseSalesOrderListRequest,
   parseSalesPosCompleteRequest,
+  parseSalesPosPrewarmCheckoutContextRequest,
 } from '@shared/schemas/sales/sales';
 import { createApiClient, type ApiClient, type ApiInvoker } from './client';
 
@@ -1150,6 +1152,29 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             user,
             () => listLocalSalesDrafts(apiRequest.payload, salesDrafts),
           );
+        case 'sales.pos.prewarmCheckoutContext': {
+          let prewarmInput;
+          try {
+            prewarmInput = parseSalesPosPrewarmCheckoutContextRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, SalesPosPrewarmCheckoutContextResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () => ({
+              warmed: {
+                shift: true,
+                balances: new Set(prewarmInput.variantIds).size,
+              },
+              generatedAt: now().toISOString(),
+            }),
+          );
+        }
         case 'sales.pos.complete':
           try {
             parseSalesPosCompleteRequest(apiRequest.payload);

@@ -65,6 +65,7 @@ export function createProductionApiComposition(deps: ProductionApiCompositionDep
     seedDemoReadModels: false,
     afterInvoke: deps.sheetGateway.flushPendingAppends,
     attachmentStorage: deps.attachmentStorage,
+    platformCacheStore: deps.platformCacheStore,
   };
 
   return createApiCompositionFromDependencies(compositionDeps);

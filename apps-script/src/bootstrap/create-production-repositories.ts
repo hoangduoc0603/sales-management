@@ -101,6 +101,7 @@ export function createProductionRepositories(deps: ProductionRepositoryDependenc
       gateway: deps.sheetGateway,
       tableDefinitions: deps.tableDefinitions,
       transactionPartitionKey: deps.transactionPartitionKey,
+      cacheStore: deps.platformCacheStore,
     }),
     purchasingRepository: createSheetPurchasingRepository({
       gateway: deps.sheetGateway,

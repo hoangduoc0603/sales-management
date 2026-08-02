@@ -56,6 +56,7 @@ export const operationNames = [
   'sales.draft.save',
   'sales.draft.list',
   'sales.draft.cancel',
+  'sales.pos.prewarmCheckoutContext',
   'sales.pos.complete',
   'sales.order.list',
   'sales.order.get',

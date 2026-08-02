@@ -61,4 +61,6 @@ Return line computes maximum return quantity from source sale less resolved retu
 
 Adapter keeps a single in-flight complete command per cart/command ID. It uses `command.getStatus` then same idempotency key after timeout. The hot path excludes Drive, PDF, export, report and full history I/O.
 
+Khi vào màn POS, frontend có thể gọi query nền `sales.pos.prewarmCheckoutContext` với Branch/Warehouse, `shiftId` hiện hành và tối đa 20 `variantId` đang hiển thị để làm nóng cache server cho Shift và InventoryBalance. Query này không tạo chứng từ, không ghi ledger/projection/command transaction và không thay thế revalidation trong `sales.pos.complete`; checkout vẫn phải kiểm tra lại shift, giá, tồn và idempotency trong commit path.
+
 Tests cover warm-cache scan/no RPC, explicit draft save/reopen/cancel, shift requirement, POS full/partial payment, online reservation/cancel/ship/deliver, quote conflict, retry duplicate prevention, source/fast return permission, exchange net settlement, print no-ledger, and concurrent last-stock/voucher cases.

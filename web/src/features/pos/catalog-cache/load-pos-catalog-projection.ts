@@ -1,4 +1,8 @@
 import type { CatalogPosProjectionResponse } from '@shared/contracts/catalog/catalog';
+import type {
+  SalesPosPrewarmCheckoutContextRequest,
+  SalesPosPrewarmCheckoutContextResponse,
+} from '@shared/contracts/sales/sales';
 import type { ApiClient } from '../../../lib/api/client';
 
 const posCatalogProjectionCachePrefix = 'cenio:pos-catalog-projection:v2';
@@ -9,6 +13,12 @@ export interface LoadPosCatalogProjectionInput {
   sessionToken: string;
   branchId: string;
   warehouseId: string;
+}
+
+export interface PrewarmPosCheckoutContextInput extends SalesPosPrewarmCheckoutContextRequest {
+  apiClient: ApiClient;
+  requestId: string;
+  sessionToken: string;
 }
 
 export interface PosCatalogProjectionCacheKeyInput {
@@ -49,6 +59,37 @@ export async function loadPosCatalogProjection({
     payload: {
       branchId,
       warehouseId,
+    },
+  });
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result.data;
+}
+
+export async function prewarmPosCheckoutContext({
+  apiClient,
+  branchId,
+  cashierId,
+  requestId,
+  sessionToken,
+  shiftId,
+  variantIds,
+  warehouseId,
+}: PrewarmPosCheckoutContextInput): Promise<SalesPosPrewarmCheckoutContextResponse> {
+  const uniqueVariantIds = [...new Set(variantIds)].slice(0, 20);
+  const result = await apiClient.invoke<SalesPosPrewarmCheckoutContextResponse>({
+    operation: 'sales.pos.prewarmCheckoutContext',
+    requestId,
+    sessionToken,
+    payload: {
+      branchId,
+      warehouseId,
+      cashierId,
+      shiftId,
+      variantIds: uniqueVariantIds,
     },
   });
 

@@ -165,6 +165,22 @@ export interface SalesPosCompleteRequest extends SalesCommandBase {
   tenders: readonly SaleTenderDraftInputDTO[];
 }
 
+export interface SalesPosPrewarmCheckoutContextRequest {
+  branchId: string;
+  warehouseId: string;
+  cashierId: string;
+  shiftId?: string;
+  variantIds: readonly string[];
+}
+
+export interface SalesPosPrewarmCheckoutContextResponse {
+  warmed: {
+    shift: boolean;
+    balances: number;
+  };
+  generatedAt: string;
+}
+
 export interface SalesDraftSaveResponse {
   order: SaleOrderDTO;
   lines: readonly SaleOrderLineDTO[];

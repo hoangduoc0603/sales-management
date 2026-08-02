@@ -9,6 +9,7 @@ import type {
   StockTransferLineDTO,
 } from '@shared/contracts/inventory/inventory';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import {
   createAppendOnlySheetRecordRepository,
   type AppendOnlySheetRecordGateway,
@@ -19,6 +20,7 @@ export interface InventoryRepository {
   appendNewMovement(movement: InventoryMovementDTO): void;
   listMovements(): InventoryMovementDTO[];
   getBalance(warehouseId: string, variantId: string): InventoryBalanceDTO | undefined;
+  getBalances(warehouseId: string, variantIds: readonly string[]): InventoryBalanceDTO[];
   listBalances(warehouseId?: string): InventoryBalanceDTO[];
   applyProjection(balance: InventoryBalanceDTO): void;
   getLotBalance(warehouseId: string, variantId: string, lotId: string): InventoryLotBalanceDTO | undefined;
@@ -63,6 +65,12 @@ export function createInMemoryInventoryRepository(): InventoryRepository {
     getBalance(warehouseId, variantId) {
       const balance = balances.get(balanceKey(warehouseId, variantId));
       return balance === undefined ? undefined : clone(balance);
+    },
+    getBalances(warehouseId, variantIds) {
+      return uniqueStrings(variantIds)
+        .map((variantId) => balances.get(balanceKey(warehouseId, variantId)))
+        .filter(isDefined)
+        .map(clone);
     },
     listBalances(warehouseId) {
       return [...balances.values()]
@@ -141,10 +149,19 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
 export interface SheetInventoryRepositoryDependencies {
   gateway: AppendOnlySheetRecordGateway;
   tableDefinitions: readonly TableDefinitionDTO[];
   transactionPartitionKey: string;
+  cacheStore?: PlatformCacheStore;
 }
 
 export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDependencies): InventoryRepository {
@@ -198,8 +215,69 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
     }
     return [...latestByBalanceId.values()].map((row) => {
       rememberLatestBalanceVersion(row);
-      return fromBalanceRow(row);
+      const balance = fromBalanceRow(row);
+      cacheBalance(deps.cacheStore, balance, getRecordVersion(row));
+      return balance;
     });
+  }
+
+  function findLatestBalanceByBalanceId(balanceId: string): InventoryBalanceDTO | undefined {
+    const cached = readCachedBalance(deps.cacheStore, balanceId);
+    if (cached !== undefined) {
+      latestBalanceVersionCache.set(balanceId, cached.recordVersion);
+      return cached.balance;
+    }
+
+    const latest = findBalanceRowsByColumn('balanceId', balanceId).reduce<InventoryBalanceSheetRow | undefined>(
+      (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
+      undefined,
+    );
+    if (latest === undefined) return undefined;
+
+    rememberLatestBalanceVersion(latest);
+    const balance = fromBalanceRow(latest);
+    cacheBalance(deps.cacheStore, balance, getRecordVersion(latest));
+    return balance;
+  }
+
+  function getBalanceInternal(warehouseId: string, variantId: string): InventoryBalanceDTO | undefined {
+    const balanceId = `balance-${warehouseId}-${variantId}`;
+    return findLatestBalanceByBalanceId(balanceId)
+      ?? listLatestBalances(warehouseId).find((balance) => balance.variantId === variantId);
+  }
+
+  function getBalancesInternal(warehouseId: string, variantIds: readonly string[]): InventoryBalanceDTO[] {
+    const uniqueVariantIds = uniqueStrings(variantIds);
+    if (uniqueVariantIds.length === 0) return [];
+
+    const balancesByVariantId = new Map<string, InventoryBalanceDTO>();
+    const misses: string[] = [];
+    for (const variantId of uniqueVariantIds) {
+      const balanceId = `balance-${warehouseId}-${variantId}`;
+      const cached = readCachedBalance(deps.cacheStore, balanceId);
+      if (cached === undefined) {
+        misses.push(variantId);
+      } else {
+        latestBalanceVersionCache.set(balanceId, cached.recordVersion);
+        balancesByVariantId.set(variantId, cached.balance);
+      }
+    }
+
+    if (misses.length === 1) {
+      const balance = getBalanceInternal(warehouseId, misses[0]);
+      if (balance !== undefined) balancesByVariantId.set(balance.variantId, balance);
+    } else if (misses.length > 1) {
+      for (const balance of listLatestBalances(warehouseId)) {
+        if (misses.includes(balance.variantId)) {
+          balancesByVariantId.set(balance.variantId, balance);
+        }
+      }
+    }
+
+    return uniqueVariantIds
+      .map((variantId) => balancesByVariantId.get(variantId))
+      .filter(isDefined)
+      .map(deepClone);
   }
 
   function findRowsByColumn(table: TableDefinitionDTO, columnName: string, value: string): Record<string, unknown>[] {
@@ -311,16 +389,10 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
       return movementRepository.list().map(fromMovementRow);
     },
     getBalance(warehouseId, variantId) {
-      const balanceId = `balance-${warehouseId}-${variantId}`;
-      const latest = findBalanceRowsByColumn('balanceId', balanceId).reduce<InventoryBalanceSheetRow | undefined>(
-        (current, row) => (current === undefined || getRecordVersion(row) > getRecordVersion(current) ? row : current),
-        undefined,
-      );
-      if (latest !== undefined) {
-        rememberLatestBalanceVersion(latest);
-        return fromBalanceRow(latest);
-      }
-      return listLatestBalances(warehouseId).find((balance) => balance.variantId === variantId);
+      return getBalanceInternal(warehouseId, variantId);
+    },
+    getBalances(warehouseId, variantIds) {
+      return getBalancesInternal(warehouseId, variantIds);
     },
     listBalances(warehouseId) {
       return listLatestBalances(warehouseId);
@@ -346,6 +418,7 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
         ],
       });
       latestBalanceVersionCache.set(balance.balanceId, nextVersion);
+      cacheBalance(deps.cacheStore, balance, nextVersion);
     },
     getLotBalance(warehouseId, variantId, lotId) {
       const row = latestRowByLogicalId<InventoryLotBalanceSheetRow>(
@@ -909,6 +982,54 @@ function inferLogicalIdColumn(tableName: string): string {
     default:
       return 'id';
   }
+}
+
+const inventoryBalanceCacheTtlSeconds = 300;
+
+interface CachedInventoryBalancePayload {
+  balance: InventoryBalanceDTO;
+  recordVersion: number;
+}
+
+function cacheBalance(
+  cacheStore: PlatformCacheStore | undefined,
+  balance: InventoryBalanceDTO,
+  recordVersion: number,
+): void {
+  if (cacheStore === undefined) return;
+  cacheStore.put(balanceCacheKey(balance.balanceId), JSON.stringify({ balance, recordVersion }), inventoryBalanceCacheTtlSeconds);
+}
+
+function readCachedBalance(
+  cacheStore: PlatformCacheStore | undefined,
+  balanceId: string,
+): CachedInventoryBalancePayload | undefined {
+  if (cacheStore === undefined) return undefined;
+  const key = balanceCacheKey(balanceId);
+  const raw = cacheStore.get(key);
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CachedInventoryBalancePayload>;
+    if (
+      parsed.balance === undefined ||
+      parsed.balance.balanceId !== balanceId ||
+      typeof parsed.recordVersion !== 'number'
+    ) {
+      cacheStore.remove(key);
+      return undefined;
+    }
+    return {
+      balance: deepClone(parsed.balance),
+      recordVersion: parsed.recordVersion,
+    };
+  } catch {
+    cacheStore.remove(key);
+    return undefined;
+  }
+}
+
+function balanceCacheKey(balanceId: string): string {
+  return `inventory:balance:${balanceId}`;
 }
 
 function deepClone<T>(value: T): T {

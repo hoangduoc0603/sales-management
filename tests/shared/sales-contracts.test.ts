@@ -11,6 +11,7 @@ import {
   parseSalesDraftCancelRequest,
   parseSalesDraftSaveRequest,
   parseSalesPosCompleteRequest,
+  parseSalesPosPrewarmCheckoutContextRequest,
   parseSalesWarrantyOpenRequest,
   parseSalesWarrantyTransitionRequest,
 } from '../../shared/schemas/sales/sales';
@@ -20,6 +21,7 @@ describe('sales shared contracts', () => {
     expect(operationNames).toContain('sales.draft.save');
     expect(operationNames).toContain('sales.draft.list');
     expect(operationNames).toContain('sales.draft.cancel');
+    expect(operationNames).toContain('sales.pos.prewarmCheckoutContext');
     expect(operationNames).toContain('sales.pos.complete');
   });
 
@@ -146,6 +148,33 @@ describe('sales shared contracts', () => {
           },
         ],
         tenders: [],
+      }),
+    ).toThrow();
+  });
+
+  it('validates POS prewarm checkout context as a small read-only hint', () => {
+    expect(
+      parseSalesPosPrewarmCheckoutContextRequest({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        shiftId: 'shift-local-open',
+        variantIds: ['variant-1', 'variant-2'],
+      }),
+    ).toEqual({
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      cashierId: 'user-admin',
+      shiftId: 'shift-local-open',
+      variantIds: ['variant-1', 'variant-2'],
+    });
+
+    expect(() =>
+      parseSalesPosPrewarmCheckoutContextRequest({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        variantIds: Array.from({ length: 21 }, (_, index) => `variant-${index + 1}`),
       }),
     ).toThrow();
   });

@@ -76,6 +76,25 @@ describe('sales composition', () => {
     });
     if (!quote.ok) throw new Error('quote failed');
 
+    const prewarm = composition.invoke({
+      operation: 'sales.pos.prewarmCheckoutContext',
+      requestId: 'req-pos-prewarm',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        cashierId: 'user-admin',
+        shiftId: shift.data.shift.shiftId,
+        variantIds: [variant.variantId],
+      },
+    });
+    expect(prewarm).toMatchObject({
+      ok: true,
+      data: {
+        warmed: { shift: true, balances: 1 },
+      },
+    });
+
     const draft = composition.invoke({
       operation: 'sales.draft.save',
       requestId: 'req-draft-save',
