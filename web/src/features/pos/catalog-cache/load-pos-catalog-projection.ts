@@ -5,7 +5,9 @@ import type {
 } from '@shared/contracts/sales/sales';
 import type { ApiClient } from '../../../lib/api/client';
 
-const posCatalogProjectionCachePrefix = 'cenio:pos-catalog-projection:v2';
+const posCatalogProjectionCachePrefix = 'cenio:pos-catalog-projection:v3';
+const posCatalogProjectionDatabaseName = 'cenio-pos-catalog-projection';
+const posCatalogProjectionStoreName = 'projections';
 
 export interface LoadPosCatalogProjectionInput {
   apiClient: ApiClient;
@@ -25,7 +27,7 @@ export interface PosCatalogProjectionCacheKeyInput {
   branchId: string;
   warehouseId: string;
   cacheNamespace?: string;
-  storage?: Storage;
+  store?: PosCatalogProjectionStore;
 }
 
 export interface WriteCachedPosCatalogProjectionInput extends PosCatalogProjectionCacheKeyInput {
@@ -36,6 +38,25 @@ export interface WriteCachedPosCatalogProjectionInput extends PosCatalogProjecti
 export interface CachedPosCatalogProjectionEntry {
   cachedAt: string;
   projection: CatalogPosProjectionResponse;
+}
+
+export interface PosCatalogProjectionStore {
+  read(key: string): Promise<unknown>;
+  write(key: string, cacheNamespace: string, value: CachedPosCatalogProjectionEntry): Promise<void>;
+  clearNamespace(cacheNamespace: string): Promise<void>;
+}
+
+export interface ClearCachedPosCatalogProjectionNamespaceInput {
+  cacheNamespace: string;
+  store?: PosCatalogProjectionStore;
+}
+
+export interface PosCatalogCacheNamespaceInput {
+  tenantId: string;
+  userId: string;
+  authVersion: number;
+  appVersion: string;
+  schemaVersion: number;
 }
 
 export interface ShouldRefreshCachedPosCatalogProjectionInput {
@@ -100,30 +121,28 @@ export async function prewarmPosCheckoutContext({
   return result.data;
 }
 
-export function readCachedPosCatalogProjection({
+export async function readCachedPosCatalogProjection({
   branchId,
   cacheNamespace,
-  storage = getBrowserLocalStorage(),
+  store = getBrowserIndexedDbStore(),
   warehouseId,
-}: PosCatalogProjectionCacheKeyInput): CatalogPosProjectionResponse | undefined {
-  return readCachedPosCatalogProjectionEntry({ branchId, cacheNamespace, storage, warehouseId })?.projection;
+}: PosCatalogProjectionCacheKeyInput): Promise<CatalogPosProjectionResponse | undefined> {
+  return (await readCachedPosCatalogProjectionEntry({ branchId, cacheNamespace, store, warehouseId }))?.projection;
 }
 
-export function readCachedPosCatalogProjectionEntry({
+export async function readCachedPosCatalogProjectionEntry({
   branchId,
   cacheNamespace,
-  storage = getBrowserLocalStorage(),
+  store = getBrowserIndexedDbStore(),
   warehouseId,
-}: PosCatalogProjectionCacheKeyInput): CachedPosCatalogProjectionEntry | undefined {
-  if (storage === undefined) return undefined;
+}: PosCatalogProjectionCacheKeyInput): Promise<CachedPosCatalogProjectionEntry | undefined> {
+  if (store === undefined) return undefined;
   const key = buildPosCatalogProjectionCacheKey({ branchId, cacheNamespace, warehouseId });
 
   try {
-    const raw = storage.getItem(key);
-    if (raw === null) return undefined;
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = await store.read(key);
     if (!isCachedPosCatalogProjectionEntry(parsed, branchId, warehouseId)) {
-      storage.removeItem(key);
+      await store.clearNamespace(cacheNamespace ?? 'anonymous');
       return undefined;
     }
     return parsed;
@@ -132,30 +151,49 @@ export function readCachedPosCatalogProjectionEntry({
   }
 }
 
-export function writeCachedPosCatalogProjection({
+export async function writeCachedPosCatalogProjection({
   branchId,
   cacheNamespace,
   now = Date.now,
   projection,
-  storage = getBrowserLocalStorage(),
+  store = getBrowserIndexedDbStore(),
   warehouseId,
-}: WriteCachedPosCatalogProjectionInput): void {
-  if (storage === undefined) return;
+}: WriteCachedPosCatalogProjectionInput): Promise<void> {
+  if (store === undefined) return;
   if (!isCatalogPosProjectionResponse(projection, branchId, warehouseId)) return;
   const key = buildPosCatalogProjectionCacheKey({ branchId, cacheNamespace, warehouseId });
 
   try {
-    storage.setItem(
-      key,
-      JSON.stringify({
-        cachedAt: new Date(now()).toISOString(),
-        projection,
-      } satisfies CachedPosCatalogProjectionEntry),
-    );
+    await store.write(key, cacheNamespace ?? 'anonymous', {
+      cachedAt: new Date(now()).toISOString(),
+      projection,
+    });
   } catch {
     // Browser storage can be disabled or full. POS remains functional by falling
     // back to the remote projection path.
   }
+}
+
+export async function clearCachedPosCatalogProjectionNamespace({
+  cacheNamespace,
+  store = getBrowserIndexedDbStore(),
+}: ClearCachedPosCatalogProjectionNamespaceInput): Promise<void> {
+  if (store === undefined) return;
+  try {
+    await store.clearNamespace(cacheNamespace);
+  } catch {
+    // Cache cleanup is best-effort. Auth/scope remain enforced server-side.
+  }
+}
+
+export function buildPosCatalogCacheNamespace({
+  appVersion,
+  authVersion,
+  schemaVersion,
+  tenantId,
+  userId,
+}: PosCatalogCacheNamespaceInput): string {
+  return `${tenantId}:${userId}:auth-${authVersion}:app-${appVersion}:schema-${schemaVersion}`;
 }
 
 export function shouldRefreshCachedPosCatalogProjection({
@@ -180,13 +218,76 @@ function buildPosCatalogProjectionCacheKey({
   )}:${encodeURIComponent(warehouseId)}`;
 }
 
-function getBrowserLocalStorage(): Storage | undefined {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    return window.localStorage;
-  } catch {
-    return undefined;
-  }
+function getBrowserIndexedDbStore(): PosCatalogProjectionStore | undefined {
+  if (typeof indexedDB === 'undefined') return undefined;
+  return createIndexedDbPosCatalogProjectionStore(indexedDB);
+}
+
+function createIndexedDbPosCatalogProjectionStore(factory: IDBFactory): PosCatalogProjectionStore {
+  return {
+    async read(key) {
+      const database = await openDatabase(factory);
+      const transaction = database.transaction(posCatalogProjectionStoreName, 'readonly');
+      const result = await requestResult<IndexedDbProjectionRecord | undefined>(
+        transaction.objectStore(posCatalogProjectionStoreName).get(key),
+      );
+      await transactionComplete(transaction);
+      database.close();
+      return result?.value;
+    },
+    async write(key, cacheNamespace, value) {
+      const database = await openDatabase(factory);
+      const transaction = database.transaction(posCatalogProjectionStoreName, 'readwrite');
+      transaction.objectStore(posCatalogProjectionStoreName).put({ key, cacheNamespace, value } satisfies IndexedDbProjectionRecord);
+      await transactionComplete(transaction);
+      database.close();
+    },
+    async clearNamespace(cacheNamespace) {
+      const database = await openDatabase(factory);
+      const transaction = database.transaction(posCatalogProjectionStoreName, 'readwrite');
+      const store = transaction.objectStore(posCatalogProjectionStoreName);
+      const records = await requestResult<IndexedDbProjectionRecord[]>(store.getAll());
+      for (const record of records) {
+        if (record.cacheNamespace === cacheNamespace) store.delete(record.key);
+      }
+      await transactionComplete(transaction);
+      database.close();
+    },
+  };
+}
+
+interface IndexedDbProjectionRecord {
+  key: string;
+  cacheNamespace: string;
+  value: CachedPosCatalogProjectionEntry;
+}
+
+function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(posCatalogProjectionDatabaseName, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(posCatalogProjectionStoreName)) {
+        request.result.createObjectStore(posCatalogProjectionStoreName, { keyPath: 'key' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('Không thể mở IndexedDB cache POS.'));
+  });
+}
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('Không thể đọc IndexedDB cache POS.'));
+  });
+}
+
+function transactionComplete(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Không thể ghi IndexedDB cache POS.'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB cache POS đã bị hủy.'));
+  });
 }
 
 function isCachedPosCatalogProjectionEntry(

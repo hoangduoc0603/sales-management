@@ -5,6 +5,7 @@ import { createPosCartState } from '../../web/src/features/pos/pos-cart-state';
 import {
   createLargePosProjection,
   measureDurationsMs,
+  summarizePerformanceSamples,
 } from './fixtures/pos-seed';
 import type { ApiResult } from '@shared/contracts/api';
 
@@ -23,6 +24,17 @@ function invokeOk<TData>(
 }
 
 describe('POS release performance baseline', () => {
+  it('labels fewer than 20 samples as smoke evidence instead of certified percentile evidence', () => {
+    expect(summarizePerformanceSamples([1, 2, 3])).toEqual({
+      sampleCount: 3,
+      p50Ms: 2,
+      p95Ms: 3,
+      p99Ms: 3,
+      maxMs: 3,
+      certified: false,
+    });
+  });
+
   it('keeps browser-local scan/search/cart operations within SRS p95 budgets on 10,000 variants', () => {
     const projection = createLargePosProjection(10_000);
     let unexpectedRemoteLookups = 0;

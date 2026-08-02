@@ -3,10 +3,15 @@ import type { ApiClient } from '../../web/src/lib/api/client';
 import {
   loadPosCatalogProjection,
   prewarmPosCheckoutContext,
+  buildPosCatalogCacheNamespace,
+  clearCachedPosCatalogProjectionNamespace,
   readCachedPosCatalogProjection,
   readCachedPosCatalogProjectionEntry,
   shouldRefreshCachedPosCatalogProjection,
   writeCachedPosCatalogProjection,
+} from '../../web/src/features/pos/catalog-cache/load-pos-catalog-projection';
+import type {
+  PosCatalogProjectionStore,
 } from '../../web/src/features/pos/catalog-cache/load-pos-catalog-projection';
 
 describe('loadPosCatalogProjection', () => {
@@ -116,8 +121,8 @@ describe('loadPosCatalogProjection', () => {
     expect(JSON.stringify(calls)).not.toContain('admin123');
   });
 
-  it('lưu và đọc browser cache theo namespace + Branch/Warehouse mà không lưu session token', () => {
-    const storage = createMemoryStorage();
+  it('lưu và đọc browser cache theo namespace + Branch/Warehouse mà không lưu session token', async () => {
+    const store = createMemoryProjectionStore();
     const projection = {
       projectionVersion: 'catalog-pos-v2',
       branchId: 'branch-default',
@@ -126,43 +131,43 @@ describe('loadPosCatalogProjection', () => {
       variants: [],
     };
 
-    writeCachedPosCatalogProjection({
+    await writeCachedPosCatalogProjection({
       branchId: 'branch-default',
       warehouseId: 'warehouse-default',
       cacheNamespace: 'tenant-default:user-admin:v1',
-      storage,
+      store,
       projection,
       now: () => 1_785_581_000_000,
     });
 
-    expect(
+    await expect(
       readCachedPosCatalogProjection({
         branchId: 'branch-default',
         warehouseId: 'warehouse-default',
         cacheNamespace: 'tenant-default:user-admin:v1',
-        storage,
+        store,
       }),
-    ).toEqual(projection);
-    expect(
+    ).resolves.toEqual(projection);
+    await expect(
       readCachedPosCatalogProjectionEntry({
         branchId: 'branch-default',
         warehouseId: 'warehouse-default',
         cacheNamespace: 'tenant-default:user-admin:v1',
-        storage,
+        store,
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       cachedAt: '2026-08-01T10:43:20.000Z',
       projection,
     });
-    expect(
+    await expect(
       readCachedPosCatalogProjection({
         branchId: 'branch-default',
         warehouseId: 'warehouse-other',
         cacheNamespace: 'tenant-default:user-admin:v1',
-        storage,
+        store,
       }),
-    ).toBeUndefined();
-    expect(JSON.stringify([...storage.entries()])).not.toContain('session-token');
+    ).resolves.toBeUndefined();
+    expect(JSON.stringify([...store.entries()])).not.toContain('session-token');
   });
 
   it('xác định cache POS còn tươi để tránh gọi Apps Script lại khi vừa refresh', () => {
@@ -205,24 +210,107 @@ describe('loadPosCatalogProjection', () => {
       }),
     ).toBe(true);
   });
+
+  it('xóa namespace cache bị hỏng và fallback cache miss khi IndexedDB không sẵn sàng', async () => {
+    let clearedNamespace: string | undefined;
+    const corruptStore: PosCatalogProjectionStore = {
+      async read() {
+        return { cachedAt: 'not-a-valid-entry' };
+      },
+      async write() {},
+      async clearNamespace(cacheNamespace) {
+        clearedNamespace = cacheNamespace;
+      },
+    };
+
+    await expect(
+      readCachedPosCatalogProjectionEntry({
+        branchId: 'branch-default',
+        cacheNamespace: 'tenant-default:user-admin:auth-1:app-0.1.0:schema-1',
+        store: corruptStore,
+        warehouseId: 'warehouse-default',
+      }),
+    ).resolves.toBeUndefined();
+    expect(clearedNamespace).toBe('tenant-default:user-admin:auth-1:app-0.1.0:schema-1');
+
+    await expect(
+      readCachedPosCatalogProjection({
+        branchId: 'branch-default',
+        cacheNamespace: 'tenant-default:user-admin:auth-1:app-0.1.0:schema-1',
+        store: undefined,
+        warehouseId: 'warehouse-default',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('lưu cache POS qua IndexedDB-style store và xóa đúng namespace khi logout/deploy đổi version', async () => {
+    const store = createMemoryProjectionStore();
+    const projection = {
+      projectionVersion: 'catalog-pos-v3',
+      branchId: 'branch-default',
+      warehouseId: 'warehouse-default',
+      generatedAt: '2026-08-02T00:00:00.000Z',
+      variants: [],
+    };
+    const namespace = 'tenant-default:user-admin:auth-1:app-0.1.0:schema-1';
+
+    expect(
+      buildPosCatalogCacheNamespace({
+        tenantId: 'tenant-default',
+        userId: 'user-admin',
+        authVersion: 1,
+        appVersion: '0.1.0',
+        schemaVersion: 1,
+      }),
+    ).toBe(namespace);
+
+    await writeCachedPosCatalogProjection({
+      branchId: 'branch-default',
+      cacheNamespace: namespace,
+      now: () => 1_785_633_200_000,
+      projection,
+      store,
+      warehouseId: 'warehouse-default',
+    });
+
+    await expect(
+      readCachedPosCatalogProjection({
+        branchId: 'branch-default',
+        cacheNamespace: namespace,
+        store,
+        warehouseId: 'warehouse-default',
+      }),
+    ).resolves.toEqual(projection);
+
+    await clearCachedPosCatalogProjectionNamespace({ cacheNamespace: namespace, store });
+
+    await expect(
+      readCachedPosCatalogProjection({
+        branchId: 'branch-default',
+        cacheNamespace: namespace,
+        store,
+        warehouseId: 'warehouse-default',
+      }),
+    ).resolves.toBeUndefined();
+    expect(JSON.stringify([...store.entries()])).not.toContain('session-token');
+  });
 });
 
-function createMemoryStorage(): Storage & { entries(): IterableIterator<[string, string]> } {
-  const values = new Map<string, string>();
+function createMemoryProjectionStore(): PosCatalogProjectionStore & { entries(): IterableIterator<[string, unknown]> } {
+  const values = new Map<string, { cacheNamespace: string; value: unknown }>();
 
   return {
-    get length() {
-      return values.size;
+    async read(key) {
+      return values.get(key)?.value;
     },
-    clear: () => values.clear(),
-    getItem: (key: string) => values.get(key) ?? null,
-    key: (index: number) => [...values.keys()][index] ?? null,
-    removeItem: (key: string) => {
-      values.delete(key);
+    async write(key, cacheNamespace, value) {
+      values.set(key, { cacheNamespace, value });
     },
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
+    async clearNamespace(cacheNamespace) {
+      for (const [key, entry] of values) {
+        if (entry.cacheNamespace === cacheNamespace) values.delete(key);
+      }
     },
     entries: () => values.entries(),
-  } as Storage & { entries(): IterableIterator<[string, string]> };
+  };
 }

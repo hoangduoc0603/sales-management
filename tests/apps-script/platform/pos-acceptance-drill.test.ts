@@ -61,9 +61,14 @@ describe('POS production acceptance drill', () => {
     });
 
     expect(performance.stages['sales.pos.validateShiftMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['sales.pos.preflightCatalogProjectionMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['sales.pos.targetedQuoteMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['sales.pos.inventoryIssueMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['sales.pos.financeRecordMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['sales.pos.persistOrderMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['command.lockWaitMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['command.lockHoldMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['command.flushPendingWritesMs']).toBeGreaterThanOrEqual(0);
   });
 });
 
