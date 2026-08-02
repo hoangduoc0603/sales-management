@@ -59,7 +59,7 @@ Document actual `ApiMeta.durationMs`, `stages` and `io`; define `command.lockWai
 
 - [ ] **Step 4: Verify and commit**
 
-Run: `node scripts/verify-structure.mjs`  
+Run: `node scripts/verify-structure.mjs`
 Expected: `Cấu trúc thư mục base hợp lệ.`
 
 ```bash
@@ -100,7 +100,7 @@ Add a flush-throwing case asserting `releaseLock` still occurs and `run()` throw
 
 - [ ] **Step 2: Verify red**
 
-Run: `npm test -- tests/apps-script/platform/command-coordinator.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`  
+Run: `npm test -- tests/apps-script/platform/command-coordinator.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`
 Expected: FAIL because the flush dependency and lock stages do not exist.
 
 - [ ] **Step 3: Implement minimal boundary**
@@ -109,7 +109,7 @@ Call injected `flushPendingWrites()` after `appendNew(Committed)` inside the `wi
 
 - [ ] **Step 4: Verify green and commit**
 
-Run: `npm test -- tests/apps-script/platform/command-coordinator.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`  
+Run: `npm test -- tests/apps-script/platform/command-coordinator.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`
 Expected: PASS; test event order proves Advanced Sheets flush occurs before Spreadsheet flush and unlock.
 
 ```bash
@@ -144,14 +144,14 @@ Also assert inactive/missing variants produce the existing `PRICE_CHANGED`-compa
 
 - [ ] **Step 2: Verify red**
 
-Run: `npm test -- tests/apps-script/catalog/catalog-sheet-repository.test.ts tests/apps-script/catalog/catalog-service.test.ts`  
+Run: `npm test -- tests/apps-script/catalog/catalog-sheet-repository.test.ts tests/apps-script/catalog/catalog-service.test.ts`
 Expected: FAIL because the narrow repository/service contracts do not exist.
 
 - [ ] **Step 3: Implement and verify green**
 
 Deduplicate IDs; use `findRowsByColumn` through the existing gateway targeted lookup path; retain cache/fallback behavior. Quote only requested active variants and requested active sale unit versions. Do not register a new RPC operation and do not change `getPosProjection`.
 
-Run: `npm test -- tests/apps-script/catalog/catalog-sheet-repository.test.ts tests/apps-script/catalog/catalog-service.test.ts`  
+Run: `npm test -- tests/apps-script/catalog/catalog-sheet-repository.test.ts tests/apps-script/catalog/catalog-service.test.ts`
 Expected: PASS and no full-table read in the new test.
 
 ```bash
@@ -186,7 +186,7 @@ Cover stale quote, closed shift and multi-line insufficient stock.
 
 - [ ] **Step 2: Verify red**
 
-Run: `npm test -- tests/apps-script/sales/sales-service.test.ts tests/apps-script/sales/sales-composition.test.ts`  
+Run: `npm test -- tests/apps-script/sales/sales-service.test.ts tests/apps-script/sales/sales-composition.test.ts`
 Expected: FAIL because checkout currently calls `getPosProjection` in its locked handler.
 
 - [ ] **Step 3: Implement two phases**
@@ -195,7 +195,7 @@ Build candidate snapshots and non-authoritative quote outside `commandCoordinato
 
 - [ ] **Step 4: Verify green and commit**
 
-Run: `npm test -- tests/apps-script/sales/sales-service.test.ts tests/apps-script/sales/sales-composition.test.ts tests/apps-script/platform/command-coordinator.test.ts`  
+Run: `npm test -- tests/apps-script/sales/sales-service.test.ts tests/apps-script/sales/sales-composition.test.ts tests/apps-script/platform/command-coordinator.test.ts`
 Expected: PASS with original retry/conflict behavior.
 
 ```bash
@@ -231,14 +231,14 @@ await expect(store.read(key)).resolves.toBeUndefined();
 
 - [ ] **Step 2: Verify red**
 
-Run: `npm test -- tests/web/load-pos-catalog-projection.test.ts tests/web/pos-checkout-shell.test.ts tests/web/auth-flow.test.ts`  
+Run: `npm test -- tests/web/load-pos-catalog-projection.test.ts tests/web/pos-checkout-shell.test.ts tests/web/auth-flow.test.ts`
 Expected: FAIL because loader persistence is synchronous `localStorage`.
 
 - [ ] **Step 3: Implement and verify green**
 
 Implement one IndexedDB object store plus injected test adapter. Loader renders current memory state, awaits cache, then remote-refreshes by TTL/version. Construct namespace from runtime installation/app/schema plus actor/scope; clear actor namespace on logout; delete corrupt/incompatible entry; remove POS projection localStorage path. Keep memory barcode/search and remote fallback.
 
-Run: `npm test -- tests/web/load-pos-catalog-projection.test.ts tests/web/pos-checkout-shell.test.ts tests/web/auth-flow.test.ts tests/web/pos-catalog-cache.test.ts`  
+Run: `npm test -- tests/web/load-pos-catalog-projection.test.ts tests/web/pos-checkout-shell.test.ts tests/web/auth-flow.test.ts tests/web/pos-catalog-cache.test.ts`
 Expected: PASS; warm scan/search still have no RPC.
 
 ```bash
@@ -272,22 +272,22 @@ expect(summarizeSamples([1, 2, 3]).certified).toBe(false);
 
 - [ ] **Step 2: Verify red**
 
-Run: `npm test -- tests/performance/pos-performance.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`  
+Run: `npm test -- tests/performance/pos-performance.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`
 Expected: FAIL because certification summary and command metrics are absent.
 
 - [ ] **Step 3: Implement and verify green**
 
 Record counters only at command/gateway boundaries. Export a pure percentile summary helper; local benchmark labels itself regression only. Do not persist normal-success telemetry.
 
-Run: `npm test -- tests/performance/pos-performance.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`  
+Run: `npm test -- tests/performance/pos-performance.test.ts tests/apps-script/platform/google-workspace-adapter.test.ts`
 Expected: PASS with existing local SRS assertions retained.
 
 - [ ] **Step 4: Full verification and evidence**
 
-Run: `npm run verify`  
+Run: `npm run verify`
 Expected: structure, typecheck, lint, tests, build and Apps Script artifact checks pass.
 
-Run: `npm run deploy:test`  
+Run: `npm run deploy:test`
 Expected: verified artifact is pushed to `/dev`, no production version is created.
 
 In the authorized test tenant, collect at least 20 cold and 20 warm checkout samples covering 10,000 variants, single/multi-line, retry, concurrency and report/export background load. Record environment, percentiles/max, stages and I/O in `release-hardening.md`; do not mark release Ready unless every P0 gate is closed.

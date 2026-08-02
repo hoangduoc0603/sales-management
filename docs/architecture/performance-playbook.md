@@ -1,6 +1,6 @@
 # Performance playbook
 
-**Trạng thái:** Approved  
+**Trạng thái:** Approved
 **Nguồn policy:** [Runtime và hiệu năng](runtime-and-performance.md), `SRS-OVR-012`–`024`, ADR 0004, ADR 0005, ADR 0016 và ADR 0017.
 
 Tài liệu này là entrypoint bắt buộc trước mọi thay đổi có API, Google Sheets/Drive, command/query, cache, worker, payload/read model lớn hoặc UI hiển thị dữ liệu lớn. Nó không thay SRS/ADR; khi mâu thuẫn, áp dụng thứ tự ưu tiên trong `AGENTS.md`.
