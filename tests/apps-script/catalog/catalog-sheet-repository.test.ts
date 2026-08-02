@@ -250,6 +250,26 @@ describe('Sheet-backed CatalogRepository', () => {
     ]);
   });
 
+  it('loads only requested parent products through targeted lookup for POS revalidation', () => {
+    const gateway = new FakeSheetGateway({
+      Product: [productRow('product-1', 'Hàng 1'), productRow('product-2', 'Hàng 2')],
+    });
+    const repository = createSheetCatalogRepository({
+      gateway,
+      tableDefinitions: createPlatformTableDefinitions(),
+    });
+
+    expect(repository.findProductsByIds(['product-2', 'product-1', 'product-2'])).toEqual([
+      expect.objectContaining({ productId: 'product-2' }),
+      expect.objectContaining({ productId: 'product-1' }),
+    ]);
+    expect(gateway.readRequests).toEqual([]);
+    expect(gateway.findRequests).toEqual([
+      { tableName: 'Product', columnName: 'productId', value: 'product-2' },
+      { tableName: 'Product', columnName: 'productId', value: 'product-1' },
+    ]);
+  });
+
   it('loads only requested unit versions through targeted lookup for POS revalidation', () => {
     const gateway = new FakeSheetGateway({
       UnitConversionVersion: [unitRow('unit-1', 'variant-1'), unitRow('unit-2', 'variant-2')],
@@ -370,6 +390,20 @@ function variantRow(variantId: string, displayName: string): Record<string, unkn
     defaultUnitId: 'cái',
     isActive: true,
     unitPriceVnd: 10000,
+  };
+}
+
+function productRow(productId: string, name: string): Record<string, unknown> {
+  return {
+    id: `${productId}:v1`,
+    tenantId: 'tenant-default',
+    schemaVersion: 1,
+    recordVersion: 1,
+    productId,
+    productCode: `SP-${productId}`,
+    name,
+    productType: 'Stocked',
+    isActive: true,
   };
 }
 

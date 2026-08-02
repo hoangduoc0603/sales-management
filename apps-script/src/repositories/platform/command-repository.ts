@@ -35,6 +35,9 @@ export function createInMemoryCommandRepository(): CommandRepository {
   const byCommandId = new Map<string, CommandTransactionRecord>();
 
   return {
+    findCachedByIdempotencyKey(idempotencyKey) {
+      return [...byCommandId.values()].find((record) => record.idempotencyKey === idempotencyKey);
+    },
     findByIdempotencyKey(idempotencyKey) {
       return [...byCommandId.values()].find((record) => record.idempotencyKey === idempotencyKey);
     },

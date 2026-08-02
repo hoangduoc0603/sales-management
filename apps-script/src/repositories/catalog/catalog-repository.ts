@@ -10,6 +10,7 @@ import type { AppendOnlySheetRecordGateway } from '../platform/sheet-record-repo
 
 export interface CatalogRepository {
   findProductById(productId: string): ProductDTO | undefined;
+  findProductsByIds(productIds: readonly string[]): readonly ProductDTO[];
   findVariantById(variantId: string): VariantDTO | undefined;
   findVariantsByIds(variantIds: readonly string[]): readonly VariantDTO[];
   findUnitVersionsByIds(unitVersionIds: readonly string[]): readonly UnitConversionVersionDTO[];
@@ -35,6 +36,12 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
     findProductById(productId) {
       const product = products.get(productId);
       return product === undefined ? undefined : clone(product);
+    },
+    findProductsByIds(productIds) {
+      return [...new Set(productIds)]
+        .map((productId) => products.get(productId))
+        .filter((product): product is ProductDTO => product !== undefined)
+        .map(clone);
     },
     findVariantById(variantId) {
       const variant = variants.get(variantId);
@@ -115,10 +122,13 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
 
   return {
     findProductById(productId) {
-      return products.list().find((product) => product.productId === productId);
+      return products.findByIds([productId])[0];
+    },
+    findProductsByIds(productIds) {
+      return products.findByIds(productIds);
     },
     findVariantById(variantId) {
-      return variants.list().find((variant) => variant.variantId === variantId);
+      return variants.findByIds([variantId])[0];
     },
     findVariantsByIds(variantIds) {
       return variants.findByIds(variantIds);

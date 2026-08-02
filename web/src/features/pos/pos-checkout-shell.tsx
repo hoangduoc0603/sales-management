@@ -15,10 +15,11 @@ import { TextAvatar } from '../../components/ui/text-avatar';
 import type { ApiClient } from '../../lib/api/client';
 import {
   buildPosCatalogCacheNamespace,
+  clearCachedPosCatalogProjectionNamespace,
   loadPosCatalogProjection,
+  PosCatalogProjectionLoadError,
   prewarmPosCheckoutContext,
   readCachedPosCatalogProjectionEntry,
-  shouldRefreshCachedPosCatalogProjection,
   writeCachedPosCatalogProjection,
 } from './catalog-cache/load-pos-catalog-projection';
 import type { CatalogPosProjectionResponse } from './catalog-cache/pos-catalog-cache';
@@ -45,6 +46,7 @@ export interface PosCheckoutShellProps {
   initialReceipt?: SalesPosCompleteResponse['receipt'];
   initialStateId?: (typeof recoveryStates)[number]['id'];
   onNavigateDashboard?(): void;
+  onSessionExpired?(): void;
   onScopeChange?(input: { branchId?: string; warehouseId?: string }): void;
   onThemeToggle?(): void;
 }
@@ -127,8 +129,6 @@ const tenderMethods = [
 ] as const;
 
 const categories = ['Tất cả', 'Sữa & đồ uống', 'Mỹ phẩm', 'Gia dụng', 'Thời trang'] as const;
-const posCatalogProjectionFreshTtlMs = 5 * 60 * 1000;
-
 const recoveryStates = [
   {
     id: 'shift',
@@ -234,6 +234,7 @@ export function PosCheckoutShell({
   actor,
   apiClient,
   onNavigateDashboard,
+  onSessionExpired,
   onScopeChange,
   onThemeToggle,
   projection = localPreviewProjection,
@@ -336,17 +337,6 @@ export function PosCheckoutShell({
         prewarmCheckoutContext(cachedProjection);
       }
 
-      if (
-        cachedProjectionEntry !== undefined &&
-        !shouldRefreshCachedPosCatalogProjection({
-          cachedAt: cachedProjectionEntry.cachedAt,
-          maxAgeMs: posCatalogProjectionFreshTtlMs,
-          projection: cachedProjectionEntry.projection,
-        })
-      ) {
-        return;
-      }
-
       void loadPosCatalogProjection({
         apiClient,
         requestId: `pos-catalog-${Date.now()}`,
@@ -355,19 +345,32 @@ export function PosCheckoutShell({
         warehouseId: selectedWarehouseId,
       })
         .then((nextProjection) => {
-          void writeCachedPosCatalogProjection({
-            branchId: selectedBranchId,
-            cacheNamespace: catalogCacheNamespace,
-            projection: nextProjection,
-            warehouseId: selectedWarehouseId,
-          });
           prewarmCheckoutContext(nextProjection);
-          if (isActive) {
+          const projectionChanged = cachedProjection?.projectionVersion !== nextProjection.projectionVersion;
+          if (projectionChanged) {
+            void writeCachedPosCatalogProjection({
+              branchId: selectedBranchId,
+              cacheNamespace: catalogCacheNamespace,
+              projection: nextProjection,
+              warehouseId: selectedWarehouseId,
+            });
+          }
+          if (isActive && projectionChanged) {
             setActiveProjection(nextProjection);
             setMessage(`Dữ liệu hàng hóa đã cập nhật phiên bản ${nextProjection.projectionVersion}.`);
           }
         })
-        .catch(() => {
+        .catch((error) => {
+          if (!isActive) return;
+          if (isCacheRevocationError(error)) {
+            void clearCachedPosCatalogProjectionNamespace({ cacheNamespace: catalogCacheNamespace });
+            setActiveProjection(createUnavailableProjection(selectedBranchId, selectedWarehouseId));
+            setMessage('Quyền hoặc phiên đăng nhập đã thay đổi; dữ liệu POS trên máy đã được xóa.');
+            if (error.code === 'SESSION_EXPIRED' || error.code === 'SESSION_REQUIRED') {
+              onSessionExpired?.();
+            }
+            return;
+          }
           if (isActive && cachedProjection === undefined) {
             setActiveProjection(projection);
             setMessage('Không tải được dữ liệu hàng hóa mới; đang dùng dữ liệu dự phòng của màn hình.');
@@ -385,6 +388,7 @@ export function PosCheckoutShell({
     catalogCacheNamespace,
     prewarmCheckoutContext,
     projection,
+    onSessionExpired,
     selectedBranchId,
     selectedWarehouseId,
     sessionToken,
@@ -910,6 +914,26 @@ export function PosCheckoutShell({
       </MainTag>
     </div>
   );
+}
+
+function isCacheRevocationError(error: unknown): error is PosCatalogProjectionLoadError {
+  return (
+    error instanceof PosCatalogProjectionLoadError &&
+    (error.code === 'SESSION_EXPIRED' ||
+      error.code === 'SESSION_REQUIRED' ||
+      error.code === 'PERMISSION_DENIED' ||
+      error.code === 'SCOPE_DENIED')
+  );
+}
+
+function createUnavailableProjection(branchId: string, warehouseId: string): CatalogPosProjectionResponse {
+  return {
+    projectionVersion: 'catalog-pos-unavailable',
+    branchId,
+    warehouseId,
+    generatedAt: new Date().toISOString(),
+    variants: [],
+  };
 }
 
 function RecoveryStateContent({

@@ -17,6 +17,7 @@ export interface CommandActorInput {
 
 export interface CommandCoordinator {
   run<T>(command: ApiCommand, handler: () => T, actor?: CommandActorInput): T;
+  getCachedStatus(input: { idempotencyKey: string }): CommandStatusDTO | undefined;
   getStatus(input: { commandId?: string; idempotencyKey?: string }): CommandStatusDTO | undefined;
 }
 
@@ -122,6 +123,19 @@ export function createCommandCoordinator(deps: CommandCoordinatorDependencies): 
         errorCode: record.errorCode,
         updatedAt: record.updatedAt,
       };
+    },
+    getCachedStatus(input) {
+      const record = deps.commandRepository.findCachedByIdempotencyKey?.(input.idempotencyKey);
+      return record === undefined
+        ? undefined
+        : {
+            commandId: record.commandId,
+            idempotencyKey: record.idempotencyKey,
+            status: record.status,
+            resultJson: record.resultJson,
+            errorCode: record.errorCode,
+            updatedAt: record.updatedAt,
+          };
     },
   };
 }

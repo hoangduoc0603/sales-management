@@ -59,6 +59,15 @@ describe('TableRegistryService', () => {
         }),
       ]),
     );
+    expect(definitions.find((table) => table.tableName === 'Product')?.lookupKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Product.productId',
+          columns: ['productId'],
+          unique: true,
+        }),
+      ]),
+    );
     expect(definitions.find((table) => table.tableName === 'UnitConversionVersion')?.lookupKeys).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

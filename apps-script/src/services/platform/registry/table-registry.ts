@@ -433,7 +433,9 @@ export function createPlatformTableDefinitions(): readonly TableDefinitionDTO[] 
       'taxCode',
       'isActive',
       'descriptionJson',
-    ], 'catalog'),
+    ], 'catalog', [
+      { name: 'Product.productId', columns: ['productId'], unique: true },
+    ]),
     table('Variant', 'core', 'master', 'none', [
       'id',
       'tenantId',

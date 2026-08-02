@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createInMemoryCatalogRepository } from '../../../apps-script/src/repositories/catalog/catalog-repository';
 import { createCatalogService } from '../../../apps-script/src/services/catalog/catalog-service';
 
-function createService() {
+function createService(repository = createInMemoryCatalogRepository()) {
   let sequence = 0;
 
   return createCatalogService({
-    repository: createInMemoryCatalogRepository(),
+    repository,
     tenantId: 'tenant-default',
     now: () => new Date('2026-07-27T00:00:00.000Z'),
     newId(prefix) {
@@ -42,7 +42,35 @@ describe('CatalogService', () => {
           },
         ],
       }),
-    ).toMatchObject({ totalVnd: 84000, lines: [{ unitPriceVnd: 42000 }] });
+    ).toMatchObject({ ok: true, quote: { totalVnd: 84000, lines: [{ unitPriceVnd: 42000 }] } });
+  });
+
+  it('rejects POS revalidation when the active variant parent product is no longer active instead of quoting zero', () => {
+    const repository = createInMemoryCatalogRepository();
+    const service = createService(repository);
+    const created = service.createProduct({
+      productCode: 'SP-QUOTE-INACTIVE',
+      name: 'Hàng đã ngừng bán',
+      productType: 'Stocked',
+      sku: 'QUOTE-INACTIVE',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 42000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+    repository.saveProduct({ ...created.data.product, isActive: false });
+
+    expect(
+      service.quotePosLines({
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+        lines: [{
+          lineId: 'line-quote-inactive',
+          variantId: created.data.defaultVariant.variantId,
+          unitVersionId: created.data.defaultUnit.unitVersionId,
+          quantity: 1,
+        }],
+      }),
+    ).toMatchObject({ ok: false, error: { lineId: 'line-quote-inactive', reason: 'PRODUCT_INACTIVE' } });
   });
 
   it('tạo product đơn giản với Default Variant là đơn vị giao dịch', () => {

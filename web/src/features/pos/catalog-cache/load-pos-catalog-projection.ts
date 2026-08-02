@@ -1,4 +1,5 @@
 import type { CatalogPosProjectionResponse } from '@shared/contracts/catalog/catalog';
+import type { ApiErrorCode } from '@shared/contracts/errors';
 import type {
   SalesPosPrewarmCheckoutContextRequest,
   SalesPosPrewarmCheckoutContextResponse,
@@ -15,6 +16,16 @@ export interface LoadPosCatalogProjectionInput {
   sessionToken: string;
   branchId: string;
   warehouseId: string;
+}
+
+export class PosCatalogProjectionLoadError extends Error {
+  constructor(
+    readonly code: ApiErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PosCatalogProjectionLoadError';
+  }
 }
 
 export interface PrewarmPosCheckoutContextInput extends SalesPosPrewarmCheckoutContextRequest {
@@ -84,7 +95,7 @@ export async function loadPosCatalogProjection({
   });
 
   if (!result.ok) {
-    throw new Error(result.error.message);
+    throw new PosCatalogProjectionLoadError(result.error.code, result.error.message);
   }
 
   return result.data;

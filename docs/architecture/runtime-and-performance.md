@@ -18,7 +18,7 @@ Không endpoint nào được quét full transaction table trong fast path chỉ
 
 ## 2. Read path và cache
 
-Browser dùng memory cache cho tab hiện tại và IndexedDB cho catalog/read model đã xác thực. POS bootstrap chỉ trả đúng Branch/Warehouse, catalog projection, barcode index, price/promotion policy và version cần thiết; detail/history/lot/serial lazy-load khi người dùng mở. POS catalog projection được persist tại IndexedDB theo namespace `tenant:user:authVersion:appVersion:schemaVersion` và Branch/Warehouse; không lưu session token. Entry hỏng, IndexedDB bị tắt/đầy hoặc cache miss phải fallback remote; logout xóa namespace hiện hành, còn đổi auth/app/schema version tạo namespace mới nên không đọc dữ liệu cũ.
+Browser dùng memory cache cho tab hiện tại và IndexedDB cho catalog/read model đã xác thực. POS bootstrap chỉ trả đúng Branch/Warehouse, catalog projection, barcode index, price/promotion policy và version cần thiết; detail/history/lot/serial lazy-load khi người dùng mở. POS catalog projection được persist tại IndexedDB theo namespace `tenant:user:authVersion:appVersion:schemaVersion` và Branch/Warehouse; không lưu session token. POS có thể render cache trước, nhưng mỗi lần vào POS phải revalidate projection nền và chỉ thay cache/memory khi `projectionVersion` thay đổi. Entry hỏng, IndexedDB bị tắt/đầy hoặc cache miss phải fallback remote; logout, lỗi session hoặc lỗi permission/scope xóa namespace hiện hành, còn đổi auth/app/schema version tạo namespace mới nên không đọc dữ liệu cũ.
 
 Cache client có key gồm installation, user, permission/auth version, app/schema version, scope và resource version. Cache cũ chỉ là stale read-only fallback; logout, auth/permission error hoặc deployment mới phải xóa namespace tương ứng.
 

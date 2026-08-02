@@ -35,6 +35,18 @@ type CatalogServiceResult<T> =
       };
     };
 
+export type CatalogPosLineQuoteResult =
+  | { ok: true; quote: CatalogQuoteResponse }
+  | {
+      ok: false;
+      error: {
+        lineId: string;
+        variantId: string;
+        unitVersionId: string;
+        reason: 'PRODUCT_NOT_FOUND' | 'PRODUCT_INACTIVE' | 'VARIANT_UNAVAILABLE' | 'UNIT_UNAVAILABLE' | 'UNIT_MISMATCH';
+      };
+    };
+
 export interface CatalogService {
   createProduct(input: CatalogCreateProductRequest): CatalogServiceResult<CatalogCreateProductResponse>;
   listProducts(input: CatalogProductListRequest): CatalogProductListResponse;
@@ -43,7 +55,7 @@ export interface CatalogService {
     input: CatalogSetProductActiveRequest,
   ): CatalogServiceResult<CatalogSetProductActiveResponse>;
   getPosProjection(input: CatalogPosProjectionRequest): CatalogPosProjectionResponse;
-  quotePosLines(input: CatalogQuoteRequest): CatalogQuoteResponse;
+  quotePosLines(input: CatalogQuoteRequest): CatalogPosLineQuoteResult;
 }
 
 export interface CatalogServiceDependencies {
@@ -359,21 +371,42 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
     },
     quotePosLines(input) {
       const variantsById = new Map(
+        deps.repository.findVariantsByIds(input.lines.map((line) => line.variantId)).map((variant) => [variant.variantId, variant]),
+      );
+      const productsById = new Map(
         deps.repository
-          .findVariantsByIds(input.lines.map((line) => line.variantId))
-          .filter((variant) => variant.isActive)
-          .map((variant) => [variant.variantId, variant]),
+          .findProductsByIds([...variantsById.values()].map((variant) => variant.productId))
+          .map((product) => [product.productId, product]),
       );
       const unitsById = new Map(
         deps.repository
           .findUnitVersionsByIds(input.lines.map((line) => line.unitVersionId))
-          .filter((unitVersion) => unitVersion.isActive && unitVersion.saleEnabled)
           .map((unitVersion) => [unitVersion.unitVersionId, unitVersion]),
       );
+      for (const line of input.lines) {
+        const variant = variantsById.get(line.variantId);
+        if (variant === undefined || !variant.isActive) {
+          return { ok: false, error: { ...line, reason: 'VARIANT_UNAVAILABLE' } };
+        }
+        const product = productsById.get(variant.productId);
+        if (product === undefined) {
+          return { ok: false, error: { ...line, reason: 'PRODUCT_NOT_FOUND' } };
+        }
+        if (!product.isActive) {
+          return { ok: false, error: { ...line, reason: 'PRODUCT_INACTIVE' } };
+        }
+        const unitVersion = unitsById.get(line.unitVersionId);
+        if (unitVersion === undefined || !unitVersion.isActive || !unitVersion.saleEnabled) {
+          return { ok: false, error: { ...line, reason: 'UNIT_UNAVAILABLE' } };
+        }
+        if (unitVersion.variantId !== variant.variantId) {
+          return { ok: false, error: { ...line, reason: 'UNIT_MISMATCH' } };
+        }
+      }
       const pricingVariants = input.lines.flatMap((line) => {
         const variant = variantsById.get(line.variantId);
         const unitVersion = unitsById.get(line.unitVersionId);
-        if (variant === undefined || unitVersion?.variantId !== variant.variantId) return [];
+        if (variant === undefined || unitVersion === undefined) return [];
         return [{
           variantId: variant.variantId,
           unitVersionId: unitVersion.unitVersionId,
@@ -381,11 +414,14 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
         }];
       });
 
-      return createPricingService({
+      return {
+        ok: true,
+        quote: createPricingService({
         variants: pricingVariants,
         priceRules: [],
         promotions: [],
-      }).quoteCart(input);
+        }).quoteCart(input),
+      };
     },
   };
 }

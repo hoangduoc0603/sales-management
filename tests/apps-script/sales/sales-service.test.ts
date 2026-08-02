@@ -89,6 +89,23 @@ describe('SalesService POS checkout', () => {
     expect(financeRepository.listPayments()).toHaveLength(1);
   });
 
+  it('returns the committed idempotent result without catalog preflight when a retry arrives during catalog outage', () => {
+    const { catalogService, salesService, shiftId } = createFixture();
+    const first = salesService.completePosSale(posCompleteInput({ shiftId }));
+    if (!first.ok) throw new Error('Expected first POS completion to succeed.');
+
+    catalogService.getPosProjection = () => {
+      throw new Error('Catalog temporarily unavailable.');
+    };
+
+    const retry = salesService.completePosSale({
+      ...posCompleteInput({ shiftId }),
+      commandId: 'cmd-pos-retry-after-outage',
+    });
+
+    expect(retry).toMatchObject({ ok: true, data: { order: { saleOrderId: first.data.order.saleOrderId } } });
+  });
+
   it('validates POS shift by direct shiftId lookup instead of scanning open shifts by cashier', () => {
     const { financeRepository, salesService, shiftId } = createFixture();
     let getShiftCalls = 0;
@@ -822,6 +839,7 @@ function createFixture(options: {
   });
 
   return {
+    catalogService,
     financeRepository,
     inventoryRepository,
     inventoryService,

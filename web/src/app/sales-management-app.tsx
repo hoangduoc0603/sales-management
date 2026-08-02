@@ -500,6 +500,7 @@ export function SalesManagementApp({
           sessionToken={sessionToken}
           shellMode="embedded"
           theme={theme}
+          onSessionExpired={clearSession}
         />
       ) : route === 'orders' ? (
         <SalesOrdersReturnsHome

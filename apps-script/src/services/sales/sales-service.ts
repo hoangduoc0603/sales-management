@@ -181,6 +181,8 @@ export function createSalesService(deps: SalesServiceDependencies): SalesService
       };
     },
     completePosSale(input) {
+      const committedResult = readCommittedPosSaleResult(deps, input.idempotencyKey);
+      if (committedResult !== undefined) return committedResult;
       const preflight = preparePosSale(deps, input);
       return deps.commandCoordinator.run(
         toCommand(input),
@@ -970,6 +972,20 @@ interface PosSalePreflight {
   projection: CatalogPosProjection;
 }
 
+function readCommittedPosSaleResult(
+  deps: SalesServiceDependencies,
+  idempotencyKey: string,
+): SalesServiceResult<SalesPosCompleteResponse> | undefined {
+  const status = deps.commandCoordinator.getCachedStatus({ idempotencyKey });
+  if (status?.status !== 'Committed' || status.resultJson === undefined) return undefined;
+
+  try {
+    return JSON.parse(status.resultJson) as SalesServiceResult<SalesPosCompleteResponse>;
+  } catch {
+    return undefined;
+  }
+}
+
 function preparePosSale(
   deps: SalesServiceDependencies,
   input: SalesPosCompleteRequest,
@@ -1006,7 +1022,7 @@ function commitPosSale(
   );
   if (shiftError !== undefined) return shiftError;
 
-  const quote = measure('sales.pos.targetedQuoteMs', () =>
+  const quoteResult = measure('sales.pos.targetedQuoteMs', () =>
     deps.catalogService.quotePosLines({
       branchId: input.branchId,
       warehouseId: input.warehouseId,
@@ -1019,6 +1035,15 @@ function commitPosSale(
       })),
     }),
   );
+  if (!quoteResult.ok) {
+    return failure('PRICE_CHANGED', 'Hàng hóa hoặc đơn vị bán đã thay đổi trước khi hoàn tất.', {
+      lineId: quoteResult.error.lineId,
+      variantId: quoteResult.error.variantId,
+      unitVersionId: quoteResult.error.unitVersionId,
+      reason: quoteResult.error.reason,
+    });
+  }
+  const quote = quoteResult.quote;
   if (quote.quoteVersion !== input.quoteVersion) {
     return failure('PRICE_CHANGED', 'Giá hoặc khuyến mãi đã thay đổi. Vui lòng áp dụng báo giá mới trước khi hoàn tất.', {
       expectedVersion: input.quoteVersion,

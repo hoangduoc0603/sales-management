@@ -67,6 +67,35 @@ describe('loadPosCatalogProjection', () => {
     ]);
   });
 
+  it('giữ mã lỗi auth/scope để POS xóa cache thay vì tiếp tục hiển thị dữ liệu cũ', async () => {
+    const client: ApiClient = {
+      async invoke(request) {
+        return {
+          ok: false,
+          error: { code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập đã hết hạn.' },
+          meta: {
+            requestId: request.requestId,
+            operation: request.operation,
+            serverTime: '2026-08-02T00:00:00.000Z',
+            durationMs: 0,
+            stages: {},
+            io: {},
+          },
+        };
+      },
+    };
+
+    await expect(
+      loadPosCatalogProjection({
+        apiClient: client,
+        requestId: 'req-pos-catalog-expired',
+        sessionToken: 'expired-session',
+        branchId: 'branch-default',
+        warehouseId: 'warehouse-default',
+      }),
+    ).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+  });
+
   it('gọi prewarm checkout context ở nền với payload nhỏ và không trả business data', async () => {
     const calls: unknown[] = [];
     const client: ApiClient = {

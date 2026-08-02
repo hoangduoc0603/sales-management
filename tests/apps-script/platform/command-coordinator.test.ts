@@ -49,7 +49,7 @@ describe('CommandCoordinator', () => {
       return readPerformanceSnapshot();
     });
 
-    expect(performance.stages['command.findExistingMs']).toBeGreaterThanOrEqual(0);
+    expect(performance.stages['command.findCachedExistingMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.handlerMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.appendCommittedMs']).toBeGreaterThanOrEqual(0);
     expect(performance.stages['command.totalWithLockMs']).toBeGreaterThanOrEqual(0);
