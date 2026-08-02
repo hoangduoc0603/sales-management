@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-- Status: `Review`
+- Status: `Approved`
 - Ngày thiết kế: 2026-08-02
 - Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`
@@ -18,7 +18,9 @@
 
 ## Handoff UI
 
-- AppShell Cenio Core: global scope, sidebar kho vận, breadcrumb, tab view, theme light/dark.
+- AppShell Cenio Core: global scope, breadcrumb, theme light/dark.
+- Sidebar chính có section riêng `Kho`; các menu nghiệp vụ cấp 1 là `Tồn kho`, `Nhập kho`, `Xuất kho`, `Điều chuyển`, `Kiểm kê`, `Điều chỉnh`, `Báo cáo NXT`.
+- Trong màn `Tồn kho`, các state `Cảnh báo`, `Lô & serial`, `Giữ chỗ`, `Truy xuất`, empty, restricted và scope changed là view nội bộ theo hash/state; không render tab ngang và không đưa thành menu cấp 1 riêng.
 - Bảng desktop có tìm kiếm và custom listbox cho trạng thái, cảnh báo, theo dõi; mobile chuyển thành thẻ tồn, không tràn ngang viewport 390 px.
 - Cảnh báo có tồn thấp, lô gần hạn, serial bất thường và di chuyển chậm.
 - Trace là read-only; có bộ lọc chứng từ nguồn và không mở thao tác chỉnh số dư.

@@ -158,6 +158,162 @@ describe('AppShell', () => {
     expect(html).toContain('aria-current="page"');
   });
 
+  it('render section sidebar dạng disclosure và tự mở section chứa route hiện tại', () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        actor,
+        currentRoute: 'inventory',
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        theme: 'light',
+        onLogout: () => undefined,
+        onRouteChange: () => undefined,
+        onScopeChange: () => undefined,
+        onThemeToggle: () => undefined,
+        children: createElement('div', null, 'Nội dung kho'),
+      }),
+    );
+
+    expect(html).toContain('class="cn-nav-group-trigger"');
+    expect(html).toContain('aria-controls="cn-nav-section-kho"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain(
+      'aria-hidden="false" class="cn-nav-group-content" data-state="open" id="cn-nav-section-kho"',
+    );
+    expect(html).toContain('class="cn-nav-text">Tồn kho</span>');
+    expect(html).toContain('class="cn-nav-text">Nhập kho</span>');
+    expect(html).toContain('class="cn-nav-text">Xuất kho</span>');
+    expect(html).toContain('class="cn-nav-text">Điều chuyển</span>');
+    expect(html).toContain('class="cn-nav-text">Kiểm kê</span>');
+    expect(html).toContain('class="cn-nav-text">Điều chỉnh</span>');
+    expect(html).toContain('class="cn-nav-text">Báo cáo NXT</span>');
+    expect(html).not.toContain('class="cn-nav-text">Cảnh báo</span>');
+    expect(html).not.toContain('class="cn-nav-text">Lô &amp; serial</span>');
+    expect(html).not.toContain('class="cn-nav-text">Giữ chỗ</span>');
+    expect(html).not.toContain('class="cn-nav-text">Truy xuất</span>');
+    expect(html).toMatch(/<button aria-current="page" class="cn-nav-item cn-sidebar-tooltip-trigger active"[^>]*>[\s\S]*?<span class="cn-nav-text">Tồn kho<\/span>/);
+  });
+
+  it('sidebar section không active có thể khởi tạo ở trạng thái collapsed từ localStorage', () => {
+    const originalWindow = globalThis.window;
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: { hash: '' },
+        localStorage: {
+          getItem: (key: string) =>
+            key === 'sales-management.sidebarSections.v1' ? '{"kiem-soat":false}' : null,
+          setItem: () => undefined,
+        },
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+
+    try {
+      const html = renderToStaticMarkup(
+        createElement(AppShell, {
+          actor,
+          currentRoute: 'dashboard',
+          scope,
+          selectedBranchId: 'branch-default',
+          selectedWarehouseId: 'warehouse-default',
+          theme: 'light',
+          onLogout: () => undefined,
+          onRouteChange: () => undefined,
+          onScopeChange: () => undefined,
+          onThemeToggle: () => undefined,
+          children: createElement('div', null, 'Nội dung'),
+        }),
+      );
+
+      expect(html).toMatch(/aria-controls="cn-nav-section-kiem-soat"[^>]*aria-expanded="false"/);
+      expect(html).toMatch(
+        /<div aria-hidden="true" class="cn-nav-group-content" data-state="closed" id="cn-nav-section-kiem-soat"/,
+      );
+      expect(html).toMatch(/aria-controls="cn-nav-section-van-hanh"[^>]*aria-expanded="true"/);
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
+  });
+
+  it('sidebar section đang active vẫn tôn trọng trạng thái collapsed người dùng đã chọn', () => {
+    const originalWindow = globalThis.window;
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: { hash: '' },
+        localStorage: {
+          getItem: (key: string) =>
+            key === 'sales-management.sidebarSections.v1' ? '{"van-hanh":false}' : null,
+          setItem: () => undefined,
+        },
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+
+    try {
+      const html = renderToStaticMarkup(
+        createElement(AppShell, {
+          actor,
+          currentRoute: 'dashboard',
+          scope,
+          selectedBranchId: 'branch-default',
+          selectedWarehouseId: 'warehouse-default',
+          theme: 'light',
+          onLogout: () => undefined,
+          onRouteChange: () => undefined,
+          onScopeChange: () => undefined,
+          onThemeToggle: () => undefined,
+          children: createElement('div', null, 'Nội dung'),
+        }),
+      );
+
+      expect(html).toMatch(/aria-controls="cn-nav-section-van-hanh"[^>]*aria-expanded="false"/);
+      expect(html).toMatch(
+        /<div aria-hidden="true" class="cn-nav-group-content" data-state="closed" id="cn-nav-section-van-hanh"/,
+      );
+      expect(html).toMatch(/<button aria-current="page"[^>]*tabindex="-1"[^>]*>/);
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
+  });
+
+  it('sidebar icon-only không render trigger collapse section nhưng vẫn giữ tooltip cho từng item', () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        actor,
+        currentRoute: 'inventory',
+        initialSidebarCollapsed: true,
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        theme: 'light',
+        onLogout: () => undefined,
+        onRouteChange: () => undefined,
+        onScopeChange: () => undefined,
+        onThemeToggle: () => undefined,
+        children: createElement('div', null, 'Nội dung'),
+      }),
+    );
+
+    expect(html).not.toContain('cn-nav-group-trigger');
+    expect(html).not.toContain('aria-controls="cn-nav-section-kho"');
+    expect(html).toContain('aria-label="Tồn kho"');
+    expect(html).toContain('data-tooltip-label="Tồn kho"');
+    expect(html).toContain('class="cn-nav-text">Xuất kho</span>');
+  });
+
   it('desktop collapse trigger dùng edge rail handle gần footer thay vì nút nổi phía trên brand', () => {
     const css = readFileSync('web/src/styles/index.css', 'utf8');
 
@@ -174,6 +330,30 @@ describe('AppShell', () => {
 
     expect(css).toMatch(/\.cn-app-shell-collapsed\s+\.cn-sidebar-brand\s*\{[^}]*height:\s*64px;[^}]*min-height:\s*64px;[^}]*overflow:\s*hidden;/s);
     expect(css).toMatch(/\.cn-app-shell-collapsed\s+\.cn-sidebar-brand-copy\s*\{[^}]*flex:\s*0 0 0;[^}]*max-height:\s*0;[^}]*overflow:\s*hidden;/s);
+  });
+
+  it('sidebar navigation là vùng scroll riêng khi có nhiều menu', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    expect(css).toMatch(/\.cn-nav\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
+    expect(css).toMatch(/\.cn-sidebar-brand,\s*\.cn-sidebar-foot,\s*\.cn-sidebar-foot-compact\s*\{[^}]*flex:\s*0 0 auto;/s);
+  });
+
+  it('badge dùng CSS chống vỡ chữ dài', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    expect(css).toContain('.cn-nav-group-trigger');
+    expect(css).toContain('.cn-nav-group-content');
+    expect(css).toMatch(/\.cn-nav-group-content\s*\{[^}]*grid-template-rows:\s*1fr;[^}]*transition:\s*grid-template-rows var\(--cn-motion-slow\) var\(--cn-ease\), opacity var\(--cn-motion-base\) var\(--cn-ease\), transform var\(--cn-motion-base\) var\(--cn-ease\);/s);
+    expect(css).toMatch(/\.cn-nav-group-content\[data-state="closed"\]\s*\{[^}]*grid-template-rows:\s*0fr;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/s);
+    expect(css).toMatch(/\.cn-badge\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+  });
+
+  it('global CSS tải Outfit để khớp font với Cenio Core/Open Design', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    expect(css).toContain('fonts.googleapis.com/css2?family=Outfit');
+    expect(css).toContain('--cn-font: "Outfit"');
   });
 });
 

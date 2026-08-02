@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-- Status: `Review`
+- Status: `Approved`
 - Ngày thiết kế: 2026-08-02
 - Design System: Cenio Core v0.7
 - Open Design project: `7eaa3a02-4f8f-4b74-ad1a-d1486bbab62b`

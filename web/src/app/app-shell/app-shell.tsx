@@ -30,10 +30,12 @@ export interface AppShellProps {
 }
 
 const navigationGroups: readonly {
+  id: string;
   label: string;
-  items: readonly { route: AppRoute; label: string; icon: AppIconName }[];
+  items: readonly { route: AppRoute; label: string; icon: AppIconName; inventoryViewId?: string }[];
 }[] = [
   {
+    id: 'van-hanh',
     label: 'Vận hành',
     items: [
       { route: 'dashboard', label: 'Tổng quan', icon: 'dashboard' },
@@ -44,21 +46,56 @@ const navigationGroups: readonly {
     ],
   },
   {
+    id: 'kho',
+    label: 'Kho',
+    items: [
+      { route: 'inventory', label: 'Tồn kho', icon: 'inventory', inventoryViewId: 'overview' },
+      { route: 'inventory', label: 'Nhập kho', icon: 'purchasing', inventoryViewId: 'receiving' },
+      { route: 'inventory', label: 'Xuất kho', icon: 'orders', inventoryViewId: 'outbound' },
+      { route: 'inventory', label: 'Điều chuyển', icon: 'refresh', inventoryViewId: 'transfer' },
+      { route: 'inventory', label: 'Kiểm kê', icon: 'check', inventoryViewId: 'stocktake' },
+      { route: 'inventory', label: 'Điều chỉnh', icon: 'fileAlert', inventoryViewId: 'adjustment' },
+      { route: 'inventory', label: 'Báo cáo NXT', icon: 'reports', inventoryViewId: 'nxt' },
+    ],
+  },
+  {
+    id: 'kiem-soat',
     label: 'Kiểm soát',
     items: [
-      { route: 'inventory', label: 'Kho', icon: 'inventory' },
       { route: 'purchasing', label: 'Mua hàng', icon: 'purchasing' },
       { route: 'finance', label: 'Tài chính', icon: 'finance' },
       { route: 'reports', label: 'Báo cáo', icon: 'reports' },
     ],
   },
   {
+    id: 'he-thong',
     label: 'Hệ thống',
     items: [{ route: 'admin', label: 'Quản trị', icon: 'admin' }],
   },
 ];
 
 const sidebarCollapsedStorageKey = 'sales-management.sidebarCollapsed.v1';
+const sidebarSectionsStorageKey = 'sales-management.sidebarSections.v1';
+
+const inventorySubNavigation: readonly { viewId: string; label: string }[] = [
+  { viewId: 'overview', label: 'Tồn kho' },
+  { viewId: 'receiving', label: 'Nhập kho' },
+  { viewId: 'outbound', label: 'Xuất kho' },
+  { viewId: 'transfer', label: 'Điều chuyển' },
+  { viewId: 'stocktake', label: 'Kiểm kê' },
+  { viewId: 'adjustment', label: 'Điều chỉnh' },
+  { viewId: 'nxt', label: 'Báo cáo NXT' },
+];
+
+const inventoryOverviewInternalViews = new Set([
+  'alerts',
+  'lot-serial',
+  'reservation',
+  'trace',
+  'empty',
+  'restricted',
+  'scope-changed',
+]);
 
 export function AppShell({
   actor,
@@ -80,6 +117,8 @@ export function AppShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     () => initialSidebarCollapsed ?? readSidebarCollapsedPreference(),
   );
+  const [sidebarSectionState, setSidebarSectionState] = useState(() => readSidebarSectionPreference());
+  const [activeInventoryView, setActiveInventoryView] = useState(() => readInventorySidebarView());
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const handleSidebarToggle = useCallback(() => {
@@ -97,6 +136,34 @@ export function AppShell({
     },
     [onRouteChange],
   );
+
+  const handleInventorySubRouteChange = useCallback(
+    (viewId: string) => {
+      writeInventorySidebarHash(viewId);
+      setActiveInventoryView(viewId);
+      onRouteChange('inventory');
+    },
+    [onRouteChange],
+  );
+
+  const handleMobileInventorySubRouteChange = useCallback(
+    (viewId: string) => {
+      handleInventorySubRouteChange(viewId);
+      setIsMobileSidebarOpen(false);
+    },
+    [handleInventorySubRouteChange],
+  );
+
+  const handleSidebarSectionToggle = useCallback((sectionId: string) => {
+    setSidebarSectionState((current) => {
+      const next = {
+        ...current,
+        [sectionId]: !(current[sectionId] ?? true),
+      };
+      writeSidebarSectionPreference(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!isUserMenuOpen) return undefined;
@@ -118,6 +185,13 @@ export function AppShell({
     };
   }, [isUserMenuOpen]);
 
+  useEffect(() => {
+    const handleHashChange = () => setActiveInventoryView(readInventorySidebarView());
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   return (
     <div
       className={isSidebarCollapsed ? 'cn-app-shell cn-app-shell-collapsed' : 'cn-app-shell'}
@@ -125,9 +199,13 @@ export function AppShell({
     >
       <SidebarPanel
         currentRoute={currentRoute}
+        activeInventoryView={activeInventoryView}
         isCollapsed={isSidebarCollapsed}
+        sectionState={sidebarSectionState}
+        onInventorySubRouteChange={handleInventorySubRouteChange}
         onRouteChange={onRouteChange}
         onSidebarToggle={handleSidebarToggle}
+        onSectionToggle={handleSidebarSectionToggle}
         showToggle
       />
       <div className="cn-app-main">
@@ -219,8 +297,12 @@ export function AppShell({
         <div className="cn-mobile-sidebar">
           <SidebarPanel
             currentRoute={currentRoute}
+            activeInventoryView={activeInventoryView}
             isCollapsed={false}
+            sectionState={sidebarSectionState}
+            onInventorySubRouteChange={handleMobileInventorySubRouteChange}
             onRouteChange={handleMobileRouteChange}
+            onSectionToggle={handleSidebarSectionToggle}
             showToggle={false}
           />
         </div>
@@ -230,17 +312,25 @@ export function AppShell({
 }
 
 interface SidebarPanelProps {
+  activeInventoryView: string;
   currentRoute: AppRoute;
   isCollapsed: boolean;
+  sectionState: Record<string, boolean>;
   showToggle: boolean;
+  onInventorySubRouteChange(viewId: string): void;
   onRouteChange(route: AppRoute): void;
+  onSectionToggle(sectionId: string): void;
   onSidebarToggle?: () => void;
 }
 
 function SidebarPanel({
+  activeInventoryView,
   currentRoute,
   isCollapsed,
+  sectionState,
+  onInventorySubRouteChange,
   onRouteChange,
+  onSectionToggle,
   onSidebarToggle,
   showToggle,
 }: SidebarPanelProps) {
@@ -254,29 +344,72 @@ function SidebarPanel({
         </div>
       </div>
       <nav className="cn-nav" id={showToggle ? 'cn-sidebar-navigation' : undefined} aria-label="Điều hướng chính">
-        {navigationGroups.map((group) => (
-          <div className="cn-nav-group" key={group.label}>
-            <p className="cn-nav-label">{group.label}</p>
-            {group.items.map((item) => (
-              <Tooltip disabled={!isCollapsed} key={item.route} label={item.label}>
+        {navigationGroups.map((group) => {
+          const isSectionOpen = isCollapsed || (sectionState[group.id] ?? true);
+          const sectionContentId = `cn-nav-section-${group.id}`;
+
+          return (
+            <div className="cn-nav-group" key={group.id}>
+              {isCollapsed ? (
+                <p className="cn-nav-label">{group.label}</p>
+              ) : (
                 <button
-                  aria-label={isCollapsed ? item.label : undefined}
-                  aria-current={item.route === currentRoute ? 'page' : undefined}
-                  className={
-                    item.route === currentRoute
-                      ? 'cn-nav-item cn-sidebar-tooltip-trigger active'
-                      : 'cn-nav-item cn-sidebar-tooltip-trigger'
-                  }
-                  onClick={() => onRouteChange(item.route)}
+                  aria-controls={sectionContentId}
+                  aria-expanded={isSectionOpen}
+                  className="cn-nav-group-trigger"
+                  onClick={() => onSectionToggle(group.id)}
                   type="button"
                 >
-                  <AppIcon className="cn-nav-icon" name={item.icon} />
-                  <span className="cn-nav-text">{item.label}</span>
+                  <span>{group.label}</span>
                 </button>
-              </Tooltip>
-            ))}
-          </div>
-        ))}
+              )}
+              <div
+                aria-hidden={!isSectionOpen}
+                className="cn-nav-group-content"
+                data-state={isSectionOpen ? 'open' : 'closed'}
+                id={sectionContentId}
+              >
+                <div className="cn-nav-group-content-inner">
+                  {group.items.map((item) => {
+                    const isActive =
+                      item.inventoryViewId && currentRoute === 'inventory'
+                        ? activeInventoryView === item.inventoryViewId
+                        : item.route === currentRoute;
+
+                    return (
+                      <div className="cn-nav-item-block" key={`${item.route}:${item.inventoryViewId ?? item.label}`}>
+                        <Tooltip disabled={!isCollapsed} label={item.label}>
+                          <button
+                            aria-label={isCollapsed ? item.label : undefined}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={
+                              isActive
+                                ? 'cn-nav-item cn-sidebar-tooltip-trigger active'
+                                : 'cn-nav-item cn-sidebar-tooltip-trigger'
+                            }
+                            onClick={() => {
+                              if (item.inventoryViewId) {
+                                onInventorySubRouteChange(item.inventoryViewId);
+                                return;
+                              }
+
+                              onRouteChange(item.route);
+                            }}
+                            tabIndex={isSectionOpen ? undefined : -1}
+                            type="button"
+                          >
+                            <AppIcon className="cn-nav-icon" name={item.icon} />
+                            <span className="cn-nav-text">{item.label}</span>
+                          </button>
+                        </Tooltip>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </nav>
       {showToggle && onSidebarToggle ? (
         <button
@@ -331,6 +464,50 @@ function writeSidebarCollapsedPreference(isCollapsed: boolean): void {
   } catch {
     // localStorage có thể bị chặn trong một số môi trường test/browser; UI vẫn hoạt động với state trong memory.
   }
+}
+
+function readSidebarSectionPreference(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const rawValue = window.localStorage?.getItem(sidebarSectionsStorageKey);
+    if (!rawValue) return {};
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeSidebarSectionPreference(sectionState: Record<string, boolean>): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage?.setItem(sidebarSectionsStorageKey, JSON.stringify(sectionState));
+  } catch {
+    // localStorage có thể bị chặn; disclosure vẫn hoạt động trong memory.
+  }
+}
+
+function readInventorySidebarView(): string {
+  if (typeof window === 'undefined') return 'overview';
+
+  const hash = window.location?.hash?.replace('#', '') ?? '';
+  if (inventoryOverviewInternalViews.has(hash)) return 'overview';
+
+  return inventorySubNavigation.some((item) => item.viewId === hash) ? hash : 'overview';
+}
+
+function writeInventorySidebarHash(viewId: string): void {
+  if (typeof window === 'undefined') return;
+
+  if (window.location.hash === `#${viewId}`) return;
+  window.history.replaceState(null, '', `#${viewId}`);
+  window.dispatchEvent(new Event('hashchange'));
 }
 
 function getInitials(displayName: string): string {
