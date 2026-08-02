@@ -22,6 +22,8 @@
     "verify": "node scripts/verify-structure.mjs && npm run typecheck && npm run lint && npm test && npm run build && npm run check:artifact"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-tooltip": "1.2.16",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.4.3"

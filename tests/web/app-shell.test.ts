@@ -79,10 +79,12 @@ describe('AppShell', () => {
     expect(html).toContain('Kho mặc định');
     expect(html).toContain('aria-label="Chuyển sang giao diện tối"');
     expect(html).toContain('aria-label="Thu gọn sidebar"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('aria-controls="cn-sidebar-navigation"');
     expect(html).not.toContain('<select');
   });
 
-  it('render sidebar thu gọn dạng icon-only nhưng vẫn giữ aria-label điều hướng', () => {
+  it('render sidebar thu gọn dạng icon-only nhưng vẫn giữ label trong DOM cho transition và aria-label điều hướng', () => {
     const html = renderToStaticMarkup(
       createElement(AppShell, {
         actor,
@@ -101,13 +103,46 @@ describe('AppShell', () => {
     );
 
     expect(html).toContain('cn-app-shell cn-app-shell-collapsed');
+    expect(html).toContain('data-sidebar-collapsed="true"');
     expect(html).toContain('aria-label="Mở rộng sidebar"');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="Bán hàng"');
     expect(html).toContain('aria-current="page"');
-    expect(html).not.toContain('<span>Bán hàng</span>');
-    expect(html).not.toContain('Retail operations');
+    expect(html).toContain('class="cn-nav-text">Bán hàng</span>');
+    expect(html).toContain('class="cn-sidebar-brand-copy"');
+    expect(html).toContain('Retail operations');
+    expect(html).toContain('cn-sidebar-tooltip-trigger');
     expect(html).toContain('cn-sidebar-foot-compact');
     expect(html).not.toContain('class="cn-sidebar-foot"><span class="cn-sync-dot"></span>Đồng bộ cục bộ sẵn sàng');
+  });
+
+  it('render mobile drawer mở sẵn với dialog semantics và navigation expanded', () => {
+    const html = renderToStaticMarkup(
+      createElement(AppShell, {
+        actor,
+        currentRoute: 'inventory',
+        initialMobileSidebarOpen: true,
+        initialSidebarCollapsed: true,
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+        theme: 'light',
+        onLogout: () => undefined,
+        onRouteChange: () => undefined,
+        onScopeChange: () => undefined,
+        onThemeToggle: () => undefined,
+        children: createElement('div', null, 'Nội dung'),
+      }),
+    );
+
+    expect(html).toContain('aria-label="Mở menu điều hướng"');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('Menu điều hướng');
+    expect(html).toContain('cn-mobile-sidebar');
+    expect(html).toContain('Kho');
+    expect(html).toContain('aria-current="page"');
   });
 });
 

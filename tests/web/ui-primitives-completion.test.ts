@@ -2,9 +2,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Dialog } from '../../web/src/components/ui/dialog';
+import { Sheet } from '../../web/src/components/ui/sheet';
 import { Skeleton } from '../../web/src/components/ui/skeleton';
 import { Table } from '../../web/src/components/ui/table';
 import { Tabs } from '../../web/src/components/ui/tabs';
+import { Tooltip } from '../../web/src/components/ui/tooltip';
 import { Toast } from '../../web/src/components/ui/toast';
 
 describe('remaining UI foundation primitives', () => {
@@ -66,5 +68,33 @@ describe('remaining UI foundation primitives', () => {
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain('role="status"');
     expect(html).toContain('cn-skeleton-line');
+  });
+
+  it('Sheet và Tooltip expose semantics cần cho mobile drawer và collapsed navigation', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        createElement(
+          Sheet,
+          {
+            isOpen: true,
+            title: 'Menu điều hướng',
+            description: 'Chọn module nghiệp vụ',
+            side: 'left',
+            onOpenChange: () => undefined,
+          },
+          createElement('nav', { 'aria-label': 'Điều hướng chính' }, 'Bán hàng'),
+        ),
+        createElement(Tooltip, { label: 'Bán hàng' }, createElement('button', { type: 'button' }, 'POS')),
+      ),
+    );
+
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('data-side="left"');
+    expect(html).toContain('Menu điều hướng');
+    expect(html).toContain('Chọn module nghiệp vụ');
+    expect(html).toContain('data-tooltip-label="Bán hàng"');
   });
 });

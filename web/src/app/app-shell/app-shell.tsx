@@ -6,7 +6,9 @@ import { CenioBrandMark } from '../../components/ui/brand-mark';
 import { IconButton } from '../../components/ui/button';
 import { AppIcon, type AppIconName } from '../../components/ui/icons';
 import { Listbox } from '../../components/ui/listbox';
+import { Sheet } from '../../components/ui/sheet';
 import { TextAvatar } from '../../components/ui/text-avatar';
+import { Tooltip } from '../../components/ui/tooltip';
 import type { AppTheme } from '../theme/theme';
 
 export type AppRoute = 'dashboard' | 'pos' | 'orders' | 'catalog' | 'customers' | 'inventory' | 'purchasing' | 'finance' | 'reports' | 'admin';
@@ -20,6 +22,7 @@ export interface AppShellProps {
   theme: AppTheme;
   children: ReactNode;
   initialSidebarCollapsed?: boolean;
+  initialMobileSidebarOpen?: boolean;
   onLogout(): void;
   onRouteChange(route: AppRoute): void;
   onScopeChange(input: { branchId?: string; warehouseId?: string }): void;
@@ -61,6 +64,7 @@ export function AppShell({
   actor,
   children,
   currentRoute,
+  initialMobileSidebarOpen,
   initialSidebarCollapsed,
   onLogout,
   onRouteChange,
@@ -72,6 +76,7 @@ export function AppShell({
   theme,
 }: AppShellProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(initialMobileSidebarOpen ?? false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     () => initialSidebarCollapsed ?? readSidebarCollapsedPreference(),
   );
@@ -84,6 +89,14 @@ export function AppShell({
       return next;
     });
   }, []);
+
+  const handleMobileRouteChange = useCallback(
+    (route: AppRoute) => {
+      onRouteChange(route);
+      setIsMobileSidebarOpen(false);
+    },
+    [onRouteChange],
+  );
 
   useEffect(() => {
     if (!isUserMenuOpen) return undefined;
@@ -106,60 +119,28 @@ export function AppShell({
   }, [isUserMenuOpen]);
 
   return (
-    <div className={isSidebarCollapsed ? 'cn-app-shell cn-app-shell-collapsed' : 'cn-app-shell'}>
-      <aside className="cn-sidebar">
-        <div className="cn-sidebar-brand">
-          <CenioBrandMark />
-          {!isSidebarCollapsed ? (
-            <div className="cn-sidebar-brand-copy">
-              <strong>Cenio Sales</strong>
-              <span>Retail operations</span>
-            </div>
-          ) : null}
-          <button
-            aria-label={isSidebarCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            className="cn-sidebar-toggle"
-            onClick={handleSidebarToggle}
-            title={isSidebarCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            type="button"
-          >
-            <AppIcon name="chevronRight" />
-          </button>
-        </div>
-        <nav className="cn-nav" aria-label="Điều hướng chính">
-          {navigationGroups.map((group) => (
-            <div className="cn-nav-group" key={group.label}>
-              {!isSidebarCollapsed ? <p className="cn-nav-label">{group.label}</p> : null}
-              {group.items.map((item) => (
-                <button
-                  aria-label={isSidebarCollapsed ? item.label : undefined}
-                  aria-current={item.route === currentRoute ? 'page' : undefined}
-                  className={item.route === currentRoute ? 'cn-nav-item active' : 'cn-nav-item'}
-                  key={item.route}
-                  onClick={() => onRouteChange(item.route)}
-                  type="button"
-                >
-                  <AppIcon className="cn-nav-icon" name={item.icon} />
-                  {!isSidebarCollapsed ? <span>{item.label}</span> : null}
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-        {!isSidebarCollapsed ? (
-          <div className="cn-sidebar-foot">
-            <span className="cn-sync-dot" />
-            Đồng bộ cục bộ sẵn sàng
-          </div>
-        ) : (
-          <div aria-label="Đồng bộ cục bộ sẵn sàng" className="cn-sidebar-foot-compact" title="Đồng bộ cục bộ sẵn sàng">
-            <span className="cn-sync-dot" />
-          </div>
-        )}
-      </aside>
+    <div
+      className={isSidebarCollapsed ? 'cn-app-shell cn-app-shell-collapsed' : 'cn-app-shell'}
+      data-sidebar-collapsed={isSidebarCollapsed ? 'true' : undefined}
+    >
+      <SidebarPanel
+        currentRoute={currentRoute}
+        isCollapsed={isSidebarCollapsed}
+        onRouteChange={onRouteChange}
+        onSidebarToggle={handleSidebarToggle}
+        showToggle
+      />
       <div className="cn-app-main">
         <header className="cn-topbar">
           <div className="cn-topbar-left">
+            <IconButton
+              aria-haspopup="dialog"
+              className="cn-mobile-nav-trigger"
+              label="Mở menu điều hướng"
+              onClick={() => setIsMobileSidebarOpen(true)}
+            >
+              <AppIcon className="cn-topbar-icon" name="menu" />
+            </IconButton>
             <div className="cn-workspace">
               <strong>{scope.tenant.displayName}</strong>
               <span>Không gian quản lý</span>
@@ -229,7 +210,105 @@ export function AppShell({
           {children}
         </main>
       </div>
+      <Sheet
+        description="Chọn module nghiệp vụ"
+        isOpen={isMobileSidebarOpen}
+        onOpenChange={setIsMobileSidebarOpen}
+        side="left"
+        title="Menu điều hướng"
+      >
+        <div className="cn-mobile-sidebar">
+          <SidebarPanel
+            currentRoute={currentRoute}
+            isCollapsed={false}
+            onRouteChange={handleMobileRouteChange}
+            showToggle={false}
+          />
+        </div>
+      </Sheet>
     </div>
+  );
+}
+
+interface SidebarPanelProps {
+  currentRoute: AppRoute;
+  isCollapsed: boolean;
+  showToggle: boolean;
+  onRouteChange(route: AppRoute): void;
+  onSidebarToggle?: () => void;
+}
+
+function SidebarPanel({
+  currentRoute,
+  isCollapsed,
+  onRouteChange,
+  onSidebarToggle,
+  showToggle,
+}: SidebarPanelProps) {
+  return (
+    <aside className="cn-sidebar">
+      <div className="cn-sidebar-brand">
+        <CenioBrandMark />
+        <div className="cn-sidebar-brand-copy">
+          <strong>Cenio Sales</strong>
+          <span>Retail operations</span>
+        </div>
+        {showToggle ? (
+          <button
+            aria-controls="cn-sidebar-navigation"
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            className="cn-sidebar-toggle"
+            onClick={onSidebarToggle}
+            title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            type="button"
+          >
+            <AppIcon name="chevronRight" />
+          </button>
+        ) : null}
+      </div>
+      <nav className="cn-nav" id={showToggle ? 'cn-sidebar-navigation' : undefined} aria-label="Điều hướng chính">
+        {navigationGroups.map((group) => (
+          <div className="cn-nav-group" key={group.label}>
+            <p className="cn-nav-label">{group.label}</p>
+            {group.items.map((item) => (
+              <Tooltip disabled={!isCollapsed} key={item.route} label={item.label}>
+                <button
+                  aria-label={isCollapsed ? item.label : undefined}
+                  aria-current={item.route === currentRoute ? 'page' : undefined}
+                  className={
+                    item.route === currentRoute
+                      ? 'cn-nav-item cn-sidebar-tooltip-trigger active'
+                      : 'cn-nav-item cn-sidebar-tooltip-trigger'
+                  }
+                  onClick={() => onRouteChange(item.route)}
+                  type="button"
+                >
+                  <AppIcon className="cn-nav-icon" name={item.icon} />
+                  <span className="cn-nav-text">{item.label}</span>
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+        ))}
+      </nav>
+      {!isCollapsed ? (
+        <div className="cn-sidebar-foot">
+          <span className="cn-sync-dot" />
+          <span className="cn-sidebar-foot-text">Đồng bộ cục bộ sẵn sàng</span>
+        </div>
+      ) : (
+        <Tooltip label="Đồng bộ cục bộ sẵn sàng">
+          <div
+            aria-label="Đồng bộ cục bộ sẵn sàng"
+            className="cn-sidebar-foot-compact"
+            title="Đồng bộ cục bộ sẵn sàng"
+          >
+            <span className="cn-sync-dot" />
+          </div>
+        </Tooltip>
+      )}
+    </aside>
   );
 }
 

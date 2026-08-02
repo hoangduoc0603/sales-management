@@ -13,6 +13,7 @@ export type AppIconName =
   | 'finance'
   | 'inventory'
   | 'logout'
+  | 'menu'
   | 'moon'
   | 'orders'
   | 'pos'
@@ -220,6 +221,14 @@ function renderIcon(name: AppIconName): ReactNode {
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
           <path d="M10 17l5-5-5-5" />
           <path d="M15 12H3" />
+        </>
+      );
+    case 'menu':
+      return (
+        <>
+          <path d="M4 6h16" />
+          <path d="M4 12h16" />
+          <path d="M4 18h16" />
         </>
       );
     case 'trendUp':

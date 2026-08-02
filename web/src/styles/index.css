@@ -17,6 +17,7 @@
   --cn-primary-foreground: #ffffff;
   --cn-primary-subtle: #eef2ff;
   --cn-primary-subtle-foreground: #3545c2;
+  --cn-active-nav-bg: var(--cn-primary-subtle);
   --cn-accent: #0f766e;
   --cn-success: #167a4a;
   --cn-success-subtle: #e9f7ef;
@@ -33,6 +34,10 @@
   --cn-shadow-xs: 0 1px 2px color-mix(in oklab, var(--cn-text), transparent 92%);
   --cn-shadow-sm: 0 4px 10px color-mix(in oklab, var(--cn-text), transparent 92%);
   --cn-shadow-md: 0 12px 24px color-mix(in oklab, var(--cn-text), transparent 84%);
+  --cn-motion-fast: 120ms;
+  --cn-motion-base: 180ms;
+  --cn-motion-slow: 240ms;
+  --cn-ease: cubic-bezier(0.2, 0, 0, 1);
   --cn-tooltip-background: #111827;
   --cn-tooltip-foreground: #ffffff;
 }
@@ -609,6 +614,7 @@ input:focus-visible {
   display: grid;
   min-height: 100vh;
   grid-template-columns: 236px minmax(0, 1fr);
+  transition: grid-template-columns var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-app-shell-collapsed {
@@ -623,9 +629,12 @@ input:focus-visible {
   flex-direction: column;
   border-right: 1px solid var(--cn-border);
   background: var(--cn-surface);
+  box-shadow: var(--cn-shadow-xs);
+  overflow: visible;
 }
 
 .cn-sidebar-brand {
+  position: relative;
   display: flex;
   min-height: 64px;
   align-items: center;
@@ -636,6 +645,9 @@ input:focus-visible {
 
 .cn-sidebar-brand-copy {
   min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-width var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-sidebar-brand .cn-brand-mark {
@@ -656,8 +668,8 @@ input:focus-visible {
 
 .cn-sidebar-toggle {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   place-items: center;
   margin-left: auto;
@@ -665,22 +677,29 @@ input:focus-visible {
   border-radius: var(--cn-radius-control);
   background: var(--cn-surface);
   color: var(--cn-text-secondary);
+  box-shadow: var(--cn-shadow-xs);
+  transition: background-color var(--cn-motion-base) var(--cn-ease), border-color var(--cn-motion-base) var(--cn-ease), color var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), box-shadow var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-sidebar-toggle:hover {
   background: var(--cn-surface-subtle);
+  border-color: color-mix(in oklab, var(--cn-primary), var(--cn-border) 58%);
   color: var(--cn-text);
+}
+
+.cn-sidebar-toggle:active {
+  transform: translateY(1px);
 }
 
 .cn-sidebar-toggle svg {
   width: 15px;
   height: 15px;
   transform: rotate(180deg);
+  transition: transform var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-app-shell-collapsed .cn-sidebar-brand {
-  min-height: 86px;
-  flex-direction: column;
+  min-height: 64px;
   justify-content: center;
   gap: 6px;
   padding: 10px;
@@ -692,7 +711,11 @@ input:focus-visible {
 }
 
 .cn-app-shell-collapsed .cn-sidebar-toggle {
+  position: absolute;
+  top: 15px;
+  right: -17px;
   margin-left: 0;
+  background: var(--cn-surface-elevated);
 }
 
 .cn-app-shell-collapsed .cn-sidebar-toggle svg {
@@ -720,6 +743,7 @@ input:focus-visible {
   color: var(--cn-text-muted);
   font-size: 12px;
   font-weight: 500;
+  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-height var(--cn-motion-base) var(--cn-ease), margin var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-nav-item {
@@ -735,6 +759,7 @@ input:focus-visible {
   padding: 8px 10px;
   text-align: left;
   font-weight: 500;
+  transition: background-color var(--cn-motion-base) var(--cn-ease), color var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-fast) var(--cn-ease);
 }
 
 .cn-app-shell-collapsed .cn-nav-item {
@@ -749,6 +774,15 @@ input:focus-visible {
   flex: 0 0 auto;
 }
 
+.cn-nav-text {
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-width var(--cn-motion-base) var(--cn-ease);
+}
+
 .cn-app-shell-collapsed .cn-nav-icon {
   width: 20px;
   height: 20px;
@@ -760,8 +794,25 @@ input:focus-visible {
 }
 
 .cn-nav-item.active {
-  background: var(--cn-primary-subtle);
+  background: var(--cn-active-nav-bg);
   color: var(--cn-primary-subtle-foreground);
+}
+
+.cn-app-shell-collapsed .cn-sidebar-brand-copy,
+.cn-app-shell-collapsed .cn-nav-text,
+.cn-app-shell-collapsed .cn-sidebar-foot-text {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+}
+
+.cn-app-shell-collapsed .cn-nav-label {
+  max-height: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateX(-6px);
 }
 
 .cn-sidebar-foot {
@@ -773,6 +824,13 @@ input:focus-visible {
   color: var(--cn-text-muted);
   padding: 16px;
   font-size: 12px;
+}
+
+.cn-sidebar-foot-text {
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity var(--cn-motion-base) var(--cn-ease), transform var(--cn-motion-base) var(--cn-ease), max-width var(--cn-motion-base) var(--cn-ease);
 }
 
 .cn-sidebar-foot-compact {
@@ -788,6 +846,95 @@ input:focus-visible {
   height: 8px;
   border-radius: 999px;
   background: var(--cn-accent);
+}
+
+.cn-mobile-nav-trigger {
+  display: none;
+}
+
+.cn-tooltip-content {
+  z-index: 60;
+  max-width: 240px;
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-tooltip-background);
+  color: var(--cn-tooltip-foreground);
+  padding: 6px 9px;
+  box-shadow: var(--cn-shadow-md);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cn-tooltip-arrow {
+  fill: var(--cn-tooltip-background);
+}
+
+.cn-sheet-overlay {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  background: color-mix(in oklab, var(--cn-text), transparent 62%);
+}
+
+.cn-sheet-content {
+  position: fixed;
+  z-index: 51;
+  top: 0;
+  display: flex;
+  width: min(420px, 100vw);
+  height: 100vh;
+  flex-direction: column;
+  border: 1px solid var(--cn-border);
+  background: var(--cn-surface-elevated);
+  box-shadow: var(--cn-shadow-md);
+}
+
+.cn-sheet-content[data-side="left"] {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 var(--cn-radius-container) var(--cn-radius-container) 0;
+}
+
+.cn-sheet-content[data-side="right"] {
+  right: 0;
+  border-right: 0;
+  border-radius: var(--cn-radius-container) 0 0 var(--cn-radius-container);
+}
+
+.cn-sheet-head {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--cn-border);
+  padding: 0 16px;
+}
+
+.cn-sheet-title {
+  margin: 0;
+  color: var(--cn-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.cn-sheet-description {
+  margin: 2px 0 0;
+  color: var(--cn-text-muted);
+  font-size: 12px;
+}
+
+.cn-sheet-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.cn-mobile-sidebar .cn-sidebar {
+  position: static;
+  height: auto;
+  min-height: 100%;
+  border-right: 0;
+  box-shadow: none;
 }
 
 .cn-app-main {
@@ -1003,9 +1150,12 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .cn-sidebar {
-    position: static;
-    height: auto;
+  .cn-app-shell > .cn-sidebar {
+    display: none;
+  }
+
+  .cn-mobile-nav-trigger {
+    display: inline-flex;
   }
 
   .cn-topbar,
