@@ -54,6 +54,14 @@ Design handoff quyết định layout, hierarchy, visual treatment và component
 | API data | UI gọi qua API client/hook; không truy cập trực tiếp Google Sheets/Drive. |
 | State nghiệp vụ | Follow SRS/LLD; không tự thêm trạng thái mới chỉ vì design trông tiện hơn. |
 
+## Quy tắc loading skeleton chung
+
+- Khi màn hình hoặc vùng UI đang chờ dữ liệu API/projection/read model, dùng skeleton primitive chung từ `web/src/components/ui/skeleton.tsx`; không tạo spinner hoặc placeholder riêng theo từng màn nếu không có handoff/SRS yêu cầu.
+- Dùng đúng primitive theo cấu trúc dữ liệu cuối: `SkeletonPage` cho màn đầy đủ, `SkeletonTable` cho bảng, `SkeletonCard` cho panel/card, `SkeletonText` cho copy hoặc metadata.
+- Skeleton phải giữ gần đúng chiều cao/khung layout của nội dung thật để hạn chế layout shift; không hiển thị dữ liệu cũ sau khi scope Branch/Warehouse bị đổi hoặc bị backend từ chối.
+- Skeleton phải có semantic loading (`role="status"`, `aria-busy="true"`, `aria-label` tiếng Việt rõ nghĩa) và motion phải tôn trọng `prefers-reduced-motion`.
+- Loading của command ngắn trên button không đổi sang skeleton; tiếp tục dùng spinner inline và chặn gửi trùng theo command/idempotency contract.
+
 ## Quy tắc context, báo cáo và command
 
 - UI không tự quyết định phạm vi dữ liệu. Mọi truy vấn dùng `ActorContext` và scope Branch/Warehouse do backend xác thực; không fallback sang dữ liệu rộng hơn khi scope không hợp lệ.
@@ -72,6 +80,7 @@ Design handoff quyết định layout, hierarchy, visual treatment và component
 - [ ] Light/dark theme hoạt động.
 - [ ] Không dùng native `<select>` nếu handoff yêu cầu custom select/listbox.
 - [ ] Loading, empty, error, restricted, scope invalid/changed, stale/retry, archive coverage và command-in-progress đầy đủ nếu handoff/SRS yêu cầu.
+- [ ] Loading dữ liệu dùng skeleton chung đúng primitive, có `aria-busy`/`aria-label`, không dùng copy kỹ thuật hoặc spinner toàn màn hình.
 - [ ] Scope cũ không còn hiển thị sau khi đổi Branch/Warehouse hoặc backend từ chối phạm vi.
 - [ ] Report/dashboard hiển thị đúng metadata freshness và coverage từ backend; không ngụ ý có offline write/sync.
 - [ ] Không hiển thị dữ liệu sensitive nếu thiếu quyền.

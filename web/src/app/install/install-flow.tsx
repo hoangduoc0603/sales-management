@@ -6,6 +6,7 @@ import type {
 } from '@shared/contracts/platform/install';
 import { CenioBrandMark } from '../../components/ui/brand-mark';
 import { Button } from '../../components/ui/button';
+import { SkeletonCard } from '../../components/ui/skeleton';
 
 export type InstallFormInput = InstallRunRequest;
 
@@ -141,8 +142,7 @@ export function InstallCheckingScreen({
             <span>Quản lý bán hàng</span>
           </div>
         </div>
-        <div className="cn-install-check-content" role="status" aria-live="polite">
-          {failed ? null : <span aria-hidden="true" className="cn-install-spinner" />}
+        <div className="cn-install-check-content" aria-live="polite">
           <div>
             <p className="cn-eyebrow">First-run setup</p>
             <h1 id="install-check-title">
@@ -162,11 +162,12 @@ export function InstallCheckingScreen({
               </Button>
             </>
           ) : (
-            <ol className="cn-install-check-list" aria-label="Các bước kiểm tra">
-              <li>Kiểm tra runtime config</li>
-              <li>Đọc trạng thái dữ liệu</li>
-              <li>Chuẩn bị màn đăng nhập hoặc setup</li>
-            </ol>
+            <SkeletonCard
+              bodyLines={3}
+              className="cn-skeleton-auth-card"
+              label="Đang kiểm tra cài đặt"
+              titleLines={1}
+            />
           )}
         </div>
       </section>

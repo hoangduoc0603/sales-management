@@ -101,8 +101,23 @@ describe('SalesManagementApp', () => {
     const html = renderToStaticMarkup(createElement(SalesManagementApp, { runtimeMode: 'apps-script' }));
 
     expect(html).toContain('Đang kiểm tra cài đặt');
-    expect(html).toContain('cn-install-spinner');
-    expect(html).toContain('Kiểm tra runtime config');
+    expect(html).toContain('cn-skeleton-auth-card');
+    expect(html).toContain('aria-label="Đang kiểm tra cài đặt"');
+    expect(html).not.toContain('cn-install-spinner');
+    expect(html).not.toContain('Kiểm tra runtime config');
+  });
+
+  it('hiển thị skeleton khi đang bootstrap session và phạm vi làm việc', () => {
+    const html = renderToStaticMarkup(
+      createElement(SalesManagementApp, {
+        initialInstallStatus: installedStatus,
+        initialSessionToken: 'session-token',
+      }),
+    );
+
+    expect(html).toContain('Đang chuẩn bị màn hình làm việc');
+    expect(html).toContain('cn-skeleton-auth-card');
+    expect(html).not.toContain('Đang xác thực session và tải scope Branch/Warehouse');
   });
 
   it('DashboardHome có đúng 4 KPI chính theo handoff', () => {
@@ -127,6 +142,21 @@ describe('SalesManagementApp', () => {
     expect(html).toContain('Giá vốn &amp; lợi nhuận bị hạn chế');
     expect(html).not.toContain('Dashboard projection chưa triển khai');
     expect(html).not.toContain('Hoạt động gần đây');
+  });
+
+  it('DashboardHome dùng page skeleton chung khi chưa có dữ liệu', () => {
+    const html = renderToStaticMarkup(
+      createElement(DashboardHome, {
+        scope,
+        selectedBranchId: 'branch-default',
+        selectedWarehouseId: 'warehouse-default',
+      }),
+    );
+
+    expect(html).toContain('cn-dashboard-skeleton-page');
+    expect(html).toContain('data-kind="dashboard"');
+    expect(html).toContain('aria-label="Đang tải tổng quan vận hành"');
+    expect(html).not.toContain('Đang tải DashboardProjection theo Branch');
   });
 
   it('authenticated app có thể render route Catalog/CRM khi được chọn trong AppShell', () => {

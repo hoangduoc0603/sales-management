@@ -37,7 +37,15 @@
 | Metric/KPI card | Không dùng top accent strip trang trí. Phân cấp bằng spacing, border, elevation, icon tint và typography. |
 | Badge/Status | Dùng semantic variants `success`, `warning`, `danger`, `info`; không dùng màu ngẫu nhiên theo từng màn. Trạng thái không được chỉ phân biệt bằng màu: kèm icon/copy và focus/contrast đạt chuẩn. |
 | Table | Header, density, row hover, empty/error/loading state phải theo pattern đã duyệt. |
+| Skeleton loading | Với màn hình/vùng dữ liệu đang chờ API/projection, dùng primitive chung `SkeletonText`, `SkeletonCard`, `SkeletonTable`, `SkeletonPage` trong `web/src/components/ui/skeleton.tsx`; shimmer phải nhẹ, giữ kích thước layout để hạn chế layout shift và tôn trọng `prefers-reduced-motion`. |
 | Sensitive data | Không che số liệu nhạy cảm chỉ bằng UI. Nếu không có quyền, backend/API phải trả permission-restricted state. |
+
+## Loading pattern chung
+
+- Loading của command ngắn trên button tiếp tục dùng spinner inline để giữ nhãn CTA ổn định.
+- Loading của dữ liệu màn hình, panel, bảng hoặc dashboard phải dùng skeleton chung thay vì spinner toàn màn hình hoặc copy kỹ thuật.
+- Chọn skeleton theo hình dạng dữ liệu cuối: `SkeletonPage` cho màn lớn, `SkeletonTable` cho bảng, `SkeletonCard` cho panel/card, `SkeletonText` cho đoạn mô tả.
+- Skeleton chỉ thể hiện trạng thái chờ đọc dữ liệu; lỗi, empty, restricted, not-ready và stale/retry vẫn dùng state semantic riêng theo SRS/LLD.
 
 ## Khi Cenio Core thay đổi
 

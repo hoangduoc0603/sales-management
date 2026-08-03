@@ -53,6 +53,16 @@ describe('InstallFlow', () => {
 });
 
 describe('InstallCheckingScreen', () => {
+  it('render skeleton chung khi đang kiểm tra cài đặt', () => {
+    const html = renderToStaticMarkup(createElement(InstallCheckingScreen));
+
+    expect(html).toContain('Đang kiểm tra cài đặt');
+    expect(html).toContain('cn-skeleton-auth-card');
+    expect(html).toContain('aria-label="Đang kiểm tra cài đặt"');
+    expect(html).not.toContain('cn-install-spinner');
+    expect(html).not.toContain('Kiểm tra runtime config');
+  });
+
   it('render trạng thái phục hồi có retry khi fresh check install bị lỗi', () => {
     const html = renderToStaticMarkup(
       createElement(InstallCheckingScreen, {

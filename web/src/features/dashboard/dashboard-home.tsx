@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/button';
 import { AppIcon, type AppIconName } from '../../components/ui/icons';
 import { Listbox } from '../../components/ui/listbox';
 import { Panel } from '../../components/ui/panel';
+import { SkeletonPage } from '../../components/ui/skeleton';
 import { StateBlock } from '../../components/ui/state-block';
 import { Tabs } from '../../components/ui/tabs';
 import type { ApiClient } from '../../lib/api/client';
@@ -153,11 +154,10 @@ export function DashboardHome({
           tone="warning"
         />
       ) : !dashboard ? (
-        <StateBlock
-          description="Đang tải DashboardProjection theo Branch, Warehouse, as-of và quyền truy cập của phiên hiện tại."
-          detail={<DashboardSkeleton />}
-          title="Đang tải tổng quan vận hành"
-          tone="info"
+        <SkeletonPage
+          className="cn-dashboard-skeleton-page"
+          kind="dashboard"
+          label="Đang tải tổng quan vận hành"
         />
       ) : (
         <>
@@ -490,11 +490,11 @@ function SecondaryFollowUp({ dashboard }: { dashboard: ReportingDashboardRespons
 
 function DashboardSkeleton() {
   return (
-    <div className="cn-skeleton" aria-label="Đang tải dữ liệu Dashboard">
-      <div className="cn-skeleton-line" />
-      <div className="cn-skeleton-line" />
-      <div className="cn-skeleton-line" />
-    </div>
+    <SkeletonPage
+      className="cn-dashboard-skeleton-page cn-dashboard-state-skeleton"
+      kind="dashboard"
+      label="Đang tải dữ liệu Dashboard"
+    />
   );
 }
 

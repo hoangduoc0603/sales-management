@@ -17,6 +17,8 @@ import {
   LOCAL_DEBUG_SESSION_TOKEN,
 } from '../lib/api/local-fake-backend';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CenioBrandMark } from '../components/ui/brand-mark';
+import { SkeletonCard } from '../components/ui/skeleton';
 import { StateBlock } from '../components/ui/state-block';
 import { AuthFlow, type ChangePasswordInput, type LoginInput } from './auth/auth-flow';
 import { createSessionStorage } from './auth/session-storage';
@@ -450,13 +452,29 @@ export function SalesManagementApp({
 
   if (stage === 'bootstrapping') {
     return (
-      <div className="cn-auth-page">
-        <StateBlock
-          description="Đang xác thực session và tải scope Branch/Warehouse từ backend."
-          title="Đang chuẩn bị không gian làm việc"
-          tone="info"
-        />
-      </div>
+      <main className="cn-auth-page">
+        <section className="cn-auth-card cn-install-check-card" aria-labelledby="workspace-loading-title">
+          <div className="cn-auth-brand">
+            <CenioBrandMark />
+            <div>
+              <strong>Cenio Sales</strong>
+              <span>Quản lý bán hàng</span>
+            </div>
+          </div>
+          <div className="cn-install-check-content">
+            <div>
+              <p className="cn-eyebrow">Đang tải dữ liệu</p>
+              <h1 id="workspace-loading-title">Đang chuẩn bị màn hình làm việc</h1>
+            </div>
+            <SkeletonCard
+              bodyLines={4}
+              className="cn-skeleton-auth-card"
+              label="Đang chuẩn bị màn hình làm việc"
+              titleLines={1}
+            />
+          </div>
+        </section>
+      </main>
     );
   }
 
