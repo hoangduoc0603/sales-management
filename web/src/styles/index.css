@@ -740,8 +740,13 @@ input:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px 12px;
-  scrollbar-gutter: stable;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
   overscroll-behavior: contain;
+}
+
+.cn-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .cn-app-shell-collapsed .cn-nav {

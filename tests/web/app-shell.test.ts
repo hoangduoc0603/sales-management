@@ -339,6 +339,17 @@ describe('AppShell', () => {
     expect(css).toMatch(/\.cn-sidebar-brand,\s*\.cn-sidebar-foot,\s*\.cn-sidebar-foot-compact\s*\{[^}]*flex:\s*0 0 auto;/s);
   });
 
+  it('sidebar nav ẩn scrollbar nhưng vẫn giữ khả năng scroll khi nhiều menu', () => {
+    const css = readFileSync('web/src/styles/index.css', 'utf8');
+
+    const navBlock = css.match(/\.cn-nav\s*\{(?<body>[^}]*)\}/s)?.groups?.body ?? '';
+    expect(navBlock).not.toContain('scrollbar-gutter: stable');
+    expect(navBlock).toContain('scrollbar-width: none');
+    expect(navBlock).toContain('-ms-overflow-style: none');
+    expect(css).toMatch(/\.cn-nav::-webkit-scrollbar\s*\{[^}]*display:\s*none;/s);
+    expect(css).not.toMatch(/\.cn-sidebar:hover\s+\.cn-nav,\s*\.cn-nav:focus-within\s*\{/s);
+  });
+
   it('badge dùng CSS chống vỡ chữ dài', () => {
     const css = readFileSync('web/src/styles/index.css', 'utf8');
 
