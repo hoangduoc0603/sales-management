@@ -1,4 +1,6 @@
 import type { ApiErrorCode } from '@shared/contracts/errors';
+import type { CatalogCreateProductRequest, InventoryMode, ProductType } from '@shared/contracts/catalog/catalog';
+import { inventoryModes, productTypes } from '@shared/contracts/catalog/catalog';
 import type {
   AttachmentAccessRequest,
   AttachmentAccessResponse,
@@ -18,6 +20,8 @@ import type {
   HealthCheckResponse,
   ImportCommitRequest,
   ImportCommitResponse,
+  ImportSelectionMode,
+  ImportStagingRowDTO,
   ImportTemplateRequest,
   ImportTemplateResponse,
   ImportUploadRequest,
@@ -34,6 +38,7 @@ import type {
   RuntimeCleanupResponse,
 } from '@shared/contracts/operations/operations';
 import type { ActorContextDTO } from '@shared/contracts/platform/authorization';
+import type { CatalogService } from '../catalog/catalog-service';
 import { runImportCommitChunk } from './import-commit-worker';
 import type {
   OperationsPartitionRecord,
@@ -66,6 +71,7 @@ export interface OperationsService {
 
 export interface OperationsServiceDependencies {
   repository: OperationsRepository;
+  catalogImportService?: Pick<CatalogService, 'createProduct' | 'listProducts'>;
   attachmentStorage?: AttachmentStorage;
   tenantId: string;
   appVersion: string;
@@ -89,7 +95,18 @@ export interface AttachmentStorage {
 }
 
 const importTemplateColumns: Record<ImportTemplateRequest['importType'], readonly string[]> = {
-  Catalog: ['sku', 'name', 'unit', 'unitPriceVnd'],
+  Catalog: [
+    'productCode',
+    'name',
+    'productType',
+    'sku',
+    'barcode',
+    'defaultUnitId',
+    'unitPriceVnd',
+    'inventoryMode',
+    'lotTracking',
+    'serialTracking',
+  ],
   Customer: ['customerCode', 'displayName', 'phone'],
   Supplier: ['supplierCode', 'displayName', 'phone'],
   OpeningInventory: ['warehouseId', 'sku', 'quantity', 'unitCostVnd'],
@@ -137,6 +154,10 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
       if (batch === undefined) return failure('INVALID_INPUT', 'Không tìm thấy import batch.');
 
       const seen = new Set<string>();
+      const catalogImportLookup =
+        batch.importType === 'Catalog' && deps.catalogImportService !== undefined
+          ? createCatalogImportLookup(deps.catalogImportService)
+          : undefined;
       const rows = input.request.rows.map((row) => {
         const errors: string[] = [];
         if (seen.has(row.rowKey)) errors.push('Dòng trùng khóa trong cùng batch.');
@@ -145,6 +166,9 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
           if (typeof value === 'string' && value.trim() === '') {
             errors.push(`Cột ${key} không được rỗng.`);
           }
+        }
+        if (catalogImportLookup !== undefined) {
+          errors.push(...validateCatalogImportPayload(row.payload, catalogImportLookup));
         }
 
         return {
@@ -189,6 +213,24 @@ export function createOperationsService(deps: OperationsServiceDependencies): Op
       }
       if (input.request.selectionMode === 'AllOrNothing' && existingRows.some((row) => row.validationStatus === 'Invalid')) {
         return failure('INVALID_INPUT', 'Batch có dòng lỗi nên không thể commit theo chế độ AllOrNothing.');
+      }
+
+      if (batch.importType === 'Catalog' && deps.catalogImportService !== undefined) {
+        const committed = commitCatalogImportRows({
+          repository: deps.repository,
+          catalogImportService: deps.catalogImportService,
+          batchId: batch.batchId,
+          selectionMode: input.request.selectionMode,
+          now: deps.now,
+        });
+        const updatedBatch = deps.repository.getImportBatch(batch.batchId) ?? batch;
+        return {
+          ok: true,
+          data: {
+            batch: updatedBatch,
+            committedRows: committed.filter((row) => row.commitStatus === 'Committed'),
+          },
+        };
       }
 
       runImportCommitChunk({
@@ -493,6 +535,175 @@ function requireAction(actor: ActorContextDTO, action: string): OperationsServic
   return actor.actions.includes(action)
     ? undefined
     : failure<never>('PERMISSION_DENIED', 'Bạn không có quyền thực hiện thao tác vận hành này.');
+}
+
+interface CatalogImportLookup {
+  existingSkus: ReadonlySet<string>;
+  existingBarcodes: ReadonlySet<string>;
+  batchSkus: Set<string>;
+  batchBarcodes: Set<string>;
+}
+
+function createCatalogImportLookup(
+  catalogImportService: Pick<CatalogService, 'listProducts'>,
+): CatalogImportLookup {
+  const items = catalogImportService.listProducts({ status: 'All', limit: 1000 }).items;
+  return {
+    existingSkus: new Set(items.map((item) => normalizeCatalogImportLookup(item.sku))),
+    existingBarcodes: new Set(
+      items
+        .map((item) => item.barcode)
+        .filter((barcode): barcode is string => barcode !== undefined)
+        .map(normalizeCatalogImportLookup),
+    ),
+    batchSkus: new Set<string>(),
+    batchBarcodes: new Set<string>(),
+  };
+}
+
+function validateCatalogImportPayload(
+  payload: Record<string, unknown>,
+  lookup: CatalogImportLookup,
+): string[] {
+  const parsed = parseCatalogImportCreateRequest(payload);
+  const errors = parsed.ok ? [] : parsed.errors;
+  const sku = readTrimmedString(payload, 'sku');
+  if (sku !== undefined) {
+    const normalizedSku = normalizeCatalogImportLookup(sku);
+    if (lookup.existingSkus.has(normalizedSku)) errors.push('SKU đã tồn tại trong Catalog.');
+    if (lookup.batchSkus.has(normalizedSku)) errors.push('SKU trùng trong cùng batch.');
+    lookup.batchSkus.add(normalizedSku);
+  }
+
+  const barcode = readTrimmedString(payload, 'barcode');
+  if (barcode !== undefined) {
+    const normalizedBarcode = normalizeCatalogImportLookup(barcode);
+    if (lookup.existingBarcodes.has(normalizedBarcode)) errors.push('Barcode đã tồn tại trong Catalog.');
+    if (lookup.batchBarcodes.has(normalizedBarcode)) errors.push('Barcode trùng trong cùng batch.');
+    lookup.batchBarcodes.add(normalizedBarcode);
+  }
+  return errors;
+}
+
+function commitCatalogImportRows(input: {
+  repository: Pick<OperationsRepository, 'getImportBatch' | 'saveImportBatch' | 'listImportRows' | 'saveImportRows'>;
+  catalogImportService: Pick<CatalogService, 'createProduct'>;
+  batchId: string;
+  selectionMode: ImportSelectionMode;
+  now: () => Date;
+}): readonly ImportStagingRowDTO[] {
+  const batch = input.repository.getImportBatch(input.batchId);
+  if (batch === undefined) throw new Error('ImportBatchNotFound');
+  const rows = input.repository.listImportRows(batch.batchId);
+  if (batch.status === 'Completed') return rows;
+
+  let failedCount = 0;
+  const finalRows = rows.map((row): ImportStagingRowDTO => {
+    if (row.validationStatus === 'Invalid' && row.commitStatus === 'Pending') {
+      return { ...row, commitStatus: 'Skipped' };
+    }
+    if (row.validationStatus !== 'Valid' || row.commitStatus !== 'Pending') return row;
+
+    const parsed = parseCatalogImportCreateRequest(row.payload);
+    if (!parsed.ok) {
+      failedCount += 1;
+      return { ...row, commitStatus: 'Failed', errors: [...row.errors, ...parsed.errors] };
+    }
+    const created = input.catalogImportService.createProduct(parsed.request);
+    if (!created.ok) {
+      failedCount += 1;
+      return { ...row, commitStatus: 'Failed', errors: [...row.errors, created.error.message] };
+    }
+    return { ...row, commitStatus: 'Committed', sourceObjectId: created.data.product.productId };
+  });
+
+  input.repository.saveImportRows(batch.batchId, finalRows);
+  input.repository.saveImportBatch({
+    ...batch,
+    status: failedCount > 0 ? 'Failed' : 'Completed',
+    selectionMode: input.selectionMode,
+    committedAt: failedCount > 0 ? batch.committedAt : input.now().toISOString(),
+  });
+  return finalRows;
+}
+
+function parseCatalogImportCreateRequest(
+  payload: Record<string, unknown>,
+): { ok: true; request: CatalogCreateProductRequest } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const sku = readTrimmedString(payload, 'sku');
+  const name = readTrimmedString(payload, 'name');
+  const productCode = readTrimmedString(payload, 'productCode') ?? sku;
+  const defaultUnitId = readTrimmedString(payload, 'defaultUnitId') ?? readTrimmedString(payload, 'unit');
+  const productType = readCatalogProductType(payload.productType ?? 'Stocked', errors);
+  const inventoryMode = readCatalogInventoryMode(payload.inventoryMode, errors);
+  const unitPriceVnd = readCatalogMoney(payload.unitPriceVnd, 'unitPriceVnd', errors);
+
+  if (sku === undefined) errors.push('SKU là bắt buộc.');
+  if (name === undefined) errors.push('Tên hàng là bắt buộc.');
+  if (defaultUnitId === undefined) errors.push('Đơn vị bán là bắt buộc.');
+
+  if (errors.length > 0 || sku === undefined || name === undefined || productCode === undefined || defaultUnitId === undefined) {
+    return { ok: false, errors };
+  }
+
+  return {
+    ok: true,
+    request: {
+      productCode,
+      name,
+      productType,
+      sku,
+      barcode: readTrimmedString(payload, 'barcode'),
+      defaultUnitId,
+      unitPriceVnd,
+      inventoryMode,
+      lotTracking: readBoolean(payload.lotTracking),
+      serialTracking: readBoolean(payload.serialTracking),
+    },
+  };
+}
+
+function readTrimmedString(payload: Record<string, unknown>, field: string): string | undefined {
+  const value = payload[field];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function readCatalogProductType(value: unknown, errors: string[]): ProductType {
+  if (typeof value === 'string' && productTypes.includes(value as ProductType)) return value as ProductType;
+  errors.push('Loại hàng không hợp lệ.');
+  return 'Stocked';
+}
+
+function readCatalogInventoryMode(value: unknown, errors: string[]): InventoryMode | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string' && inventoryModes.includes(value as InventoryMode)) return value as InventoryMode;
+  errors.push('Chế độ tồn kho không hợp lệ.');
+  return undefined;
+}
+
+function readCatalogMoney(value: unknown, field: string, errors: string[]): number {
+  const numberValue = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : Number.NaN;
+  if (!Number.isFinite(numberValue) || numberValue < 0) {
+    errors.push(`Cột ${field} phải là số không âm.`);
+    return 0;
+  }
+  return Math.round(numberValue);
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLocaleLowerCase('vi-VN');
+  if (['true', '1', 'yes', 'y', 'có'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'n', 'không'].includes(normalized)) return false;
+  return undefined;
+}
+
+function normalizeCatalogImportLookup(value: string): string {
+  return value.trim().toLocaleUpperCase('vi-VN');
 }
 
 function requireScope(

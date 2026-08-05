@@ -109,7 +109,7 @@ export function SalesManagementApp({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(sessionToken && !actor));
-  const [route, setRoute] = useState<AppRoute>(initialRoute ?? 'dashboard');
+  const [route, setRoute] = useState<AppRoute>(initialRoute ?? readRouteFromHash() ?? 'dashboard');
   const [selectedBranchId, setSelectedBranchId] = useState(effectiveInitialScope?.activeBranchId);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(effectiveInitialScope?.activeWarehouseId);
 
@@ -117,6 +117,21 @@ export function SalesManagementApp({
     const nextTheme = readBrowserTheme();
     setTheme(nextTheme);
     applyBrowserTheme(nextTheme);
+  }, []);
+
+  useEffect(() => {
+    const handleRouteHashChange = () => {
+      const nextRoute = readRouteFromHash();
+      if (nextRoute !== undefined) setRoute(nextRoute);
+    };
+
+    handleRouteHashChange();
+    window.addEventListener('hashchange', handleRouteHashChange);
+    window.addEventListener('popstate', handleRouteHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteHashChange);
+      window.removeEventListener('popstate', handleRouteHashChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -550,6 +565,33 @@ export function SalesManagementApp({
 
 function createRequestId(scope: string): string {
   return `web-${scope}-${Date.now()}`;
+}
+
+const catalogRouteHashes = new Set([
+  'catalog',
+  'detail',
+  'create',
+  'edit',
+  'row-menu',
+  'deactivate-confirm',
+  'import',
+  'import-validating',
+  'import-validated',
+  'import-confirm',
+  'import-committing',
+  'import-completed',
+  'import-failed',
+  'import-restricted',
+  'export',
+  'bundle-formula',
+  'bundle-formula-validation',
+]);
+
+function readRouteFromHash(): AppRoute | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const hash = window.location.hash.replace('#', '');
+  if (catalogRouteHashes.has(hash)) return 'catalog';
+  return undefined;
 }
 
 export function resolveInstallReadiness(

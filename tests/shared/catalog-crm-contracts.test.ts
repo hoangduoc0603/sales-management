@@ -3,9 +3,11 @@ import { operationNames } from '../../shared/contracts/platform/operations';
 import {
   parseCatalogCreateProductRequest,
   parseCatalogCreateVariantRequest,
+  parseCatalogGetBundleFormulaRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
+  parseCatalogConfigureBundleFormulaRequest,
   parseCatalogSetProductActiveRequest,
   parseCatalogSetVariantActiveRequest,
   parseCatalogUpdateProductRequest,
@@ -25,10 +27,42 @@ describe('Catalog/CRM shared contracts', () => {
     expect(operationNames).toContain('catalog.variant.create');
     expect(operationNames).toContain('catalog.variant.update');
     expect(operationNames).toContain('catalog.variant.setActive');
+    expect(operationNames).toContain('catalog.bundleFormula.configure');
+    expect(operationNames).toContain('catalog.bundleFormula.getActive');
     expect(operationNames).toContain('catalog.pos.getProjection');
     expect(operationNames).toContain('catalog.quote.preview');
     expect(operationNames).toContain('crm.customer.quickCreate');
     expect(operationNames).toContain('crm.customer.search');
+  });
+
+  it('parse cấu hình công thức bundle versioned', () => {
+    expect(
+      parseCatalogConfigureBundleFormulaRequest({
+        bundleVariantId: 'variant-bundle-1',
+        effectiveFrom: '2026-08-03T00:00:00.000Z',
+        components: [
+          {
+            componentVariantId: 'variant-component-1',
+            quantityBase: 2,
+            substitutionAllowed: false,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      bundleVariantId: 'variant-bundle-1',
+      components: [{ componentVariantId: 'variant-component-1', quantityBase: 2 }],
+    });
+
+    expect(() =>
+      parseCatalogConfigureBundleFormulaRequest({
+        bundleVariantId: 'variant-bundle-1',
+        components: [{ componentVariantId: 'variant-component-1', quantityBase: 0 }],
+      }),
+    ).toThrow();
+
+    expect(parseCatalogGetBundleFormulaRequest({ bundleVariantId: 'variant-bundle-1' })).toEqual({
+      bundleVariantId: 'variant-bundle-1',
+    });
   });
 
   it('parse create/update/setActive variant request cho màn Variant & đơn vị', () => {

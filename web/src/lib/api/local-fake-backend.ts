@@ -13,6 +13,9 @@ import type {
   InstallStatusResponse,
 } from '@shared/contracts/platform/install';
 import type {
+  BundleFormulaVersionDTO,
+  CatalogConfigureBundleFormulaRequest,
+  CatalogConfigureBundleFormulaResponse,
   CatalogCreateProductRequest,
   CatalogCreateProductResponse,
   CatalogCreateVariantRequest,
@@ -20,6 +23,8 @@ import type {
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
+  CatalogGetBundleFormulaRequest,
+  CatalogGetBundleFormulaResponse,
   CatalogPosProjectionResponse,
   CatalogQuoteRequest,
   CatalogQuoteResponse,
@@ -123,8 +128,10 @@ import type { CommandStatusResponse } from '@shared/contracts/platform/command';
 import type { TableDefinitionDTO, TableDefinitionsResponse } from '@shared/contracts/platform/registry';
 import { parseApiRequest } from '@shared/schemas/api';
 import {
+  parseCatalogConfigureBundleFormulaRequest,
   parseCatalogCreateProductRequest,
   parseCatalogCreateVariantRequest,
+  parseCatalogGetBundleFormulaRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
@@ -258,6 +265,7 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
 
   let warehouseStatus: 'Active' | 'Disabled' = 'Active';
   const catalogProducts = new Map<string, CatalogProductListItemDTO>(createLocalCatalogProducts());
+  const bundleFormulas = new Map<string, BundleFormulaVersionDTO>();
   const customers = new Map<string, CustomerDTO>();
   const purchasingSuppliers = new Map<string, SupplierDTO>();
   const purchaseOrders = new Map<string, PurchasingPoResponse>();
@@ -615,6 +623,48 @@ export function createLocalFakeBackendInvoker(options: LocalFakeBackendOptions =
             now,
             user,
             () => setLocalCatalogVariantActive(apiRequest.payload as CatalogSetVariantActiveRequest, catalogProducts),
+          );
+        case 'catalog.bundleFormula.configure':
+          try {
+            parseCatalogConfigureBundleFormulaRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogConfigureBundleFormulaResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () =>
+              configureLocalBundleFormula(
+                apiRequest.payload as CatalogConfigureBundleFormulaRequest,
+                catalogProducts,
+                bundleFormulas,
+                nextId,
+                now,
+              ),
+          );
+        case 'catalog.bundleFormula.getActive':
+          try {
+            parseCatalogGetBundleFormulaRequest(apiRequest.payload);
+          } catch {
+            return errorResult<T>('INVALID_REQUEST', 'Yêu cầu không hợp lệ.', meta);
+          }
+
+          return withSession<T, CatalogGetBundleFormulaResponse>(
+            apiRequest,
+            meta,
+            sessions,
+            now,
+            user,
+            () =>
+              getLocalActiveBundleFormula(
+                apiRequest.payload as CatalogGetBundleFormulaRequest,
+                catalogProducts,
+                bundleFormulas,
+              ),
           );
         case 'catalog.pos.getProjection':
           try {
@@ -2024,6 +2074,68 @@ function setLocalCatalogVariantActive(
     product: { ...catalogItemToProduct(product), isActive: true },
     variant: catalogItemToVariant(updated),
   };
+}
+
+function configureLocalBundleFormula(
+  input: CatalogConfigureBundleFormulaRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  bundleFormulas: Map<string, BundleFormulaVersionDTO>,
+  nextId: (prefix: string) => string,
+  now: () => Date,
+): CatalogConfigureBundleFormulaResponse | ApiResult<CatalogConfigureBundleFormulaResponse> {
+  const bundle = products.get(input.bundleVariantId);
+  if (bundle === undefined || bundle.productType !== 'Bundle') {
+    return localCatalogError('INVALID_INPUT', 'Chỉ product loại Bundle được cấu hình công thức.');
+  }
+  const componentIds = input.components.map((component) => component.componentVariantId);
+  if (new Set(componentIds).size !== componentIds.length || componentIds.includes(input.bundleVariantId)) {
+    return localCatalogError('INVALID_INPUT', 'Công thức bundle không hợp lệ.');
+  }
+  if (componentIds.some((variantId) => !products.has(variantId))) {
+    return localCatalogError('INVALID_INPUT', 'Component variant không tồn tại.');
+  }
+  const effectiveFrom = input.effectiveFrom ?? now().toISOString();
+  const retiredFormula = getActiveLocalBundleFormula(input.bundleVariantId, bundleFormulas);
+  const retired =
+    retiredFormula === undefined
+      ? undefined
+      : { ...retiredFormula, status: 'Retired' as const, effectiveTo: effectiveFrom };
+  if (retired !== undefined) bundleFormulas.set(retired.formulaVersionId, retired);
+
+  const formula: BundleFormulaVersionDTO = {
+    formulaVersionId: nextId('bundle-formula'),
+    tenantId: 'tenant-default',
+    bundleVariantId: input.bundleVariantId,
+    effectiveFrom,
+    status: 'Active',
+    components: input.components.map((component) => ({
+      componentVariantId: component.componentVariantId,
+      quantityBase: component.quantityBase,
+      substitutionAllowed: component.substitutionAllowed,
+    })),
+  };
+  bundleFormulas.set(formula.formulaVersionId, formula);
+  return { formula, retiredFormula: retired };
+}
+
+function getLocalActiveBundleFormula(
+  input: CatalogGetBundleFormulaRequest,
+  products: Map<string, CatalogProductListItemDTO>,
+  bundleFormulas: Map<string, BundleFormulaVersionDTO>,
+): CatalogGetBundleFormulaResponse | ApiResult<CatalogGetBundleFormulaResponse> {
+  if (!products.has(input.bundleVariantId)) {
+    return localCatalogError('INVALID_INPUT', 'Biến thể bundle không tồn tại.');
+  }
+  return { formula: getActiveLocalBundleFormula(input.bundleVariantId, bundleFormulas) };
+}
+
+function getActiveLocalBundleFormula(
+  bundleVariantId: string,
+  bundleFormulas: Map<string, BundleFormulaVersionDTO>,
+): BundleFormulaVersionDTO | undefined {
+  return [...bundleFormulas.values()]
+    .filter((formula) => formula.bundleVariantId === bundleVariantId && formula.status === 'Active')
+    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0];
 }
 
 function catalogItemToCreateResponse(item: CatalogProductListItemDTO): CatalogCreateProductResponse {
@@ -3829,7 +3941,18 @@ function getLocalExportStatus(
 function createLocalImportTemplate(payload: unknown): ImportTemplateResponse {
   const input = parseImportTemplateRequest(payload);
   const columnsByType: Record<string, readonly string[]> = {
-    Catalog: ['sku', 'name', 'unitName', 'unitPriceVnd', 'inventoryMode'],
+    Catalog: [
+      'productCode',
+      'name',
+      'productType',
+      'sku',
+      'barcode',
+      'defaultUnitId',
+      'unitPriceVnd',
+      'inventoryMode',
+      'lotTracking',
+      'serialTracking',
+    ],
     Customer: ['customerCode', 'displayName', 'phone', 'email', 'customerGroup'],
     Supplier: ['supplierCode', 'displayName', 'phone', 'email', 'taxCode'],
     OpeningInventory: ['sku', 'warehouseCode', 'quantity', 'unitCostVnd', 'lotCode'],

@@ -519,4 +519,83 @@ describe('CatalogService', () => {
       }),
     ).toMatchObject({ ok: true, data: { variant: { isActive: true } } });
   });
+
+  it('cấu hình bundle formula theo version và retire version đang active', () => {
+    const service = createService();
+    const bundle = service.createProduct({
+      productCode: 'BUNDLE-001',
+      name: 'Combo chăm sóc nhà cửa',
+      productType: 'Bundle',
+      sku: 'BUNDLE-HOME-001',
+      defaultUnitId: 'combo',
+      unitPriceVnd: 220000,
+    });
+    const component = service.createProduct({
+      productCode: 'SP-COMP-001',
+      name: 'Nước giặt sinh học',
+      productType: 'Stocked',
+      sku: 'COMP-LAUNDRY-001',
+      defaultUnitId: 'túi',
+      unitPriceVnd: 185000,
+    });
+    if (!bundle.ok || !component.ok) throw new Error('create product failed');
+
+    const firstFormula = service.configureBundleFormula({
+      bundleVariantId: bundle.data.defaultVariant.variantId,
+      effectiveFrom: '2026-08-03T00:00:00.000Z',
+      components: [
+        {
+          componentVariantId: component.data.defaultVariant.variantId,
+          quantityBase: 2,
+          substitutionAllowed: false,
+        },
+      ],
+    });
+
+    expect(firstFormula).toMatchObject({
+      ok: true,
+      data: {
+        formula: {
+          bundleVariantId: bundle.data.defaultVariant.variantId,
+          status: 'Active',
+          components: [{ componentVariantId: component.data.defaultVariant.variantId, quantityBase: 2 }],
+        },
+        retiredFormula: undefined,
+      },
+    });
+    if (!firstFormula.ok) throw new Error('configure formula failed');
+
+    const secondFormula = service.configureBundleFormula({
+      bundleVariantId: bundle.data.defaultVariant.variantId,
+      effectiveFrom: '2026-08-10T00:00:00.000Z',
+      components: [{ componentVariantId: component.data.defaultVariant.variantId, quantityBase: 3 }],
+    });
+
+    expect(secondFormula).toMatchObject({
+      ok: true,
+      data: {
+        formula: {
+          status: 'Active',
+          effectiveFrom: '2026-08-10T00:00:00.000Z',
+        },
+        retiredFormula: {
+          formulaVersionId: firstFormula.data.formula.formulaVersionId,
+          status: 'Retired',
+          effectiveTo: '2026-08-10T00:00:00.000Z',
+        },
+      },
+    });
+    if (!secondFormula.ok) throw new Error('configure second formula failed');
+    expect(secondFormula.data.formula.formulaVersionId).not.toBe(firstFormula.data.formula.formulaVersionId);
+    expect(service.getActiveBundleFormula({ bundleVariantId: bundle.data.defaultVariant.variantId })).toMatchObject({
+      ok: true,
+      data: { formula: { components: [{ quantityBase: 3 }] } },
+    });
+    expect(
+      service.configureBundleFormula({
+        bundleVariantId: component.data.defaultVariant.variantId,
+        components: [{ componentVariantId: component.data.defaultVariant.variantId, quantityBase: 1 }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+  });
 });

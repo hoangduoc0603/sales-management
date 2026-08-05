@@ -30,6 +30,7 @@ describe('TableRegistryService', () => {
         'Variant',
         'VariantBarcode',
         'UnitConversionVersion',
+        'BundleFormulaVersion',
         'PriceList',
         'PriceRule',
         'Promotion',
@@ -50,6 +51,19 @@ describe('TableRegistryService', () => {
     expect(
       definitions.find((table) => table.tableName === 'UnitConversionVersion')?.headers.map((header) => header.name),
     ).toEqual(expect.arrayContaining(['id', 'tenantId', 'schemaVersion', 'recordVersion', 'unitName']));
+    expect(
+      definitions.find((table) => table.tableName === 'BundleFormulaVersion')?.headers.map((header) => header.name),
+    ).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenantId',
+        'schemaVersion',
+        'recordVersion',
+        'formulaVersionId',
+        'bundleVariantId',
+        'components',
+      ]),
+    );
     expect(definitions.find((table) => table.tableName === 'Variant')?.lookupKeys).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -73,6 +87,15 @@ describe('TableRegistryService', () => {
         expect.objectContaining({
           name: 'UnitConversionVersion.unitVersionId',
           columns: ['unitVersionId'],
+          unique: true,
+        }),
+      ]),
+    );
+    expect(definitions.find((table) => table.tableName === 'BundleFormulaVersion')?.lookupKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'BundleFormulaVersion.formulaVersionId',
+          columns: ['formulaVersionId'],
           unique: true,
         }),
       ]),
