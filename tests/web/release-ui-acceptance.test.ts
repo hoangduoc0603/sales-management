@@ -45,6 +45,10 @@ const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: 
     sourcePath: 'web/src/features/catalog/catalog-crm-home.tsx',
     routeEvidence: ['route === \'catalog\' || route === \'customers\'', '<CatalogCrmHome'],
   },
+  'Hàng hóa và biến thể': {
+    sourcePath: 'web/src/features/catalog/catalog-crm-home.tsx',
+    routeEvidence: ['route === \'catalog\' || route === \'customers\'', '<CatalogCrmHome'],
+  },
   'Catalog product editor và policy builder': {
     sourcePath: 'web/src/features/catalog/catalog-crm-home.tsx',
     routeEvidence: ['route === \'catalog\' || route === \'customers\'', '<CatalogCrmHome'],
@@ -57,7 +61,35 @@ const approvedScreenShells: Record<string, { sourcePath: string; routeEvidence: 
     sourcePath: 'web/src/features/inventory/inventory-home.tsx',
     routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
   },
+  'Tổng quan vận hành tồn kho': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
   'Purchasing receipt, costing và supplier return': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Điều chỉnh kho và ngoại lệ': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Điều chuyển và nhận kho': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Kiểm kê kho': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Nhập kho và tiếp nhận hàng': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Xuất kho và fulfillment theo nguồn': {
+    sourcePath: 'web/src/features/inventory/inventory-home.tsx',
+    routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
+  },
+  'Hoàn trả, quarantine và báo cáo NXT': {
     sourcePath: 'web/src/features/inventory/inventory-home.tsx',
     routeEvidence: ['route === \'inventory\' || route === \'purchasing\'', '<InventoryHome'],
   },

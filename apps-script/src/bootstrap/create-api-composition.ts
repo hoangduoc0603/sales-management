@@ -1,7 +1,9 @@
 import type { AuthChangeOwnPasswordRequest, AuthLoginRequest } from '@shared/contracts/platform/auth';
 import type {
+  CatalogConfigureBundleFormulaRequest,
   CatalogCreateProductRequest,
   CatalogCreateVariantRequest,
+  CatalogGetBundleFormulaRequest,
   CatalogProductListRequest,
   CatalogPosProjectionRequest,
   CatalogQuoteRequest,
@@ -107,8 +109,10 @@ import { parseAuthChangeOwnPasswordRequest, parseAuthLoginRequest } from '@share
 import { parseBootstrapInstallRequest } from '@shared/schemas/platform/bootstrap';
 import { parseCommandStatusRequest } from '@shared/schemas/platform/command';
 import {
+  parseCatalogConfigureBundleFormulaRequest,
   parseCatalogCreateProductRequest,
   parseCatalogCreateVariantRequest,
+  parseCatalogGetBundleFormulaRequest,
   parseCatalogProductListRequest,
   parseCatalogPosProjectionRequest,
   parseCatalogQuoteRequest,
@@ -383,6 +387,7 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
   };
   const operationsService = createOperationsService({
     repository: operationsRepository,
+    catalogImportService: catalogService,
     attachmentStorage,
     tenantId,
     appVersion: '0.1.0',
@@ -581,6 +586,21 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
       requiredAction: 'catalog.product.configure',
       parsePayload: parseCatalogSetVariantActiveRequest,
       handler: (input) => catalogService.setVariantActive(input as CatalogSetVariantActiveRequest),
+    },
+    {
+      name: 'catalog.bundleFormula.configure',
+      kind: 'mutation',
+      requiredAction: 'catalog.bundleFormula.configure',
+      parsePayload: parseCatalogConfigureBundleFormulaRequest,
+      handler: (input) =>
+        catalogService.configureBundleFormula(input as CatalogConfigureBundleFormulaRequest),
+    },
+    {
+      name: 'catalog.bundleFormula.getActive',
+      kind: 'query',
+      requiredAction: 'catalog.product.configure',
+      parsePayload: parseCatalogGetBundleFormulaRequest,
+      handler: (input) => catalogService.getActiveBundleFormula(input as CatalogGetBundleFormulaRequest),
     },
     {
       name: 'catalog.pos.getProjection',

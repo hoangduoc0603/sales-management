@@ -57,6 +57,24 @@ export interface UnitConversionVersionDTO {
   isActive: boolean;
 }
 
+export type BundleFormulaStatus = 'Active' | 'Retired';
+
+export interface BundleFormulaComponentDTO {
+  componentVariantId: string;
+  quantityBase: number;
+  substitutionAllowed?: boolean;
+}
+
+export interface BundleFormulaVersionDTO {
+  formulaVersionId: string;
+  tenantId: string;
+  bundleVariantId: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status: BundleFormulaStatus;
+  components: readonly BundleFormulaComponentDTO[];
+}
+
 export interface CatalogCreateProductRequest {
   productCode: string;
   name: string;
@@ -192,6 +210,25 @@ export interface CatalogSetProductActiveRequest {
 export interface CatalogSetProductActiveResponse {
   product: ProductDTO;
   defaultVariant: VariantDTO;
+}
+
+export interface CatalogConfigureBundleFormulaRequest {
+  bundleVariantId: string;
+  effectiveFrom?: string;
+  components: readonly BundleFormulaComponentDTO[];
+}
+
+export interface CatalogConfigureBundleFormulaResponse {
+  formula: BundleFormulaVersionDTO;
+  retiredFormula?: BundleFormulaVersionDTO;
+}
+
+export interface CatalogGetBundleFormulaRequest {
+  bundleVariantId: string;
+}
+
+export interface CatalogGetBundleFormulaResponse {
+  formula?: BundleFormulaVersionDTO;
 }
 
 export interface CatalogPosProjectionRequest {

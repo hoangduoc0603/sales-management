@@ -38,8 +38,30 @@ describe('operations API composition', () => {
         payload: {
           batchId: upload.data.batch.batchId,
           rows: [
-            { rowNumber: 1, rowKey: 'SKU-001', payload: { sku: 'SKU-001', name: 'Sữa hạt' } },
-            { rowNumber: 2, rowKey: 'SKU-002', payload: { sku: '', name: 'Thiếu SKU' } },
+            {
+              rowNumber: 1,
+              rowKey: 'SKU-001',
+              payload: {
+                productCode: 'SP-001',
+                name: 'Sữa hạt',
+                productType: 'Stocked',
+                sku: 'SKU-001',
+                defaultUnitId: 'cái',
+                unitPriceVnd: 42000,
+              },
+            },
+            {
+              rowNumber: 2,
+              rowKey: 'SKU-002',
+              payload: {
+                productCode: 'SP-002',
+                name: 'Thiếu SKU',
+                productType: 'Stocked',
+                sku: '',
+                defaultUnitId: 'cái',
+                unitPriceVnd: 1000,
+              },
+            },
           ],
         },
       }),

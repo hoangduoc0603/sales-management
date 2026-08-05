@@ -4,7 +4,6 @@ import type {
   CatalogProductListItemDTO,
   CatalogProductListResponse,
   CatalogProductListStatus,
-  CatalogSetProductActiveResponse,
   CatalogSetVariantActiveResponse,
   CatalogUpdateProductResponse,
   CatalogUpdateVariantResponse,
@@ -16,14 +15,14 @@ import type {
   CustomerQuickCreateResponse,
   CustomerSearchResponse,
 } from '@shared/contracts/crm/customer';
-import { inventoryModes, productTypes } from '@shared/contracts/catalog/catalog';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { AppRoute } from '../../app/app-shell/app-shell';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { AppIcon } from '../../components/ui/icons';
 import { Panel } from '../../components/ui/panel';
 import { StateBlock } from '../../components/ui/state-block';
-import { Table } from '../../components/ui/table';
 import type { ApiClient } from '../../lib/api/client';
 
 export interface CatalogCrmHomeProps {
@@ -164,10 +163,133 @@ const emptyCustomerForm: CustomerFormState = {
 };
 
 const productStatuses: readonly { value: CatalogProductListStatus; label: string }[] = [
+  { value: 'All', label: 'Tất cả trạng thái' },
   { value: 'Active', label: 'Đang bán' },
   { value: 'Inactive', label: 'Ngừng bán' },
-  { value: 'All', label: 'Tất cả' },
 ];
+
+const productTypeOptions: readonly { value: ProductType | 'All'; label: string; description?: string }[] = [
+  { value: 'All', label: 'Tất cả loại hàng' },
+  { value: 'Stocked', label: 'Hàng tồn', description: 'Quản lý tồn, lô hoặc serial khi cần.' },
+  { value: 'Service', label: 'Dịch vụ', description: 'Không kiểm tồn khi bán.' },
+  { value: 'NonStock', label: 'Không tồn', description: 'Có SKU, barcode và giá nhưng không giữ tồn.' },
+  { value: 'Bundle', label: 'Bộ sản phẩm', description: 'Trừ tồn theo công thức thành phần.' },
+];
+
+const categoryOptions = [
+  { value: 'All', label: 'Tất cả nhóm hàng' },
+  { value: 'food', label: 'Thực phẩm & đồ uống' },
+  { value: 'fashion', label: 'Thời trang' },
+] as const;
+
+const brandOptions = [
+  { value: 'All', label: 'Tất cả thương hiệu' },
+  { value: 'internal', label: 'Hàng nội bộ' },
+] as const;
+
+const trackingOptions = [
+  {
+    value: 'none',
+    label: 'Không theo dõi',
+    description: 'Chỉ quản lý tổng số lượng.',
+  },
+  {
+    value: 'lot',
+    label: 'Theo dõi lô & hạn sử dụng',
+    description: 'Dùng cho hàng có hạn dùng hoặc cần FEFO.',
+  },
+  {
+    value: 'serial',
+    label: 'Theo dõi serial / IMEI',
+    description: 'Mỗi đơn vị bán có mã định danh riêng.',
+  },
+  {
+    value: 'both',
+    label: 'Theo dõi lô & hạn sử dụng và serial / IMEI',
+    description: 'Bật đồng thời lotTracking và serialTracking.',
+  },
+] as const;
+
+type CatalogDialog = 'create' | 'edit' | 'detail' | 'row-menu' | 'deactivate' | 'import' | 'export';
+
+type TrackingMode = (typeof trackingOptions)[number]['value'];
+type DrawerTab = 'overview' | 'variants' | 'units' | 'inventory';
+type CatalogHashState =
+  | 'catalog'
+  | 'detail'
+  | 'create'
+  | 'edit'
+  | 'row-menu'
+  | 'deactivate-confirm'
+  | 'import'
+  | 'import-validating'
+  | 'import-validated'
+  | 'import-confirm'
+  | 'import-committing'
+  | 'import-completed'
+  | 'import-failed'
+  | 'import-restricted'
+  | 'export'
+  | 'bundle-formula'
+  | 'bundle-formula-validation';
+type ImportState =
+  | 'import'
+  | 'import-validating'
+  | 'import-validated'
+  | 'import-confirm'
+  | 'import-committing'
+  | 'import-completed'
+  | 'import-failed'
+  | 'import-restricted';
+
+const catalogHashStates = new Set<CatalogHashState>([
+  'catalog',
+  'detail',
+  'create',
+  'edit',
+  'row-menu',
+  'deactivate-confirm',
+  'import',
+  'import-validating',
+  'import-validated',
+  'import-confirm',
+  'import-committing',
+  'import-completed',
+  'import-failed',
+  'import-restricted',
+  'export',
+  'bundle-formula',
+  'bundle-formula-validation',
+]);
+
+function isImportState(state: string): state is ImportState {
+  return (
+    state === 'import' ||
+    state === 'import-validating' ||
+    state === 'import-validated' ||
+    state === 'import-confirm' ||
+    state === 'import-committing' ||
+    state === 'import-completed' ||
+    state === 'import-failed' ||
+    state === 'import-restricted'
+  );
+}
+
+function writeCatalogHash(state: CatalogHashState) {
+  if (typeof window === 'undefined') return;
+  const nextHash = `#${state}`;
+  if (window.location.hash !== nextHash) {
+    window.history.pushState(null, '', nextHash);
+  }
+}
+
+interface CatalogProductGroup {
+  productId: string;
+  productCode: string;
+  productName: string;
+  productType: ProductType;
+  variants: readonly CatalogProductListItemDTO[];
+}
 
 export function CatalogCrmHome({
   apiClient,
@@ -177,7 +299,7 @@ export function CatalogCrmHome({
 }: CatalogCrmHomeProps) {
   const isCustomerRoute = route === 'customers';
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<CatalogProductListStatus>('Active');
+  const [status, setStatus] = useState<CatalogProductListStatus>('All');
   const [items, setItems] = useState<readonly CatalogProductListItemDTO[]>(initialProductItems);
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(
     initialProductItems[0]?.variantId,
@@ -192,11 +314,20 @@ export function CatalogCrmHome({
   const [variantMode, setVariantMode] = useState<'create' | 'edit'>(
     initialProductItems[0] ? 'edit' : 'create',
   );
-  const [editorTab, setEditorTab] = useState<'product' | 'variant' | 'barcode'>('product');
+  const [productTypeFilter, setProductTypeFilter] = useState<ProductType | 'All'>('All');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [brandFilter, setBrandFilter] = useState('All');
+  const [activeDialog, setActiveDialog] = useState<CatalogDialog>();
+  const [isBundleFormulaOpen, setIsBundleFormulaOpen] = useState(false);
+  const [openListbox, setOpenListbox] = useState<string>();
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>('overview');
+  const [importState, setImportState] = useState<ImportState>('import');
+  const [formulaValidation, setFormulaValidation] = useState(false);
+  const [inventoryEnabled, setInventoryEnabled] = useState(true);
+  const [trackingMode, setTrackingMode] = useState<TrackingMode>('none');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [barcodeCheckMessage, setBarcodeCheckMessage] = useState<string>();
 
   const selectedItem = useMemo(
     () => items.find((item) => item.variantId === selectedVariantId) ?? items[0],
@@ -206,12 +337,62 @@ export function CatalogCrmHome({
     () => (selectedItem === undefined ? 0 : items.filter((item) => item.productId === selectedItem.productId).length),
     [items, selectedItem],
   );
+  const filteredItems = useMemo(
+    () => {
+      const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
+      return items.filter((item) => {
+        if (status === 'Active' && !item.isActive) return false;
+        if (status === 'Inactive' && item.isActive) return false;
+        if (productTypeFilter !== 'All' && item.productType !== productTypeFilter) return false;
+        if (
+          normalizedQuery !== '' &&
+          ![item.productName, item.productCode, item.displayName, item.sku, item.barcode]
+            .filter((value): value is string => value !== undefined)
+            .some((value) => value.toLocaleLowerCase('vi-VN').includes(normalizedQuery))
+        ) {
+          return false;
+        }
+        return true;
+      });
+    },
+    [items, productTypeFilter, query, status],
+  );
+  const groupedItems = useMemo(() => groupProductItems(filteredItems), [filteredItems]);
+  const selectedProductItems = useMemo(
+    () =>
+      selectedItem === undefined
+        ? []
+        : items.filter((item) => item.productId === selectedItem.productId),
+    [items, selectedItem],
+  );
+  const filteredProductCount = useMemo(
+    () => new Set(filteredItems.map((item) => item.productId)).size,
+    [filteredItems],
+  );
+  const isBackdropOpen =
+    (activeDialog !== undefined && activeDialog !== 'row-menu') || isBundleFormulaOpen;
+
+  function closeCatalogOverlay() {
+    setActiveDialog(undefined);
+    setIsBundleFormulaOpen(false);
+    setFormulaValidation(false);
+    writeCatalogHash('catalog');
+  }
+
+  function openCatalogDialog(dialog: CatalogDialog, hash: CatalogHashState) {
+    setActiveDialog(dialog);
+    setIsBundleFormulaOpen(false);
+    setFormulaValidation(false);
+    writeCatalogHash(hash);
+  }
 
   useEffect(() => {
     if (selectedItem === undefined) return;
     if (mode === 'edit') {
       setForm(formFromItem(selectedItem));
       setSelectedVariantId(selectedItem.variantId);
+      setInventoryEnabled(selectedItem.inventoryMode === 'Tracked');
+      setTrackingMode(trackingModeFromFlags(selectedItem));
     }
     if (variantMode === 'edit') {
       setVariantForm(variantFormFromItem(selectedItem));
@@ -252,54 +433,108 @@ export function CatalogCrmHome({
     };
   }, [apiClient, query, sessionToken, status]);
 
-  const rows = items.map((item) => ({
-    id: item.variantId,
-    code: (
-      <button
-        className="cn-table-link"
-        onClick={() => {
-          setMode('edit');
-          setVariantMode('edit');
-          setSelectedVariantId(item.variantId);
-          setForm(formFromItem(item));
-          setVariantForm(variantFormFromItem(item));
-        }}
-        type="button"
-      >
-        <strong>{item.productCode}</strong>
-        <small>{item.sku}</small>
-      </button>
-    ),
-    name: (
-      <span className="cn-product-cell-copy">
-        <strong>{item.displayName}</strong>
-        <small>
-          {item.productType} · {item.inventoryMode}
-        </small>
-      </span>
-    ),
-    barcode: item.barcode ?? '—',
-    unit: item.defaultUnitId,
-    price: formatVnd(item.unitPriceVnd),
-    flags: (
-      <span className="cn-catalog-flags">
-        {item.lotTracking ? <Badge tone="info">Lô</Badge> : null}
-        {item.serialTracking ? <Badge tone="warning">Serial</Badge> : null}
-        {!item.lotTracking && !item.serialTracking ? <Badge tone="neutral">Chuẩn</Badge> : null}
-      </span>
-    ),
-    status: <Badge tone={item.isActive ? 'success' : 'warning'}>{item.isActive ? 'Active' : 'Inactive'}</Badge>,
-    actions: (
-      <Button
-        onClick={() => {
-          void toggleVariantActive(item);
-        }}
-        variant="ghost"
-      >
-        {item.isActive ? 'Ngừng bán' : 'Kích hoạt'}
-      </Button>
-    ),
-  }));
+  useEffect(() => {
+    if (isCustomerRoute || typeof window === 'undefined') return undefined;
+
+    const applyCatalogHash = () => {
+      const state = window.location.hash.replace('#', '') as CatalogHashState;
+      if (!catalogHashStates.has(state)) return;
+
+      if (state === 'catalog') {
+        setActiveDialog(undefined);
+        setIsBundleFormulaOpen(false);
+        setFormulaValidation(false);
+        return;
+      }
+
+      if (state === 'detail') {
+        setDrawerTab('overview');
+        setActiveDialog('detail');
+        setIsBundleFormulaOpen(false);
+        return;
+      }
+
+      if (state === 'create') {
+        setMode('create');
+        setVariantMode('create');
+        setForm(emptyForm);
+        setVariantForm(emptyVariantForm);
+        setSelectedVariantId(undefined);
+        setInventoryEnabled(true);
+        setTrackingMode('none');
+        setFormulaValidation(false);
+        setIsBundleFormulaOpen(false);
+        setActiveDialog('create');
+        return;
+      }
+
+      if (state === 'edit') {
+        setMode('edit');
+        setVariantMode('edit');
+        setFormulaValidation(false);
+        setIsBundleFormulaOpen(false);
+        setActiveDialog('edit');
+        return;
+      }
+
+      if (state === 'row-menu') {
+        setActiveDialog('row-menu');
+        setIsBundleFormulaOpen(false);
+        return;
+      }
+
+      if (state === 'deactivate-confirm') {
+        setActiveDialog('deactivate');
+        setIsBundleFormulaOpen(false);
+        return;
+      }
+
+      if (isImportState(state)) {
+        setImportState(state);
+        setActiveDialog('import');
+        setIsBundleFormulaOpen(false);
+        return;
+      }
+
+      if (state === 'export') {
+        setActiveDialog('export');
+        setIsBundleFormulaOpen(false);
+        return;
+      }
+
+      if (state === 'bundle-formula' || state === 'bundle-formula-validation') {
+        setMode('create');
+        setVariantMode('create');
+        setForm((current) => ({ ...current, productType: 'Bundle', inventoryMode: 'Bundle' }));
+        setVariantForm((current) => ({ ...current, inventoryMode: 'Bundle' }));
+        setInventoryEnabled(false);
+        setActiveDialog('create');
+        setFormulaValidation(state === 'bundle-formula-validation');
+        setIsBundleFormulaOpen(true);
+      }
+    };
+
+    applyCatalogHash();
+    window.addEventListener('hashchange', applyCatalogHash);
+    window.addEventListener('popstate', applyCatalogHash);
+    return () => {
+      window.removeEventListener('hashchange', applyCatalogHash);
+      window.removeEventListener('popstate', applyCatalogHash);
+    };
+  }, [isCustomerRoute]);
+
+  useEffect(() => {
+    if (activeDialog !== 'import') return undefined;
+    if (importState !== 'import-validating' && importState !== 'import-committing') return undefined;
+
+    const nextState = importState === 'import-validating' ? 'import-validated' : 'import-completed';
+    const timeoutId = window.setTimeout(() => {
+      setImportState(nextState);
+      writeCatalogHash(nextState);
+    }, importState === 'import-validating' ? 900 : 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeDialog, importState]);
 
   async function refreshProducts(nextQuery = query, nextStatus = status) {
     if (apiClient === undefined || sessionToken === undefined) return;
@@ -456,39 +691,6 @@ export function CatalogCrmHome({
     setSelectedVariantId(result.data.variant.variantId);
   }
 
-  async function toggleProductActive(item: CatalogProductListItemDTO) {
-    if (apiClient === undefined || sessionToken === undefined) {
-      setItems((current) =>
-        current.map((candidate) =>
-          candidate.productId === item.productId
-            ? { ...candidate, isActive: !candidate.isActive }
-            : candidate,
-        ),
-      );
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(undefined);
-    const result = await apiClient.invoke<CatalogSetProductActiveResponse>({
-      operation: 'catalog.product.setActive',
-      requestId: createRequestId('catalog-active'),
-      sessionToken,
-      payload: {
-        productId: item.productId,
-        isActive: !item.isActive,
-        reason: item.isActive ? 'Ngừng bán từ màn Hàng hóa' : undefined,
-      },
-    });
-    setIsLoading(false);
-    if (!result.ok) {
-      setErrorMessage(result.error.message);
-      return;
-    }
-    setMessage(item.isActive ? 'Đã ngừng bán sản phẩm.' : 'Đã kích hoạt sản phẩm.');
-    await refreshProducts();
-  }
-
   async function toggleVariantActive(item: CatalogProductListItemDTO) {
     if (apiClient === undefined || sessionToken === undefined) {
       setItems((current) =>
@@ -522,23 +724,6 @@ export function CatalogCrmHome({
     await refreshProducts();
   }
 
-  function checkBarcodeOrSku() {
-    const sku = variantForm.sku.trim().toLocaleUpperCase('vi-VN');
-    const barcode = variantForm.barcode.trim().toLocaleUpperCase('vi-VN');
-    const duplicate = items.find((item) => {
-      if (variantMode === 'edit' && item.variantId === selectedItem?.variantId) return false;
-      return (
-        (sku !== '' && item.sku.trim().toLocaleUpperCase('vi-VN') === sku) ||
-        (barcode !== '' && item.barcode?.trim().toLocaleUpperCase('vi-VN') === barcode)
-      );
-    });
-    setBarcodeCheckMessage(
-      duplicate === undefined
-        ? 'SKU/barcode chưa trùng trong dữ liệu đang tải.'
-        : `Trùng với ${duplicate.displayName} (${duplicate.sku}).`,
-    );
-  }
-
   if (isCustomerRoute) {
     return (
       <CustomerWorkspace
@@ -550,422 +735,1538 @@ export function CatalogCrmHome({
   }
 
   return (
-    <div className="cn-catalog-shell">
-      <header className="cn-dashboard-head">
+    <div className="cn-catalog-artifact">
+      <p className="crumb">Hàng hóa / Danh mục</p>
+      <header className="page-head">
         <div>
-          <p className="cn-breadcrumb">Catalog / Hàng hóa</p>
-          <h1>Hàng hóa & biến thể</h1>
-          <p>
-            Quản lý Product/Variant, SKU, barcode, đơn vị bán, trạng thái kinh doanh và dữ liệu
-            bán hàng an toàn cho POS.
-          </p>
+          <div className="title-line">
+            <h1>Hàng hóa & biến thể</h1>
+            <span className="product-summary">{filteredProductCount} sản phẩm</span>
+          </div>
+          <p>Quản lý thông tin sản phẩm gốc và biến thể giao dịch theo phạm vi kho hiện tại.</p>
         </div>
-        <div className="cn-dashboard-actions">
-          {isLoading ? <Badge tone="info">Đang xử lý</Badge> : <Badge tone="success">Sẵn sàng</Badge>}
-          <Button
+        <div className="head-actions">
+          {isLoading ? <span className="status info">Đang xử lý</span> : null}
+          <button className="button subtle" onClick={() => openCatalogDialog('import', 'import')} type="button">
+            <AppIcon name="fileAlert" />
+            Nhập dữ liệu
+          </button>
+          <button className="button subtle" onClick={() => openCatalogDialog('export', 'export')} type="button">
+            <AppIcon name="print" />
+            Xuất dữ liệu
+          </button>
+          <button
+            className="button primary"
             onClick={() => {
               setMode('create');
               setVariantMode('create');
-              setEditorTab('product');
               setForm(emptyForm);
               setVariantForm(emptyVariantForm);
               setSelectedVariantId(undefined);
+              setInventoryEnabled(true);
+              setTrackingMode('none');
+              setFormulaValidation(false);
+              openCatalogDialog('create', 'create');
             }}
-            variant="primary"
+            type="button"
           >
-            Tạo sản phẩm
-          </Button>
+            <span aria-hidden="true">+</span>
+            Thêm sản phẩm
+          </button>
         </div>
       </header>
 
-      <div className="cn-filter-bar cn-catalog-filter-bar" aria-label="Bộ lọc hàng hóa">
-        <label className="cn-field">
-          Tìm kiếm
-          <input
-            aria-label="Tìm kiếm hàng hóa"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tên hàng, SKU hoặc barcode"
-            value={query}
+      <section className="workspace" aria-label="Danh sách hàng hóa và biến thể">
+        <div className="toolbar" aria-label="Bộ lọc hàng hóa">
+          <label className="search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              aria-label="Tìm kiếm hàng hóa"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm tên hàng, SKU, barcode hoặc mã hàng"
+              value={query}
+            />
+          </label>
+          <CatalogDesignListbox
+            id="catalog-status-filter"
+            onChange={(value) => setStatus(value as CatalogProductListStatus)}
+            openListbox={openListbox}
+            options={productStatuses}
+            prefix="Trạng thái"
+            setOpenListbox={setOpenListbox}
+            value={status}
           />
-        </label>
-        <div className="cn-field">
-          Trạng thái
-          <div className="cn-segment-row" role="tablist">
-            {productStatuses.map((option) => (
-              <button
-                aria-selected={status === option.value}
-                className="cn-segment"
-                key={option.value}
-                onClick={() => setStatus(option.value)}
-                role="tab"
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="cn-field">
-          Thao tác
-          <Button onClick={() => void refreshProducts()} variant="secondary">
-            Làm mới
-          </Button>
-        </div>
-      </div>
-
-      {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
-      {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
-
-      <div className="cn-catalog-view-tabs" role="tablist" aria-label="Catalog workspace">
-        {[
-          { value: 'catalog', label: 'Catalog' },
-          { value: 'customers', label: 'Khách hàng' },
-          { value: 'commercial', label: 'Commercial' },
-          { value: 'imports', label: 'Imports' },
-        ].map((tab) => (
+          <CatalogDesignListbox
+            id="catalog-type-filter"
+            onChange={(value) => setProductTypeFilter(value as ProductType | 'All')}
+            openListbox={openListbox}
+            options={productTypeOptions}
+            setOpenListbox={setOpenListbox}
+            triggerLabel="Loại hàng"
+            value={productTypeFilter}
+          />
+          <CatalogDesignListbox
+            id="catalog-category-filter"
+            onChange={setCategoryFilter}
+            openListbox={openListbox}
+            options={categoryOptions}
+            setOpenListbox={setOpenListbox}
+            triggerLabel="Nhóm hàng"
+            value={categoryFilter}
+          />
+          <CatalogDesignListbox
+            id="catalog-brand-filter"
+            onChange={setBrandFilter}
+            openListbox={openListbox}
+            options={brandOptions}
+            setOpenListbox={setOpenListbox}
+            triggerLabel="Thương hiệu"
+            value={brandFilter}
+          />
+          <button className="button subtle filter-mobile" type="button">
+            Bộ lọc
+          </button>
           <button
-            aria-selected={tab.value === 'catalog'}
-            className="cn-catalog-view-tab"
+            className="filter-chip"
+            hidden={query === '' && status === 'All' && productTypeFilter === 'All' && categoryFilter === 'All' && brandFilter === 'All'}
+            onClick={() => {
+              setQuery('');
+              setStatus('All');
+              setProductTypeFilter('All');
+              setCategoryFilter('All');
+              setBrandFilter('All');
+            }}
+            type="button"
+          >
+            × Xóa lọc
+          </button>
+        </div>
+
+        {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
+        {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
+
+        <div className={filteredItems.length > 0 ? 'state active' : 'state'} id="ready-state">
+          <CatalogProductsTable
+            groups={groupedItems}
+            onOpenMenu={(item) => {
+              setSelectedVariantId(item.variantId);
+              openCatalogDialog('row-menu', 'row-menu');
+            }}
+            onSelect={(item) => {
+              setSelectedVariantId(item.variantId);
+              setDrawerTab('overview');
+              openCatalogDialog('detail', 'detail');
+            }}
+          />
+          <CatalogMobileList
+            items={filteredItems}
+            onOpenMenu={(item) => {
+              setSelectedVariantId(item.variantId);
+              openCatalogDialog('row-menu', 'row-menu');
+            }}
+            onSelect={(item) => {
+              setSelectedVariantId(item.variantId);
+              setDrawerTab('overview');
+              openCatalogDialog('detail', 'detail');
+            }}
+          />
+        </div>
+        <div className={filteredItems.length === 0 ? 'state empty active' : 'state empty'} id="no-result">
+          Không tìm thấy hàng hóa phù hợp với bộ lọc hiện tại.
+        </div>
+      </section>
+
+      <div
+        className={isBackdropOpen ? 'backdrop show' : 'backdrop'}
+        onClick={() => {
+          if (isBundleFormulaOpen) {
+            setIsBundleFormulaOpen(false);
+            setFormulaValidation(false);
+            writeCatalogHash(activeDialog === 'edit' ? 'edit' : 'create');
+            return;
+          }
+          closeCatalogOverlay();
+        }}
+      />
+
+      <CatalogDetailDrawer
+        drawerTab={drawerTab}
+        isOpen={activeDialog === 'detail'}
+        item={selectedItem}
+        productItems={selectedProductItems}
+        selectedProductVariantCount={selectedProductVariantCount}
+        onClose={closeCatalogOverlay}
+        onEdit={() => {
+          setMode('edit');
+          setVariantMode('edit');
+          openCatalogDialog('edit', 'edit');
+        }}
+        onTabChange={setDrawerTab}
+      />
+
+      <CatalogRowMenu
+        item={selectedItem}
+        isOpen={activeDialog === 'row-menu'}
+        onClose={closeCatalogOverlay}
+        onDeactivate={() => openCatalogDialog('deactivate', 'deactivate-confirm')}
+        onDuplicate={() => {
+          if (selectedItem !== undefined) {
+            setMode('create');
+            setVariantMode('create');
+            setForm({ ...formFromItem(selectedItem), productCode: '', sku: `${selectedItem.sku}-COPY` });
+            setVariantForm({ ...variantFormFromItem(selectedItem), sku: `${selectedItem.sku}-COPY` });
+            openCatalogDialog('create', 'create');
+          }
+        }}
+        onEdit={() => {
+          setMode('edit');
+          setVariantMode('edit');
+          openCatalogDialog('edit', 'edit');
+        }}
+        onView={() => {
+          setDrawerTab('overview');
+          openCatalogDialog('detail', 'detail');
+        }}
+      />
+
+      <CatalogLifecycleDialog
+        item={selectedItem}
+        isLoading={isLoading}
+        isOpen={activeDialog === 'deactivate'}
+        onClose={closeCatalogOverlay}
+        onConfirm={() => {
+          if (selectedItem !== undefined) void toggleVariantActive(selectedItem);
+          closeCatalogOverlay();
+        }}
+      />
+
+      <CatalogProductDialog
+        form={form}
+        inventoryEnabled={inventoryEnabled}
+        isLoading={isLoading}
+        isOpen={activeDialog === 'create' || activeDialog === 'edit'}
+        mode={mode}
+        openListbox={openListbox}
+        setOpenListbox={setOpenListbox}
+        trackingMode={trackingMode}
+        variantForm={variantForm}
+        onClose={closeCatalogOverlay}
+        onFormChange={setForm}
+        onInventoryEnabledChange={setInventoryEnabled}
+        onOpenBundleFormula={() => {
+          setFormulaValidation(false);
+          setIsBundleFormulaOpen(true);
+          writeCatalogHash('bundle-formula');
+        }}
+        onProductTypeChange={(productType) => {
+          const nextInventoryMode = defaultInventoryModeForProductType(productType);
+          setForm((current) => ({
+            ...current,
+            productType,
+            inventoryMode: nextInventoryMode,
+          }));
+          setVariantForm((current) => ({
+            ...current,
+            inventoryMode: nextInventoryMode,
+          }));
+          setInventoryEnabled(nextInventoryMode === 'Tracked');
+          setTrackingMode('none');
+          if (productType !== 'Bundle') setIsBundleFormulaOpen(false);
+        }}
+        onSaveProduct={() => void submitProduct()}
+        onSaveVariant={() => void submitVariant()}
+        onTrackingModeChange={(nextTrackingMode) => {
+          setTrackingMode(nextTrackingMode);
+          const next = trackingFlagsFromMode(nextTrackingMode);
+          setForm((current) => ({ ...current, ...next }));
+          setVariantForm((current) => ({ ...current, ...next }));
+        }}
+        onVariantFormChange={setVariantForm}
+      />
+
+      <CatalogBundleFormulaDialog
+        hasValidation={formulaValidation}
+        isLoading={isLoading}
+        isOpen={isBundleFormulaOpen}
+        onClose={() => {
+          setFormulaValidation(false);
+          setIsBundleFormulaOpen(false);
+          writeCatalogHash(mode === 'edit' ? 'edit' : 'create');
+        }}
+        onValidationChange={(nextValidation) => {
+          setFormulaValidation(nextValidation);
+          if (nextValidation) writeCatalogHash('bundle-formula-validation');
+        }}
+        onSaved={() => {
+          setFormulaValidation(false);
+          setIsBundleFormulaOpen(false);
+          writeCatalogHash(mode === 'edit' ? 'edit' : 'create');
+        }}
+      />
+
+      <CatalogImportWizard
+        importState={importState}
+        isLoading={isLoading}
+        isOpen={activeDialog === 'import'}
+        onClose={closeCatalogOverlay}
+        onStateChange={(nextState) => {
+          setImportState(nextState);
+          writeCatalogHash(nextState);
+        }}
+      />
+
+      <CatalogExportDialog
+        isLoading={isLoading}
+        isOpen={activeDialog === 'export'}
+        productCount={filteredProductCount}
+        onClose={closeCatalogOverlay}
+      />
+    </div>
+  );
+}
+
+function CatalogDesignListbox(props: {
+  id: string;
+  value: string;
+  options: readonly { value: string; label: string; description?: string }[];
+  openListbox: string | undefined;
+  setOpenListbox(value: string | undefined): void;
+  onChange(value: string): void;
+  prefix?: string;
+  triggerLabel?: string;
+  className?: string;
+}) {
+  const selectedOption = props.options.find((option) => option.value === props.value) ?? props.options[0];
+  const isOpen = props.openListbox === props.id;
+  const triggerText =
+    props.triggerLabel !== undefined ? props.triggerLabel : `${props.prefix}: ${selectedOption?.label ?? props.value}`;
+
+  return (
+    <div className={`listbox ${props.className ?? ''}`.trim()}>
+      <button
+        aria-controls={props.id}
+        aria-expanded={isOpen}
+        className="listbox-trigger"
+        onClick={() => props.setOpenListbox(isOpen ? undefined : props.id)}
+        type="button"
+      >
+        <span>{triggerText}</span>
+        <AppIcon name="chevronDown" />
+      </button>
+      <div className="listbox-popover" hidden={!isOpen} id={props.id} role="listbox">
+        {props.options.map((option) => (
+          <button
+            aria-selected={option.value === props.value}
+            className="listbox-option"
+            key={option.value}
+            onClick={() => {
+              props.onChange(option.value);
+              props.setOpenListbox(undefined);
+            }}
+            role="option"
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CatalogProductsTable(props: {
+  groups: readonly CatalogProductGroup[];
+  onOpenMenu(item: CatalogProductListItemDTO): void;
+  onSelect(item: CatalogProductListItemDTO): void;
+}) {
+  return (
+    <div className="table-wrap">
+      <table className="products-table">
+        <thead>
+          <tr>
+            <th>Hàng hóa / biến thể</th>
+            <th>SKU / barcode</th>
+            <th>Giá bán</th>
+            <th>Tồn khả dụng</th>
+            <th>Đơn vị</th>
+            <th>Theo dõi</th>
+            <th>Trạng thái</th>
+            <th aria-label="Thao tác" />
+          </tr>
+        </thead>
+        <tbody>
+          {props.groups.map((group) => (
+            <Fragment key={group.productId}>
+              <tr className="product-row">
+                <td colSpan={8}>
+                  <span className="product-name">{group.productName}</span>
+                  <span className="sku">
+                    {' '}
+                    · {variantSummary(group.variants.length)}
+                  </span>
+                </td>
+              </tr>
+              {group.variants.map((item, index) => (
+                <tr data-row="" key={item.variantId} onClick={() => props.onSelect(item)}>
+                  <td className="indent">
+                    <span className="variant-name">{index === 0 ? item.displayName : item.displayName}</span>
+                  </td>
+                  <td>
+                    <div className="sku">{item.sku}</div>
+                    <div className="sku">{item.barcode ?? 'Chưa có barcode'}</div>
+                  </td>
+                  <td className="num">{formatVnd(item.unitPriceVnd)}</td>
+                  <td>{renderAvailability(item)}</td>
+                  <td>{unitLabel(item.defaultUnitId)}</td>
+                  <td>
+                    <span className="tracking">{trackingLabel(item)}</span>
+                  </td>
+                  <td>
+                    <span className={item.isActive ? 'status success' : 'status muted'}>
+                      {item.isActive ? 'Đang bán' : 'Ngừng bán'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      aria-label={`Mở menu thao tác ${item.sku}`}
+                      className="row-action"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onOpenMenu(item);
+                      }}
+                      type="button"
+                    >
+                      ...
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CatalogMobileList(props: {
+  items: readonly CatalogProductListItemDTO[];
+  onOpenMenu(item: CatalogProductListItemDTO): void;
+  onSelect(item: CatalogProductListItemDTO): void;
+}) {
+  return (
+    <div className="mobile-list" aria-label="Danh sách hàng hóa mobile">
+      {props.items.map((item) => (
+        <article className="product-card" key={item.variantId} onClick={() => props.onSelect(item)}>
+          <div className="card-top">
+            <div>
+              <div className="card-title">{item.displayName}</div>
+              <div className="sku">{item.sku}</div>
+            </div>
+            <button
+              aria-label={`Mở menu thao tác ${item.sku}`}
+              className="row-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onOpenMenu(item);
+              }}
+              type="button"
+            >
+              ...
+            </button>
+          </div>
+          <div className="card-meta">
+            <span>
+              <b>Barcode</b>
+              {item.barcode ?? 'Chưa có'}
+            </span>
+            <span>
+              <b>Giá bán</b>
+              {formatVnd(item.unitPriceVnd)}
+            </span>
+            <span>
+              <b>Theo dõi</b>
+              {trackingLabel(item)}
+            </span>
+            <span>
+              <b>Trạng thái</b>
+              {item.isActive ? 'Đang bán' : 'Ngừng bán'}
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CatalogDetailDrawer(props: {
+  drawerTab: DrawerTab;
+  isOpen: boolean;
+  item?: CatalogProductListItemDTO;
+  productItems: readonly CatalogProductListItemDTO[];
+  selectedProductVariantCount: number;
+  onClose(): void;
+  onEdit(): void;
+  onTabChange(tab: DrawerTab): void;
+}) {
+  const item = props.item;
+  const tabs: readonly { value: DrawerTab; label: string }[] = [
+    { value: 'overview', label: 'Tổng quan' },
+    { value: 'variants', label: 'Biến thể' },
+    { value: 'units', label: 'Đơn vị & barcode' },
+    { value: 'inventory', label: 'Thiết lập tồn' },
+  ];
+
+  return (
+    <aside
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'drawer open' : 'drawer'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="drawer-head">
+        <div>
+          <h2>{item?.productName ?? 'Chưa chọn sản phẩm'}</h2>
+          <p>
+            Sản phẩm gốc · Biến thể mặc định {item?.sku ?? 'chưa xác định'}
+          </p>
+        </div>
+        <button aria-label="Đóng drawer chi tiết" className="close" onClick={props.onClose} type="button">
+          <AppIcon name="close" />
+        </button>
+      </header>
+      <div className="drawer-tabs" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            aria-selected={props.drawerTab === tab.value}
+            className={props.drawerTab === tab.value ? 'drawer-tab active' : 'drawer-tab'}
             key={tab.value}
+            onClick={() => props.onTabChange(tab.value)}
+            role="tab"
             type="button"
           >
             {tab.label}
           </button>
         ))}
       </div>
-
-      <div className="cn-catalog-grid cn-catalog-master-detail">
-        <Panel
-          action={<Badge tone="neutral">{items.length} biến thể</Badge>}
-          description="Variant là đơn vị giao dịch. Product/variant đã có chứng từ chỉ ngừng bán, không xóa cứng."
-          title="Catalog table"
-        >
-          <Table
-            columns={[
-              { key: 'code', header: 'Mã / SKU' },
-              { key: 'name', header: 'Tên hàng' },
-              { key: 'barcode', header: 'Barcode' },
-              { key: 'unit', header: 'Đơn vị' },
-              { key: 'price', header: 'Giá bán', align: 'right' },
-              { key: 'flags', header: 'Theo dõi' },
-              { key: 'status', header: 'Trạng thái' },
-              { key: 'actions', header: 'Thao tác' },
-            ]}
-            emptyMessage="Chưa có sản phẩm phù hợp."
-            getRowKey={(row) => String(row.id)}
-            rows={rows}
-          />
-        </Panel>
-
-        <Panel
-          action={
-            selectedItem ? (
-              <Badge tone="neutral">{selectedProductVariantCount} variant</Badge>
-            ) : (
-              <Badge tone="info">New</Badge>
-            )
-          }
-          description="Product editor và policy builder theo artifact mới; không dùng native select."
-          title="Product editor"
-        >
-          <div className="cn-editor-tabs" role="tablist" aria-label="Product editor sections">
-            {[
-              { value: 'product', label: 'Product master' },
-              { value: 'variant', label: 'Variant & đơn vị' },
-              { value: 'barcode', label: 'Barcode search' },
-            ].map((tab) => (
-              <button
-                aria-selected={editorTab === tab.value}
-                className="cn-editor-tab"
-                key={tab.value}
-                onClick={() => setEditorTab(tab.value as typeof editorTab)}
-                role="tab"
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
+      <div className="drawer-body">
+        <section className={props.drawerTab === 'overview' ? 'drawer-panel active' : 'drawer-panel'}>
+          <Definition label="Mã sản phẩm" value={item?.productCode ?? '—'} />
+          <Definition label="Nhóm hàng" value="Thực phẩm & đồ uống" />
+          <Definition label="Loại hàng" value={item === undefined ? '—' : productTypeLabel(item.productType)} />
+          <Definition label="Trạng thái bán" value={item?.isActive === false ? 'Ngừng bán' : 'Đang bán'} />
+          <Definition label="Kho hiện tại" value="Kho trung tâm" />
+          <div className="drawer-note">
+            <AppIcon name="warning" />
+            Không hard-delete sản phẩm/biến thể đã có khả năng phát sinh chứng từ.
           </div>
+        </section>
+        <section className={props.drawerTab === 'variants' ? 'drawer-panel active' : 'drawer-panel'}>
+          <table className="variant-table">
+            <tbody>
+              {props.productItems.map((variant) => (
+                <tr key={variant.variantId}>
+                  <td>
+                    <strong>{variant.displayName}</strong>
+                    <div className="sku">{variant.sku}</div>
+                  </td>
+                  <td className="num">{formatVnd(variant.unitPriceVnd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="field-helper">{props.selectedProductVariantCount} variant thuộc product đang chọn.</p>
+        </section>
+        <section className={props.drawerTab === 'units' ? 'drawer-panel active' : 'drawer-panel'}>
+          <Definition label="Đơn vị bán" value={unitLabel(item?.defaultUnitId)} />
+          <Definition label="Barcode" value={item?.barcode ?? 'Chưa có'} />
+          <Definition label="SKU" value={item?.sku ?? '—'} />
+        </section>
+        <section className={props.drawerTab === 'inventory' ? 'drawer-panel active' : 'drawer-panel'}>
+          <Definition label="Tồn khả dụng" value={availabilityText(item)} />
+          <Definition label="Phương thức theo dõi" value={item === undefined ? '—' : trackingLabel(item)} />
+          <Definition label="Quản lý tồn" value={item?.inventoryMode === 'Tracked' ? 'Bật' : 'Tắt'} />
+        </section>
+      </div>
+      <footer className="drawer-actionbar">
+        <button className="button primary" onClick={props.onEdit} type="button">
+          Sửa biến thể
+        </button>
+      </footer>
+    </aside>
+  );
+}
 
-          {editorTab === 'product' ? (
-            <div className="cn-catalog-form cn-editor-card">
-              <label className="cn-field">
-                Mã sản phẩm
-                <input
-                  onChange={(event) => setForm((current) => ({ ...current, productCode: event.target.value }))}
-                  value={form.productCode}
-                />
-              </label>
-              <label className="cn-field">
-                Tên hàng
-                <input
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                  value={form.name}
-                />
-              </label>
-              <div className="cn-editor-grid">
-                <label className="cn-field">
-                  Default SKU
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
-                    value={form.sku}
-                  />
-                </label>
-                <label className="cn-field">
-                  Barcode
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
-                    value={form.barcode}
-                  />
-                </label>
-              </div>
-              <div className="cn-editor-grid">
-                <label className="cn-field">
-                  Đơn vị bán mặc định
-                  <input
-                    onChange={(event) => setForm((current) => ({ ...current, defaultUnitId: event.target.value }))}
-                    value={form.defaultUnitId}
-                  />
-                </label>
-                <label className="cn-field">
-                  Giá bán mặc định
-                  <input
-                    inputMode="numeric"
-                    onChange={(event) => setForm((current) => ({ ...current, unitPriceVnd: event.target.value }))}
-                    value={form.unitPriceVnd}
-                  />
-                </label>
-              </div>
-              <div className="cn-field">
-                Loại hàng
-                <div className="cn-segment-row" role="group" aria-label="Loại hàng">
-                  {productTypes.map((type) => (
-                    <button
-                      aria-pressed={form.productType === type}
-                      className="cn-segment"
-                      key={type}
-                      onClick={() =>
-                        setForm((current) => ({
-                          ...current,
-                          productType: type,
-                          inventoryMode: defaultInventoryModeForProductType(type),
-                        }))
-                      }
-                      type="button"
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="cn-field">
-                Chế độ tồn mặc định
-                <div className="cn-segment-row" role="group" aria-label="Chế độ tồn">
-                  {inventoryModes.map((modeOption) => (
-                    <button
-                      aria-pressed={form.inventoryMode === modeOption}
-                      className="cn-segment"
-                      key={modeOption}
-                      onClick={() =>
-                        setForm((current) => ({
-                          ...current,
-                          inventoryMode: modeOption,
-                        }))
-                      }
-                      type="button"
-                    >
-                      {modeOption}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="cn-action-row">
-                <Button disabled={isLoading} isLoading={isLoading} onClick={() => void submitProduct()} variant="primary">
-                  {mode === 'create' ? 'Tạo sản phẩm' : 'Lưu Product master'}
-                </Button>
-                {selectedItem ? (
-                  <Button disabled={isLoading} onClick={() => void toggleProductActive(selectedItem)} variant="secondary">
-                    {selectedItem.isActive ? 'Ngừng toàn bộ product' : 'Kích hoạt lại'}
-                  </Button>
-                ) : null}
-              </div>
+function Definition(props: { label: string; value: string }) {
+  return (
+    <div className="definition">
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </div>
+  );
+}
+
+function CatalogRowMenu(props: {
+  isOpen: boolean;
+  item?: CatalogProductListItemDTO;
+  onClose(): void;
+  onDeactivate(): void;
+  onDuplicate(): void;
+  onEdit(): void;
+  onView(): void;
+}) {
+  return (
+    <div aria-hidden={!props.isOpen} className={props.isOpen ? 'menu open' : 'menu'} hidden={!props.isOpen} role="menu">
+      <button onClick={props.onView} role="menuitem" type="button">
+        Xem chi tiết
+      </button>
+      <button onClick={props.onEdit} role="menuitem" type="button">
+        Sửa biến thể
+      </button>
+      <button onClick={props.onDuplicate} role="menuitem" type="button">
+        Sao chép
+      </button>
+      <div className="separator" />
+      <button
+        className={props.item?.isActive === false ? undefined : 'attention'}
+        onClick={props.onDeactivate}
+        role="menuitem"
+        type="button"
+      >
+        {props.item?.isActive === false ? 'Mở bán lại' : 'Ngừng bán'}
+      </button>
+      <button onClick={props.onClose} role="menuitem" type="button">
+        Đóng menu
+      </button>
+    </div>
+  );
+}
+
+function CatalogLifecycleDialog(props: {
+  isOpen: boolean;
+  isLoading: boolean;
+  item?: CatalogProductListItemDTO;
+  onClose(): void;
+  onConfirm(): void;
+}) {
+  const isDeactivate = props.item?.isActive !== false;
+
+  return (
+    <section
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'modal utility open' : 'modal utility'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="modal-head">
+        <div>
+          <h2>{isDeactivate ? 'Ngừng bán biến thể' : 'Mở bán lại biến thể'}</h2>
+          <p>
+            {isDeactivate
+              ? 'Thao tác này không xóa dữ liệu lịch sử và chỉ ngăn chọn biến thể cho giao dịch mới.'
+              : 'Biến thể sẽ xuất hiện lại trong luồng bán hàng nếu backend xác nhận quyền và trạng thái hợp lệ.'}
+          </p>
+        </div>
+      </header>
+      <div className="modal-body confirm-copy">
+        <strong>{props.item?.displayName ?? 'Biến thể đang chọn'}</strong>
+        <p>{props.item?.sku ?? 'SKU chưa xác định'}</p>
+      </div>
+      <footer className="modal-foot">
+        <button className="button" onClick={props.onClose} type="button">
+          Hủy
+        </button>
+        <button className="button primary" disabled={props.isLoading} onClick={props.onConfirm} type="button">
+          {isDeactivate ? 'Xác nhận ngừng bán' : 'Xác nhận mở bán lại'}
+        </button>
+      </footer>
+    </section>
+  );
+}
+
+function CatalogProductDialog(props: {
+  form: ProductFormState;
+  inventoryEnabled: boolean;
+  isLoading: boolean;
+  isOpen: boolean;
+  mode: 'create' | 'edit';
+  openListbox: string | undefined;
+  setOpenListbox(value: string | undefined): void;
+  trackingMode: TrackingMode;
+  variantForm: VariantFormState;
+  onClose(): void;
+  onFormChange(updater: ProductFormState | ((current: ProductFormState) => ProductFormState)): void;
+  onInventoryEnabledChange(value: boolean): void;
+  onOpenBundleFormula(): void;
+  onProductTypeChange(productType: ProductType): void;
+  onSaveProduct(): void;
+  onSaveVariant(): void;
+  onTrackingModeChange(mode: TrackingMode): void;
+  onVariantFormChange(updater: VariantFormState | ((current: VariantFormState) => VariantFormState)): void;
+}) {
+  const form = props.form;
+  const variantForm = props.variantForm;
+
+  return (
+    <section
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'modal wide open' : 'modal wide'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="modal-head">
+        <div>
+          <h2>{props.mode === 'create' ? 'Thêm sản phẩm' : 'Sửa biến thể'}</h2>
+          <p>Tạo thông tin sản phẩm và biến thể mặc định dùng cho SKU, giá, tồn và barcode.</p>
+        </div>
+        <button aria-label="Đóng modal sản phẩm" className="close" onClick={props.onClose} type="button">
+          <AppIcon name="close" />
+        </button>
+      </header>
+      <div className="steps" aria-label="Các bước nhập sản phẩm">
+        <span className="step active">1 · Thông tin sản phẩm</span>
+        <span className="step">2 · Biến thể mặc định</span>
+      </div>
+      <div className="modal-body">
+        <section className="form-section">
+          <div className="section-title">
+            <div>
+              <h3>Thông tin sản phẩm</h3>
+              <p>Product là mô tả gốc; variant mới là đơn vị giao dịch.</p>
             </div>
-          ) : null}
-
-          {editorTab === 'variant' ? (
-            <div className="cn-catalog-form cn-editor-card">
-              <div className="cn-action-row cn-action-row-between">
-                <Badge tone="info">{variantMode === 'create' ? 'New variant' : selectedItem?.sku ?? 'Variant'}</Badge>
-                <Button
-                  onClick={() => {
-                    setVariantMode('create');
-                    setVariantForm({
-                      ...emptyVariantForm,
-                      inventoryMode: selectedItem?.inventoryMode ?? emptyVariantForm.inventoryMode,
-                    });
-                  }}
-                  variant="secondary"
-                >
-                  Thêm variant
-                </Button>
-              </div>
-              <label className="cn-field">
-                Tên biến thể
-                <input
-                  onChange={(event) => setVariantForm((current) => ({ ...current, displayName: event.target.value }))}
-                  value={variantForm.displayName}
-                />
-              </label>
-              <div className="cn-editor-grid">
-                <label className="cn-field">
-                  SKU
-                  <input
-                    onChange={(event) => setVariantForm((current) => ({ ...current, sku: event.target.value }))}
-                    value={variantForm.sku}
-                  />
-                </label>
-                <label className="cn-field">
-                  Barcode
-                  <input
-                    onChange={(event) => setVariantForm((current) => ({ ...current, barcode: event.target.value }))}
-                    value={variantForm.barcode}
-                  />
-                </label>
-              </div>
-              <div className="cn-editor-grid">
-                <label className="cn-field">
-                  Đơn vị bán
-                  <input
-                    onChange={(event) => setVariantForm((current) => ({ ...current, defaultUnitId: event.target.value }))}
-                    value={variantForm.defaultUnitId}
-                  />
-                </label>
-                <label className="cn-field">
-                  Quy đổi về đơn vị gốc
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => setVariantForm((current) => ({ ...current, unitFactor: event.target.value }))}
-                    value={variantForm.unitFactor}
-                  />
-                </label>
-              </div>
-              <label className="cn-field">
-                Giá bán
-                <input
-                  inputMode="numeric"
-                  onChange={(event) => setVariantForm((current) => ({ ...current, unitPriceVnd: event.target.value }))}
-                  value={variantForm.unitPriceVnd}
-                />
-              </label>
-              <div className="cn-field">
-                Chế độ tồn
-                <div className="cn-segment-row" role="group" aria-label="Chế độ tồn biến thể">
-                  {inventoryModes.map((modeOption) => (
-                    <button
-                      aria-pressed={variantForm.inventoryMode === modeOption}
-                      className="cn-segment"
-                      key={modeOption}
-                      onClick={() =>
-                        setVariantForm((current) => ({
-                          ...current,
-                          inventoryMode: modeOption,
-                        }))
-                      }
-                      type="button"
-                    >
-                      {modeOption}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="cn-catalog-toggle-row">
-                <label>
-                  <input
-                    checked={variantForm.lotTracking}
-                    onChange={(event) =>
-                      setVariantForm((current) => ({ ...current, lotTracking: event.target.checked }))
-                    }
-                    type="checkbox"
-                  />{' '}
-                  Theo dõi lô/hạn
-                </label>
-                <label>
-                  <input
-                    checked={variantForm.serialTracking}
-                    onChange={(event) =>
-                      setVariantForm((current) => ({ ...current, serialTracking: event.target.checked }))
-                    }
-                    type="checkbox"
-                  />{' '}
-                  Theo dõi serial
-                </label>
-                <label>
-                  <input
-                    checked={variantForm.saleEnabled}
-                    onChange={(event) =>
-                      setVariantForm((current) => ({ ...current, saleEnabled: event.target.checked }))
-                    }
-                    type="checkbox"
-                  />{' '}
-                  Cho bán
-                </label>
-                <label>
-                  <input
-                    checked={variantForm.purchaseEnabled}
-                    onChange={(event) =>
-                      setVariantForm((current) => ({ ...current, purchaseEnabled: event.target.checked }))
-                    }
-                    type="checkbox"
-                  />{' '}
-                  Cho nhập
-                </label>
-              </div>
-              <div className="cn-action-row">
-                <Button disabled={isLoading} isLoading={isLoading} onClick={() => void submitVariant()} variant="primary">
-                  {variantMode === 'create' ? 'Tạo variant' : 'Lưu variant'}
-                </Button>
-                {selectedItem ? (
-                  <Button disabled={isLoading} onClick={() => void toggleVariantActive(selectedItem)} variant="secondary">
-                    {selectedItem.isActive ? 'Ngừng bán variant' : 'Kích hoạt variant'}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {editorTab === 'barcode' ? (
-            <div className="cn-catalog-form cn-editor-card">
-              <StateBlock
-                description="Kiểm tra nhanh trên catalog đã tải. Backend vẫn là nguồn quyết định cuối cùng khi lưu."
-                title="Barcode search"
-                tone="neutral"
+            <span>* Bắt buộc</span>
+          </div>
+          <div className="form-grid">
+            <Field label="Mã hàng *">
+              <input
+                className="input"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, productCode: event.target.value }))}
+                value={form.productCode}
               />
-              <label className="cn-field">
-                SKU cần kiểm tra
-                <input
-                  onChange={(event) => setVariantForm((current) => ({ ...current, sku: event.target.value }))}
-                  value={variantForm.sku}
-                />
-              </label>
-              <label className="cn-field">
-                Barcode cần kiểm tra
-                <input
-                  onChange={(event) => setVariantForm((current) => ({ ...current, barcode: event.target.value }))}
-                  value={variantForm.barcode}
-                />
-              </label>
-              <Button onClick={checkBarcodeOrSku} variant="secondary">
-                Kiểm tra trùng
-              </Button>
-              {barcodeCheckMessage ? (
-                <p className="cn-inline-message cn-inline-message-warning">{barcodeCheckMessage}</p>
-              ) : null}
+            </Field>
+            <Field label="Tên sản phẩm *">
+              <input
+                className="input"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, name: event.target.value }))}
+                value={form.name}
+              />
+            </Field>
+            <div className="field">
+              <label>Loại hàng *</label>
+              <CatalogDesignListbox
+                className="product-type-listbox"
+                id="dialog-product-type"
+                onChange={(value) => props.onProductTypeChange(value as ProductType)}
+                openListbox={props.openListbox}
+                options={productTypeOptions.filter((option) => option.value !== 'All')}
+                setOpenListbox={props.setOpenListbox}
+                triggerLabel={productTypeLabel(form.productType)}
+                value={form.productType}
+              />
             </div>
-          ) : null}
-        </Panel>
+            <div className="field">
+              <label>Nhóm hàng *</label>
+              <CatalogDesignListbox
+                id="dialog-category"
+                onChange={() => undefined}
+                openListbox={props.openListbox}
+                options={categoryOptions}
+                setOpenListbox={props.setOpenListbox}
+                triggerLabel="Thực phẩm & đồ uống"
+                value="food"
+              />
+            </div>
+            <Field label="Thương hiệu">
+              <input className="input" placeholder="Hàng nội bộ" />
+            </Field>
+            <div className="type-context">
+              <ProductTypePanel
+                form={form}
+                inventoryEnabled={props.inventoryEnabled}
+                openListbox={props.openListbox}
+                setOpenListbox={props.setOpenListbox}
+                trackingMode={props.trackingMode}
+                onFormChange={props.onFormChange}
+                onInventoryEnabledChange={props.onInventoryEnabledChange}
+                onOpenBundleFormula={props.onOpenBundleFormula}
+                onTrackingModeChange={props.onTrackingModeChange}
+                onVariantFormChange={props.onVariantFormChange}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="form-section">
+          <div className="section-title">
+            <div>
+              <h3>Biến thể mặc định</h3>
+              <p>SKU, barcode, đơn vị và giá bán được ghi ở cấp variant.</p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <Field label="SKU *">
+              <input
+                className="input"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, sku: event.target.value }))}
+                value={form.sku}
+              />
+            </Field>
+            <Field label="Tên biến thể *">
+              <input
+                className="input"
+                onChange={(event) =>
+                  props.onVariantFormChange((current) => ({ ...current, displayName: event.target.value }))
+                }
+                value={variantForm.displayName}
+              />
+            </Field>
+            <Field label="Đơn vị *">
+              <input
+                className="input"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, defaultUnitId: event.target.value }))}
+                value={form.defaultUnitId}
+              />
+            </Field>
+            <Field label="Giá bán">
+              <input
+                className="input num"
+                inputMode="numeric"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, unitPriceVnd: event.target.value }))}
+                value={form.unitPriceVnd}
+              />
+            </Field>
+            <Field label="Barcode">
+              <input
+                className="input"
+                onChange={(event) => props.onFormChange((current) => ({ ...current, barcode: event.target.value }))}
+                value={form.barcode}
+              />
+            </Field>
+            <Field label="Quy đổi về đơn vị gốc">
+              <input
+                className="input num"
+                inputMode="decimal"
+                onChange={(event) =>
+                  props.onVariantFormChange((current) => ({ ...current, unitFactor: event.target.value }))
+                }
+                value={variantForm.unitFactor}
+              />
+            </Field>
+          </div>
+          <p className="validation show" hidden>
+            <AppIcon name="warning" />
+            SKU hoặc barcode đã tồn tại trong Catalog.
+          </p>
+        </section>
+      </div>
+      <footer className="modal-foot">
+        <button className="button" onClick={props.onClose} type="button">
+          Hủy
+        </button>
+        {props.mode === 'edit' ? (
+          <button className="button primary" disabled={props.isLoading} onClick={props.onSaveVariant} type="button">
+            Lưu biến thể
+          </button>
+        ) : (
+          <button className="button primary" disabled={props.isLoading} onClick={props.onSaveProduct} type="button">
+            Lưu sản phẩm
+          </button>
+        )}
+      </footer>
+    </section>
+  );
+}
+
+function Field(props: { label: string; children: ReactNode }) {
+  return (
+    <div className="field">
+      <label>{props.label}</label>
+      {props.children}
+    </div>
+  );
+}
+
+function ProductTypePanel(props: {
+  form: ProductFormState;
+  inventoryEnabled: boolean;
+  openListbox: string | undefined;
+  setOpenListbox(value: string | undefined): void;
+  trackingMode: TrackingMode;
+  onFormChange(updater: ProductFormState | ((current: ProductFormState) => ProductFormState)): void;
+  onInventoryEnabledChange(value: boolean): void;
+  onOpenBundleFormula(): void;
+  onTrackingModeChange(mode: TrackingMode): void;
+  onVariantFormChange(updater: VariantFormState | ((current: VariantFormState) => VariantFormState)): void;
+}) {
+  return (
+    <>
+      <section className={props.form.productType === 'Stocked' ? 'type-panel active' : 'type-panel'}>
+        <div className="type-panel-head stocked-panel-head">
+          <div>
+            <div className="stocked-title-row">
+              <h4>Thiết lập tồn kho</h4>
+              <span className="status info">Hàng tồn</span>
+            </div>
+            <p>Bật quản lý tồn để thiết lập mức tồn và cách theo dõi hàng hóa.</p>
+          </div>
+          <div className="inventory-header-control">
+            <span className="setting-label">Quản lý tồn</span>
+            <button
+              aria-checked={props.inventoryEnabled}
+              aria-label="Quản lý tồn"
+              className="switch"
+              onClick={() => {
+                const nextEnabled = !props.inventoryEnabled;
+                props.onInventoryEnabledChange(nextEnabled);
+                props.onFormChange((current) => ({ ...current, inventoryMode: nextEnabled ? 'Tracked' : 'NotTracked' }));
+                props.onVariantFormChange((current) => ({
+                  ...current,
+                  inventoryMode: nextEnabled ? 'Tracked' : 'NotTracked',
+                }));
+              }}
+              role="switch"
+              type="button"
+            />
+          </div>
+        </div>
+        <p className={props.inventoryEnabled ? 'inventory-disabled-note' : 'inventory-disabled-note show'}>
+          Bật quản lý tồn để thiết lập mức tồn và cách theo dõi hàng hóa.
+        </p>
+        <div className="form-grid inventory-config" hidden={!props.inventoryEnabled}>
+          <Field label="Tồn tối thiểu">
+            <input className="input num" inputMode="decimal" placeholder="0" />
+          </Field>
+          <div className="field inventory-track-field">
+            <label>Phương thức theo dõi hàng hóa</label>
+            <CatalogTrackingListbox
+              onChange={props.onTrackingModeChange}
+              openListbox={props.openListbox}
+              setOpenListbox={props.setOpenListbox}
+              value={props.trackingMode}
+            />
+          </div>
+        </div>
+      </section>
+      <section className={props.form.productType === 'Service' ? 'type-panel active' : 'type-panel'}>
+        <div className="type-panel-head">
+          <div>
+            <h4>Thiết lập dịch vụ</h4>
+            <p>Dịch vụ không kiểm tồn kho khi bán; vẫn snapshot giá/thuế trên đơn.</p>
+          </div>
+          <span className="status info">Dịch vụ</span>
+        </div>
+      </section>
+      <section className={props.form.productType === 'NonStock' ? 'type-panel active' : 'type-panel'}>
+        <div className="type-panel-head">
+          <div>
+            <h4>Thiết lập không tồn</h4>
+            <p>Không quản lý tồn; POS không kiểm tồn nhưng vẫn ghi nhận SKU, barcode và giá bán.</p>
+          </div>
+          <span className="status muted">Không tồn</span>
+        </div>
+      </section>
+      <section className={props.form.productType === 'Bundle' ? 'type-panel active' : 'type-panel'}>
+        <div className="type-panel-head">
+          <div>
+            <h4>Công thức bộ sản phẩm</h4>
+            <p>Bộ sản phẩm không quản lý tồn thành phẩm riêng; khi bán sẽ trừ tồn các thành phần theo công thức.</p>
+          </div>
+          <span className="status warning">Chưa cấu hình</span>
+        </div>
+        <div className="bundle-warning">
+          <AppIcon name="warning" />
+          Cần cấu hình công thức bộ sản phẩm trước khi mở bán.
+        </div>
+        <button className="button subtle" onClick={props.onOpenBundleFormula} type="button">
+          Cấu hình công thức bộ sản phẩm
+        </button>
+      </section>
+    </>
+  );
+}
+
+function CatalogTrackingListbox(props: {
+  value: TrackingMode;
+  openListbox: string | undefined;
+  setOpenListbox(value: string | undefined): void;
+  onChange(value: TrackingMode): void;
+}) {
+  const isOpen = props.openListbox === 'dialog-tracking';
+  const selectedOption = trackingOptions.find((option) => option.value === props.value) ?? trackingOptions[0];
+
+  return (
+    <div className="listbox tracking-listbox">
+      <button
+        aria-controls="dialog-tracking"
+        aria-expanded={isOpen}
+        className="listbox-trigger"
+        onClick={() => props.setOpenListbox(isOpen ? undefined : 'dialog-tracking')}
+        type="button"
+      >
+        <span>{selectedOption.label}</span>
+        <AppIcon name="chevronDown" />
+      </button>
+      <div className="listbox-popover tracking-popover" hidden={!isOpen} id="dialog-tracking" role="listbox">
+        {trackingOptions.map((option) => (
+          <button
+            aria-checked={option.value === props.value}
+            className="radio-option"
+            key={option.value}
+            onClick={() => {
+              props.onChange(option.value);
+              props.setOpenListbox(undefined);
+            }}
+            role="option"
+            type="button"
+          >
+            <span className="radio-mark" />
+            <span>
+              <strong>{option.label}</strong>
+              <small>{option.description}</small>
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );
+}
+
+function CatalogBundleFormulaDialog(props: {
+  hasValidation: boolean;
+  isLoading: boolean;
+  isOpen: boolean;
+  onClose(): void;
+  onSaved(): void;
+  onValidationChange(value: boolean): void;
+}) {
+  const [components, setComponents] = useState<readonly BundleFormulaComponent[]>([
+    {
+      id: 'component-1',
+      name: 'Sữa hạt óc chó 1L',
+      sku: 'SH-OC-1L',
+      unit: 'Thùng',
+      quantity: '1',
+    },
+  ]);
+  const [saveMessage, setSaveMessage] = useState('1 thành phần · Có hiệu lực từ ngày đã chọn.');
+
+  const hasInvalidComponent =
+    components.length === 0 ||
+    components.some((component) => component.name.trim() === '' || Number(component.quantity) <= 0);
+
+  return (
+    <section
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'modal utility formula-modal open' : 'modal utility formula-modal'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="modal-head">
+        <div>
+          <h2>Cấu hình công thức bộ sản phẩm</h2>
+          <p>Chọn các variant thành phần và số lượng trừ tồn khi bán một bộ.</p>
+        </div>
+        <button aria-label="Đóng công thức bộ sản phẩm" className="close" onClick={props.onClose} type="button">
+          <AppIcon name="close" />
+        </button>
+      </header>
+      <div className="modal-body">
+        <div className="formula-intro">
+          <div>
+            <b>Hiệu lực từ</b>
+            <input className="input" defaultValue="2026-08-03" type="date" />
+          </div>
+          <span className="status warning">Trạng thái công thức: Nháp</span>
+        </div>
+        {components.length > 0 ? (
+          <div className="formula-table-wrap">
+            <table className="formula-table">
+              <thead>
+                <tr>
+                  <th>Thành phần</th>
+                  <th>SKU</th>
+                  <th>Đơn vị cơ bản</th>
+                  <th>Số lượng</th>
+                  <th aria-label="Xóa" />
+                </tr>
+              </thead>
+              <tbody>
+                {components.map((component) => (
+                  <tr key={component.id}>
+                    <td>
+                      <div className="formula-combobox">
+                        <input
+                          className="input"
+                          onChange={(event) =>
+                            setComponents((current) =>
+                              current.map((candidate) =>
+                                candidate.id === component.id
+                                  ? { ...candidate, name: event.target.value }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                          value={component.name}
+                        />
+                        <div className="formula-suggestions" hidden>
+                          <button type="button">Sữa hạt óc chó 1L · SH-OC-1L</button>
+                          <button type="button">Túi quà Cenio · TQ-CENIO</button>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="sku">{component.sku}</td>
+                    <td>{component.unit}</td>
+                    <td>
+                      <input
+                        className="input num"
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          setComponents((current) =>
+                            current.map((candidate) =>
+                              candidate.id === component.id
+                                ? { ...candidate, quantity: event.target.value }
+                                : candidate,
+                            ),
+                          )
+                        }
+                        value={component.quantity}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        aria-label="Xóa thành phần"
+                        className="row-action"
+                        onClick={() =>
+                          setComponents((current) => current.filter((candidate) => candidate.id !== component.id))
+                        }
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="formula-empty">Chưa có thành phần trong công thức.</p>
+        )}
+        <p className={props.hasValidation ? 'validation show' : 'validation'}>
+          <AppIcon name="warning" />
+          Công thức phải có ít nhất một thành phần và số lượng phải lớn hơn 0.
+        </p>
+        <button
+          className="button subtle"
+          onClick={() => {
+            props.onValidationChange(false);
+            setComponents((current) => [
+              ...current,
+              {
+                id: `component-${Date.now()}`,
+                name: '',
+                sku: 'Chưa chọn',
+                unit: 'Cái',
+                quantity: '1',
+              },
+            ]);
+          }}
+          type="button"
+        >
+          + Thêm thành phần
+        </button>
+        <div className="formula-summary">{saveMessage}</div>
+      </div>
+      <footer className="modal-foot">
+        <button className="button" onClick={props.onClose} type="button">
+          Hủy
+        </button>
+        <button
+          className="button primary"
+          disabled={props.isLoading}
+          onClick={() => {
+            if (hasInvalidComponent) {
+              props.onValidationChange(true);
+              return;
+            }
+            props.onValidationChange(false);
+            setSaveMessage(`${components.length} thành phần · Có hiệu lực từ ngày đã chọn.`);
+            props.onSaved();
+          }}
+          type="button"
+        >
+          Lưu công thức
+        </button>
+      </footer>
+    </section>
+  );
+}
+
+interface BundleFormulaComponent {
+  id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  quantity: string;
+}
+
+function CatalogImportWizard(props: {
+  importState: ImportState;
+  isOpen: boolean;
+  isLoading: boolean;
+  onClose(): void;
+  onStateChange(state: ImportState): void;
+}) {
+  const nextState = importNextState(props.importState);
+
+  return (
+    <section
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'modal wide import-modal open' : 'modal wide import-modal'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="modal-head">
+        <div>
+          <h2>Nhập danh mục hàng hóa</h2>
+          <p>Chỉ tạo mới. SKU hoặc barcode đã tồn tại sẽ được báo lỗi và không ghi đè.</p>
+          <span className="sr-only">Nhập dữ liệu Catalog</span>
+          <span className="sr-only">Tải báo cáo kết quả</span>
+        </div>
+        <button aria-label="Đóng wizard nhập dữ liệu" className="close" onClick={props.onClose} type="button">
+          <AppIcon name="close" />
+        </button>
+      </header>
+      <div className="import-stepper" aria-label="Import stepper">
+        <span className={importStepClass(props.importState, 1)}>1. Chọn tệp</span>
+        <span className={importStepClass(props.importState, 2)}>2. Kiểm tra</span>
+        <span className={importStepClass(props.importState, 3)}>3. Xác nhận</span>
+      </div>
+      <div className="modal-body">
+        <section className={props.importState === 'import' ? 'import-state active' : 'import-state'}>
+          <div className="import-guard">Chỉ tạo mới. SKU hoặc barcode đã tồn tại sẽ được báo lỗi và không ghi đè.</div>
+          <div className="import-file-head">
+            <button className="button subtle" type="button">
+              Tải file mẫu
+            </button>
+            <span>CSV/XLSX · Chỉ Catalog</span>
+          </div>
+          <div className="import-dropzone" role="button" tabIndex={0}>
+            <AppIcon name="fileAlert" />
+            <b>Chọn hoặc thả tệp CSV/XLSX</b>
+            <span>Tải file mẫu trước khi nhập để giữ đúng schema Catalog.</span>
+          </div>
+        </section>
+        <section className={props.importState === 'import-validating' ? 'import-state active' : 'import-state'}>
+          <StateBlock
+            description="Batch đang được kiểm tra trước khi tạo mới. Catalog chưa thay đổi ở bước này."
+            title="Kiểm tra staging nền"
+            tone="neutral"
+          />
+          <div className="import-progress">
+            <span />
+          </div>
+        </section>
+        <section className={props.importState === 'import-validated' ? 'import-state active' : 'import-state'}>
+          <ImportValidationPreview />
+        </section>
+        <section className={props.importState === 'import-confirm' ? 'import-state active' : 'import-state'}>
+          <div className="import-summary">
+            <b>Batch CAT-240802-07 có 2 dòng lỗi</b>
+            <p>Chọn cách nhập phù hợp. Catalog chưa thay đổi ở bước này.</p>
+          </div>
+          <div className="import-mode">
+            <label className="import-radio selected">
+              <span className="radio-dot" />
+              <span>
+                <b>Chỉ nhập 98 dòng hợp lệ</b>
+                <small>Các dòng lỗi được bỏ qua và có trong báo cáo kết quả.</small>
+              </span>
+            </label>
+            <label className="import-radio disabled">
+              <span className="radio-dot" />
+              <span>
+                <b>Nhập toàn bộ</b>
+                <small>Đang bị vô hiệu hóa vì batch còn dòng lỗi.</small>
+              </span>
+            </label>
+          </div>
+        </section>
+        <section className={props.importState === 'import-committing' ? 'import-state active' : 'import-state'}>
+          <StateBlock
+            description="Batch CAT-240802-07 đang ghi theo checkpoint. Bạn có thể đóng an toàn, không hủy commit."
+            title="Đang ghi batch"
+            tone="neutral"
+          />
+          <p className="import-batch-note">Commit đang chạy nền; không có thao tác hủy sau bước này.</p>
+        </section>
+        <section className={props.importState === 'import-completed' ? 'import-state active' : 'import-state'}>
+          <div className="import-result">
+            <h3>Import hoàn tất</h3>
+            <div className="import-counts">
+              <span>Committed 98</span>
+              <span>Skipped 2</span>
+              <span>Failed 0</span>
+            </div>
+          </div>
+        </section>
+        <section className={props.importState === 'import-failed' ? 'import-state active' : 'import-state'}>
+          <StateBlock
+            description="Lỗi retryable đã được sanitize. Batch ID: CAT-240802-07."
+            title="Import thất bại"
+            tone="danger"
+          />
+        </section>
+        <section className={props.importState === 'import-restricted' ? 'import-state active' : 'import-state'}>
+          <StateBlock
+            description="Không hiển thị schema, file hoặc chi tiết batch cho người dùng thiếu quyền."
+            title="Bạn chưa có quyền nhập dữ liệu Catalog"
+            tone="restricted"
+          />
+        </section>
+      </div>
+      <footer className="modal-foot">
+        <button className="button" onClick={props.onClose} type="button">
+          {props.importState === 'import-confirm' ? 'Hủy batch' : 'Đóng'}
+        </button>
+        {props.importState === 'import-validated' || props.importState === 'import-completed' ? (
+          <button className="button subtle" type="button">
+            {props.importState === 'import-completed' ? 'Tải báo cáo kết quả' : 'Tải báo cáo lỗi'}
+          </button>
+        ) : null}
+        {nextState !== undefined ? (
+          <button
+            className="button primary"
+            disabled={props.isLoading}
+            onClick={() => props.onStateChange(nextState)}
+            type="button"
+          >
+            {importPrimaryLabel(props.importState)}
+          </button>
+        ) : null}
+      </footer>
+    </section>
+  );
+}
+
+function ImportValidationPreview() {
+  return (
+    <>
+      <div className="import-summary">
+        <b>100 dòng · 98 hợp lệ · 2 lỗi</b>
+        <p>2 dòng lỗi sẽ không được nhập. Kiểm tra từng dòng trước khi xác nhận.</p>
+      </div>
+      <div className="import-filter" role="group" aria-label="Lọc dòng import">
+        <button className="active" type="button">
+          Tất cả
+        </button>
+        <button type="button">Lỗi</button>
+        <button type="button">Hợp lệ</button>
+      </div>
+      <div className="import-error-wrap">
+        <table className="import-error-table">
+          <thead>
+            <tr>
+              <th>Dòng</th>
+              <th>SKU</th>
+              <th>Barcode</th>
+              <th>Kết quả</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>12</td>
+              <td>SH-OC-1L</td>
+              <td>8938501210012</td>
+              <td>SKU hoặc barcode đã tồn tại.</td>
+            </tr>
+            <tr>
+              <td>41</td>
+              <td>AO-BASIC-BLACK-M</td>
+              <td>—</td>
+              <td>Trùng SKU trong batch.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="import-error-cards">
+        <article>
+          <b>Dòng 12 · SH-OC-1L</b>
+          <span>SKU hoặc barcode đã tồn tại.</span>
+        </article>
+        <article>
+          <b>Dòng 41 · AO-BASIC-BLACK-M</b>
+          <span>Trùng SKU trong batch.</span>
+        </article>
+      </div>
+    </>
+  );
+}
+
+function CatalogExportDialog(props: {
+  isOpen: boolean;
+  isLoading: boolean;
+  productCount: number;
+  onClose(): void;
+}) {
+  return (
+    <section
+      aria-hidden={!props.isOpen}
+      aria-modal={props.isOpen ? 'true' : undefined}
+      className={props.isOpen ? 'modal utility open' : 'modal utility'}
+      hidden={!props.isOpen}
+      role={props.isOpen ? 'dialog' : undefined}
+    >
+      <header className="modal-head">
+        <div>
+          <h2>Xuất danh mục</h2>
+          <p>Chi nhánh Nguyễn Trãi · Kho trung tâm · {props.productCount} sản phẩm hiển thị.</p>
+        </div>
+      </header>
+      <div className="modal-body">
+        <div className="import-groups">
+          <div className="import-group">
+            <b>Phạm vi</b>
+            <button className="segmented active" type="button">
+              Danh sách hiện tại
+            </button>
+            <button className="segmented" type="button">
+              Tất cả theo filter
+            </button>
+            <button className="segmented" type="button">
+              Tem barcode
+            </button>
+          </div>
+          <div className="import-group">
+            <b>Định dạng</b>
+            <button className="segmented active" type="button">
+              CSV
+            </button>
+            <button className="segmented" type="button">
+              XLSX
+            </button>
+            <button className="segmented" type="button">
+              PDF tem barcode
+            </button>
+          </div>
+        </div>
+        <p className="field-helper">Xuất danh mục theo filter hiện tại, toàn bộ theo filter hoặc tem barcode theo quyền.</p>
+      </div>
+      <footer className="modal-foot">
+        <button className="button" onClick={props.onClose} type="button">
+          Hủy
+        </button>
+        <button className="button primary" disabled={props.isLoading} type="button">
+          Xuất danh mục
+        </button>
+      </footer>
+    </section>
+  );
+}
+
+function groupProductItems(items: readonly CatalogProductListItemDTO[]): readonly CatalogProductGroup[] {
+  const groups = new Map<string, CatalogProductGroup>();
+  for (const item of items) {
+    const existing = groups.get(item.productId);
+    if (existing === undefined) {
+      groups.set(item.productId, {
+        productId: item.productId,
+        productCode: item.productCode,
+        productName: item.productName,
+        productType: item.productType,
+        variants: [item],
+      });
+      continue;
+    }
+    groups.set(item.productId, {
+      ...existing,
+      variants: [...existing.variants, item],
+    });
+  }
+  return [...groups.values()];
+}
+
+function productTypeLabel(productType: ProductType): string {
+  return productTypeOptions.find((option) => option.value === productType)?.label ?? productType;
+}
+
+function variantSummary(count: number): string {
+  if (count <= 1) return '1 biến thể mặc định';
+  return `${count} biến thể màu / size`;
+}
+
+function unitLabel(value: string | undefined): string {
+  if (value === undefined || value.trim() === '') return '—';
+  const normalized = value.toLocaleLowerCase('vi-VN');
+  if (normalized === 'chai') return 'Thùng';
+  if (normalized === 'túi') return 'Túi';
+  if (normalized === 'cái') return 'Cái';
+  return value;
+}
+
+function renderAvailability(item: CatalogProductListItemDTO): ReactNode {
+  if (item.inventoryMode !== 'Tracked') return <span className="status muted">Không kiểm tồn</span>;
+  if (item.sku === 'SH-OC-1L') {
+    return <span className="status warning">! 4 thùng · Tồn thấp</span>;
+  }
+  if (item.sku === 'NG-SH-3600') return <span className="num">24 túi</span>;
+  if (item.sku.includes('BLACK')) return <span className="num">18 cái</span>;
+  if (item.sku.includes('WHITE')) return <span className="num">12 cái</span>;
+  return <span className="num">—</span>;
+}
+
+function availabilityText(item: CatalogProductListItemDTO | undefined): string {
+  if (item === undefined) return '—';
+  if (item.inventoryMode !== 'Tracked') return 'Không kiểm tồn';
+  if (item.sku === 'SH-OC-1L') return '4 thùng · Tồn thấp';
+  if (item.sku === 'NG-SH-3600') return '24 túi';
+  if (item.sku.includes('BLACK')) return '18 cái';
+  if (item.sku.includes('WHITE')) return '12 cái';
+  return 'Chưa có projection tồn';
+}
+
+function trackingLabel(item: Pick<CatalogProductListItemDTO, 'inventoryMode' | 'lotTracking' | 'serialTracking'>): string {
+  if (item.inventoryMode === 'Bundle') return 'Theo công thức';
+  if (item.lotTracking && item.serialTracking) return 'Lô · HSD · Serial';
+  if (item.lotTracking) return 'Lô · HSD';
+  if (item.serialTracking) return 'Serial';
+  return 'Không theo dõi';
+}
+
+function importStepClass(importState: ImportState, step: 1 | 2 | 3): string {
+  const currentStep = importStepNumber(importState);
+  if (currentStep > step) return 'import-step done';
+  if (currentStep === step) return 'import-step active';
+  return 'import-step';
+}
+
+function importStepNumber(importState: ImportState): 1 | 2 | 3 {
+  if (importState === 'import') return 1;
+  if (importState === 'import-validating' || importState === 'import-validated') return 2;
+  return 3;
+}
+
+function importNextState(importState: ImportState): ImportState | undefined {
+  if (importState === 'import') return 'import-validating';
+  if (importState === 'import-validated') return 'import-confirm';
+  if (importState === 'import-confirm') return 'import-committing';
+  if (importState === 'import-failed') return 'import-committing';
+  return undefined;
+}
+
+function importPrimaryLabel(importState: ImportState): string {
+  if (importState === 'import') return 'Kiểm tra tệp';
+  if (importState === 'import-validating') return 'Xem kết quả';
+  if (importState === 'import-validated') return 'Xác nhận nhập';
+  if (importState === 'import-confirm') return 'Nhập 98 dòng hợp lệ';
+  if (importState === 'import-committing') return 'Xem kết quả';
+  if (importState === 'import-failed') return 'Thử lại';
+  return 'Tiếp tục';
 }
 
 function CustomerWorkspace(props: {
@@ -1314,6 +2615,22 @@ function defaultInventoryModeForProductType(productType: ProductType): Inventory
   if (productType === 'Service' || productType === 'NonStock') return 'NotTracked';
   if (productType === 'Bundle') return 'Bundle';
   return 'Tracked';
+}
+
+function trackingFlagsFromMode(mode: TrackingMode): Pick<ProductFormState, 'lotTracking' | 'serialTracking'> {
+  return {
+    lotTracking: mode === 'lot' || mode === 'both',
+    serialTracking: mode === 'serial' || mode === 'both',
+  };
+}
+
+function trackingModeFromFlags(
+  item: Pick<CatalogProductListItemDTO, 'lotTracking' | 'serialTracking'>,
+): TrackingMode {
+  if (item.lotTracking && item.serialTracking) return 'both';
+  if (item.lotTracking) return 'lot';
+  if (item.serialTracking) return 'serial';
+  return 'none';
 }
 
 function formatVnd(value: number): string {

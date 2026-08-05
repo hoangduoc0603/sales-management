@@ -1,5 +1,8 @@
 import type { ApiErrorCode } from '@shared/contracts/errors';
 import type {
+  BundleFormulaVersionDTO,
+  CatalogConfigureBundleFormulaRequest,
+  CatalogConfigureBundleFormulaResponse,
   CatalogCreateProductRequest,
   CatalogCreateProductResponse,
   CatalogCreateVariantRequest,
@@ -7,6 +10,8 @@ import type {
   CatalogProductListItemDTO,
   CatalogProductListRequest,
   CatalogProductListResponse,
+  CatalogGetBundleFormulaRequest,
+  CatalogGetBundleFormulaResponse,
   CatalogQuoteRequest,
   CatalogQuoteResponse,
   CatalogPosProjectionRequest,
@@ -68,6 +73,12 @@ export interface CatalogService {
   ): CatalogServiceResult<CatalogSetVariantActiveResponse>;
   getPosProjection(input: CatalogPosProjectionRequest): CatalogPosProjectionResponse;
   quotePosLines(input: CatalogQuoteRequest): CatalogPosLineQuoteResult;
+  configureBundleFormula(
+    input: CatalogConfigureBundleFormulaRequest,
+  ): CatalogServiceResult<CatalogConfigureBundleFormulaResponse>;
+  getActiveBundleFormula(
+    input: CatalogGetBundleFormulaRequest,
+  ): CatalogServiceResult<CatalogGetBundleFormulaResponse>;
 }
 
 export interface CatalogServiceDependencies {
@@ -523,6 +534,90 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
         data: { product, variant: updatedVariant },
       };
     },
+    configureBundleFormula(input) {
+      const bundleVariant = deps.repository.findVariantById(input.bundleVariantId);
+      if (bundleVariant === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Biến thể bundle không tồn tại.' },
+        };
+      }
+      const bundleProduct = deps.repository.findProductById(bundleVariant.productId);
+      if (bundleProduct === undefined || bundleProduct.productType !== 'Bundle') {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Chỉ product loại Bundle được cấu hình công thức.' },
+        };
+      }
+      const componentIds = input.components.map((component) => component.componentVariantId);
+      if (new Set(componentIds).size !== componentIds.length) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Component trong công thức bị trùng.' },
+        };
+      }
+      if (componentIds.includes(input.bundleVariantId)) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Bundle không được chứa chính nó làm component.' },
+        };
+      }
+      if (input.components.some((component) => component.quantityBase <= 0)) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Số lượng component phải lớn hơn 0.' },
+        };
+      }
+      const components = deps.repository.findVariantsByIds(componentIds);
+      if (components.length !== componentIds.length) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Component variant không tồn tại.' },
+        };
+      }
+
+      const effectiveFrom = input.effectiveFrom ?? deps.now().toISOString();
+      const retiredFormula = activeBundleFormulaForVariant(deps.repository, input.bundleVariantId);
+      const nextFormula: BundleFormulaVersionDTO = {
+        formulaVersionId: deps.newId('bundle-formula'),
+        tenantId: deps.tenantId,
+        bundleVariantId: input.bundleVariantId,
+        effectiveFrom,
+        status: 'Active',
+        components: input.components.map((component) => ({
+          componentVariantId: component.componentVariantId,
+          quantityBase: component.quantityBase,
+          substitutionAllowed: component.substitutionAllowed,
+        })),
+      };
+      const retired =
+        retiredFormula === undefined
+          ? undefined
+          : {
+              ...retiredFormula,
+              status: 'Retired' as const,
+              effectiveTo: effectiveFrom,
+            };
+      if (retired !== undefined) deps.repository.saveBundleFormulaVersion(retired);
+      deps.repository.saveBundleFormulaVersion(nextFormula);
+
+      return { ok: true, data: { formula: nextFormula, retiredFormula: retired } };
+    },
+    getActiveBundleFormula(input) {
+      const bundleVariant = deps.repository.findVariantById(input.bundleVariantId);
+      if (bundleVariant === undefined) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_INPUT', message: 'Biến thể bundle không tồn tại.' },
+        };
+      }
+      return {
+        ok: true,
+        data: {
+          formula: activeBundleFormulaForVariant(deps.repository, input.bundleVariantId),
+        },
+      };
+    },
     getPosProjection(input) {
       const activeProductIds = new Set(
         deps.repository
@@ -694,6 +789,16 @@ function activeBarcodeForVariant(
   return repository
     .listBarcodes()
     .find((barcode) => barcode.variantId === variantId && barcode.isActive);
+}
+
+function activeBundleFormulaForVariant(
+  repository: CatalogRepository,
+  bundleVariantId: string,
+): BundleFormulaVersionDTO | undefined {
+  return repository
+    .listBundleFormulaVersions()
+    .filter((formula) => formula.bundleVariantId === bundleVariantId && formula.status === 'Active')
+    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0];
 }
 
 function findDefaultUnitVersion(

@@ -1,4 +1,5 @@
 import type {
+  BundleFormulaVersionDTO,
   ProductDTO,
   UnitConversionVersionDTO,
   VariantBarcodeDTO,
@@ -20,10 +21,12 @@ export interface CatalogRepository {
   listVariants(): readonly VariantDTO[];
   listBarcodes(): readonly VariantBarcodeDTO[];
   listUnitVersions(): readonly UnitConversionVersionDTO[];
+  listBundleFormulaVersions(): readonly BundleFormulaVersionDTO[];
   saveProduct(product: ProductDTO): void;
   saveVariant(variant: VariantDTO): void;
   saveBarcode(barcode: VariantBarcodeDTO): void;
   saveUnitVersion(unitVersion: UnitConversionVersionDTO): void;
+  saveBundleFormulaVersion(formula: BundleFormulaVersionDTO): void;
 }
 
 export function createInMemoryCatalogRepository(): CatalogRepository {
@@ -31,6 +34,7 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
   const variants = new Map<string, VariantDTO>();
   const barcodes = new Map<string, VariantBarcodeDTO>();
   const unitVersions = new Map<string, UnitConversionVersionDTO>();
+  const bundleFormulaVersions = new Map<string, BundleFormulaVersionDTO>();
 
   return {
     findProductById(productId) {
@@ -69,6 +73,7 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
     listVariants: () => [...variants.values()].map(clone),
     listBarcodes: () => [...barcodes.values()].map(clone),
     listUnitVersions: () => [...unitVersions.values()].map(clone),
+    listBundleFormulaVersions: () => [...bundleFormulaVersions.values()].map(clone),
     saveProduct(product) {
       products.set(product.productId, clone(product));
     },
@@ -80,6 +85,9 @@ export function createInMemoryCatalogRepository(): CatalogRepository {
     },
     saveUnitVersion(unitVersion) {
       unitVersions.set(unitVersion.unitVersionId, clone(unitVersion));
+    },
+    saveBundleFormulaVersion(formula) {
+      bundleFormulaVersions.set(formula.formulaVersionId, clone(formula));
     },
   };
 }
@@ -119,6 +127,12 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
     idField: 'unitVersionId',
     cacheStore: deps.cacheStore,
   });
+  const bundleFormulaVersions = createVersionedSheetTable<BundleFormulaVersionDTO>({
+    gateway: deps.gateway,
+    table: findTable(deps.tableDefinitions, 'BundleFormulaVersion'),
+    idField: 'formulaVersionId',
+    cacheStore: deps.cacheStore,
+  });
 
   return {
     findProductById(productId) {
@@ -146,6 +160,7 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
     listVariants: () => variants.list(),
     listBarcodes: () => barcodes.list(),
     listUnitVersions: () => unitVersions.list(),
+    listBundleFormulaVersions: () => bundleFormulaVersions.list(),
     saveProduct(product) {
       products.save(product);
     },
@@ -157,6 +172,9 @@ export function createSheetCatalogRepository(deps: SheetCatalogRepositoryDepende
     },
     saveUnitVersion(unitVersion) {
       unitVersions.save(unitVersion);
+    },
+    saveBundleFormulaVersion(formula) {
+      bundleFormulaVersions.save(formula);
     },
   };
 }

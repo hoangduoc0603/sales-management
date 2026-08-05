@@ -369,6 +369,76 @@ describe('createLocalFakeBackendClient', () => {
     });
   });
 
+  it('hỗ trợ Catalog bundle formula configure/getActive ở local fake backend', async () => {
+    const client = createLocalFakeBackendClient();
+    const login = await client.invoke({
+      operation: 'platform.auth.login',
+      requestId: 'req-login-bundle-formula',
+      payload: { loginId: 'admin', password: 'admin123' },
+    });
+    if (!login.ok) throw new Error('login failed');
+
+    const bundle = await client.invoke({
+      operation: 'catalog.product.create',
+      requestId: 'req-bundle-create',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        productCode: 'BUNDLE-LOCAL',
+        name: 'Combo local',
+        productType: 'Bundle',
+        sku: 'BUNDLE-LOCAL-001',
+        defaultUnitId: 'combo',
+        unitPriceVnd: 220000,
+      },
+    });
+    const component = await client.invoke({
+      operation: 'catalog.product.create',
+      requestId: 'req-component-create',
+      sessionToken: login.data.sessionToken,
+      payload: {
+        productCode: 'COMP-LOCAL',
+        name: 'Component local',
+        productType: 'Stocked',
+        sku: 'COMP-LOCAL-001',
+        defaultUnitId: 'cái',
+        unitPriceVnd: 42000,
+      },
+    });
+    if (!bundle.ok || !component.ok) throw new Error('create catalog fixtures failed');
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.bundleFormula.configure',
+        requestId: 'req-bundle-formula-configure',
+        sessionToken: login.data.sessionToken,
+        payload: {
+          bundleVariantId: bundle.data.defaultVariant.variantId,
+          components: [
+            {
+              componentVariantId: component.data.defaultVariant.variantId,
+              quantityBase: 2,
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { formula: { status: 'Active', components: [{ quantityBase: 2 }] } },
+    });
+
+    await expect(
+      client.invoke({
+        operation: 'catalog.bundleFormula.getActive',
+        requestId: 'req-bundle-formula-get',
+        sessionToken: login.data.sessionToken,
+        payload: { bundleVariantId: bundle.data.defaultVariant.variantId },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { formula: { bundleVariantId: bundle.data.defaultVariant.variantId } },
+    });
+  });
+
   it('hỗ trợ Inventory balance summary ở local fake backend', async () => {
     const client = createLocalFakeBackendClient();
     const login = await client.invoke({

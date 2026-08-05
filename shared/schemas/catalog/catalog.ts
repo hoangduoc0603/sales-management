@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type {
   CatalogCreateProductRequest,
   CatalogCreateVariantRequest,
+  CatalogConfigureBundleFormulaRequest,
+  CatalogGetBundleFormulaRequest,
   CatalogProductListRequest,
   CatalogPosProjectionRequest,
   CatalogQuoteRequest,
@@ -133,6 +135,40 @@ export const catalogSetProductActiveRequestSchema = z
 
 export function parseCatalogSetProductActiveRequest(value: unknown): CatalogSetProductActiveRequest {
   return catalogSetProductActiveRequestSchema.parse(value);
+}
+
+export const catalogConfigureBundleFormulaRequestSchema = z
+  .object({
+    bundleVariantId: nonEmptyTrimmed,
+    effectiveFrom: optionalNonEmptyTrimmed,
+    components: z
+      .array(
+        z
+          .object({
+            componentVariantId: nonEmptyTrimmed,
+            quantityBase: z.number().positive(),
+            substitutionAllowed: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
+export function parseCatalogConfigureBundleFormulaRequest(
+  value: unknown,
+): CatalogConfigureBundleFormulaRequest {
+  return catalogConfigureBundleFormulaRequestSchema.parse(value);
+}
+
+export const catalogGetBundleFormulaRequestSchema = z
+  .object({
+    bundleVariantId: nonEmptyTrimmed,
+  })
+  .strict();
+
+export function parseCatalogGetBundleFormulaRequest(value: unknown): CatalogGetBundleFormulaRequest {
+  return catalogGetBundleFormulaRequestSchema.parse(value);
 }
 
 export const catalogPosProjectionRequestSchema = z

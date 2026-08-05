@@ -487,6 +487,21 @@ export function createPlatformTableDefinitions(): readonly TableDefinitionDTO[] 
     ], 'catalog', [
       { name: 'UnitConversionVersion.unitVersionId', columns: ['unitVersionId'], unique: true },
     ]),
+    table('BundleFormulaVersion', 'core', 'master', 'none', [
+      'id',
+      'tenantId',
+      'schemaVersion',
+      'recordVersion',
+      'formulaVersionId',
+      'bundleVariantId',
+      'effectiveFrom',
+      'effectiveTo',
+      'status',
+      'components',
+    ], 'catalog', [
+      { name: 'BundleFormulaVersion.formulaVersionId', columns: ['formulaVersionId'], unique: true },
+      { name: 'BundleFormulaVersion.bundleVariantId', columns: ['bundleVariantId'], unique: false },
+    ]),
     table('PriceList', 'core', 'master', 'none', [
       'priceListId',
       'name',

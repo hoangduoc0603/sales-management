@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createInMemoryCatalogRepository } from '../../../apps-script/src/repositories/catalog/catalog-repository';
 import { createInMemoryOperationsRepository } from '../../../apps-script/src/repositories/operations/operations-repository';
+import { createCatalogService } from '../../../apps-script/src/services/catalog/catalog-service';
 import { createOperationsService } from '../../../apps-script/src/services/operations/operations-service';
 import type { ActorContextDTO } from '../../../shared/contracts/platform/authorization';
 
@@ -70,6 +72,100 @@ describe('OperationsService', () => {
       ok: true,
       data: { batch: { status: 'Completed' }, committedRows: [{ rowKey: 'SKU-001', commitStatus: 'Committed' }] },
     });
+  });
+
+  it('commits Catalog import create-only into Product/Default Variant and keeps retry idempotent', () => {
+    const catalogRepository = createInMemoryCatalogRepository();
+    const catalogService = createCatalogService({
+      repository: catalogRepository,
+      tenantId: 'tenant-default',
+      now: () => new Date('2026-07-27T09:00:00.000Z'),
+      newId: createSequentialId(),
+    });
+    const { service } = createFixture({ catalogImportService: catalogService });
+    const permissions = actor({ actions: ['operations.import.manage'] });
+
+    const upload = service.uploadImport({
+      actor: permissions,
+      request: {
+        importType: 'Catalog',
+        schemaVersion: 1,
+        fileName: 'catalog.csv',
+        checksum: 'file-checksum-catalog-create',
+        scopeKey: 'branch-default/warehouse-default',
+        rowCount: 1,
+        commandId: 'cmd-import-upload-catalog-create',
+        idempotencyKey: 'idem-import-upload-catalog-create',
+      },
+    });
+    if (!upload.ok) throw new Error(upload.error.message);
+
+    const validation = service.validateImport({
+      actor: permissions,
+      request: {
+        batchId: upload.data.batch.batchId,
+        rows: [
+          {
+            rowNumber: 1,
+            rowKey: 'SKU-CATALOG-001',
+            payload: {
+              productCode: 'SP-CATALOG-001',
+              name: 'Sản phẩm import Catalog',
+              productType: 'Stocked',
+              sku: 'SKU-CATALOG-001',
+              barcode: '893777000001',
+              defaultUnitId: 'cái',
+              unitPriceVnd: 125000,
+              inventoryMode: 'Tracked',
+            },
+          },
+        ],
+      },
+    });
+    if (!validation.ok) throw new Error(validation.error.message);
+
+    const firstCommit = service.commitImport({
+      actor: permissions,
+      request: {
+        batchId: upload.data.batch.batchId,
+        selectionMode: 'ValidRowsOnly',
+        commandId: 'cmd-import-commit-catalog-create',
+        idempotencyKey: 'idem-import-commit-catalog-create',
+      },
+    });
+    const retryCommit = service.commitImport({
+      actor: permissions,
+      request: {
+        batchId: upload.data.batch.batchId,
+        selectionMode: 'ValidRowsOnly',
+        commandId: 'cmd-import-commit-catalog-create-retry',
+        idempotencyKey: 'idem-import-commit-catalog-create-retry',
+      },
+    });
+
+    expect(firstCommit).toMatchObject({
+      ok: true,
+      data: {
+        batch: { status: 'Completed' },
+        committedRows: [
+          expect.objectContaining({
+            rowKey: 'SKU-CATALOG-001',
+            commitStatus: 'Committed',
+            sourceObjectId: expect.stringMatching(/^product-/),
+          }),
+        ],
+      },
+    });
+    expect(retryCommit).toMatchObject(firstCommit);
+    expect(catalogService.listProducts({ query: 'sku-catalog-001' }).items).toEqual([
+      expect.objectContaining({
+        productCode: 'SP-CATALOG-001',
+        displayName: 'Sản phẩm import Catalog',
+        sku: 'SKU-CATALOG-001',
+        barcode: '893777000001',
+        unitPriceVnd: 125000,
+      }),
+    ]);
   });
 
   it('returns attachment access token without public URL and denies warehouse outside actor scope', () => {
@@ -278,7 +374,7 @@ describe('OperationsService', () => {
   });
 });
 
-function createFixture() {
+function createFixture(input: { catalogImportService?: ReturnType<typeof createCatalogService> } = {}) {
   const repository = createInMemoryOperationsRepository();
   const attachmentStorage = {
     savedFiles: [] as Array<{ fileName: string; mimeType: string; contentBase64: string }>,
@@ -306,6 +402,7 @@ function createFixture() {
     now: () => new Date('2026-07-27T09:00:00.000Z'),
     newId: createSequentialId(),
     attachmentStorage,
+    catalogImportService: input.catalogImportService,
   });
 
   repository.savePartition({
