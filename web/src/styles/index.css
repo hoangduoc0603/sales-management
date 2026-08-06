@@ -5671,6 +5671,7 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   --focus: 0 0 0 3px rgb(70 95 255 / 0.24);
   color: var(--cn-text);
   display: grid;
+  font-family: Outfit, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   gap: 0;
 }
 
@@ -5711,7 +5712,11 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
 }
 
 .cn-catalog-artifact .page-head h1 {
+  color: var(--cn-text);
+  font-family: Outfit, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   line-height: 1.25;
   margin: 0;
 }
@@ -5779,6 +5784,16 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   color: var(--cn-primary-subtle-foreground);
 }
 
+.cn-catalog-artifact .button.icon-only {
+  min-width: 40px;
+  padding: 0;
+  width: 40px;
+}
+
+.cn-catalog-artifact .button.refresh-loading svg {
+  animation: cn-catalog-spin 0.85s linear infinite;
+}
+
 .cn-catalog-artifact .button:disabled {
   cursor: not-allowed;
   opacity: 0.68;
@@ -5812,6 +5827,43 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   height: 40px;
   min-width: 260px;
   padding: 0 11px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cn-catalog-artifact .search:focus-within {
+  border-color: color-mix(in srgb, var(--cn-primary) 52%, var(--cn-border));
+  box-shadow: 0 0 0 3px rgb(70 95 255 / 0.12);
+}
+
+.cn-catalog-artifact .search-icon {
+  align-items: center;
+  color: var(--cn-text-secondary);
+  display: inline-flex;
+  flex: none;
+  font-size: 22px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  position: relative;
+  width: 22px;
+}
+
+.cn-catalog-artifact .search-icon-loading {
+  color: transparent;
+}
+
+.cn-catalog-artifact .search-icon-loading::after {
+  animation: cn-catalog-spin 0.85s linear infinite;
+  border: 2px solid color-mix(in srgb, var(--cn-primary) 24%, transparent);
+  border-radius: 999px;
+  border-top-color: var(--cn-primary);
+  content: "";
+  height: 16px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  width: 16px;
 }
 
 .cn-catalog-artifact .search input {
@@ -5822,8 +5874,19 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   width: 100%;
 }
 
+.cn-catalog-artifact .search input:focus-visible {
+  box-shadow: none;
+  outline: 0;
+}
+
 .cn-catalog-artifact .search input::placeholder {
   color: var(--cn-text-muted);
+}
+
+@keyframes cn-catalog-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .cn-catalog-artifact .listbox {
@@ -5847,11 +5910,19 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
   left: 0;
+  max-width: calc(100vw - 32px);
+  min-width: 100%;
   padding: 6px;
   position: absolute;
+  right: auto;
   top: 46px;
-  width: 220px;
+  width: max(220px, 100%);
   z-index: 35;
+}
+
+.cn-catalog-artifact .toolbar .listbox:last-of-type .listbox-popover {
+  left: auto;
+  right: 0;
 }
 
 .cn-catalog-artifact .listbox-popover[hidden] {
@@ -5887,6 +5958,11 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   gap: 6px;
   height: 32px;
   padding: 0 9px;
+}
+
+.cn-catalog-artifact .head-actions .filter-chip {
+  height: 40px;
+  padding: 0 12px;
 }
 
 .cn-catalog-artifact .filter-mobile {
@@ -6073,13 +6149,18 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   right: 0;
   top: 0;
   transform: translateX(102%);
-  transition: transform 0.18s ease;
+  pointer-events: none;
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.24s;
+  visibility: hidden;
   width: min(520px, 100vw);
   z-index: 50;
 }
 
 .cn-catalog-artifact .drawer.open {
+  pointer-events: auto;
   transform: translateX(0);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s;
+  visibility: visible;
 }
 
 .cn-catalog-artifact .drawer-head,
@@ -6111,9 +6192,19 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   border: 1px solid var(--cn-border);
   border-radius: 8px;
   color: var(--cn-text);
+  display: grid;
   height: 40px;
+  line-height: 1;
   margin-left: auto;
+  padding: 0;
+  place-items: center;
   width: 40px;
+}
+
+.cn-catalog-artifact .close svg {
+  display: block;
+  height: 20px;
+  width: 20px;
 }
 
 .cn-catalog-artifact .drawer-tabs {
@@ -6213,10 +6304,11 @@ html[data-theme="dark"] .cn-pos-page .cn-pos-brand .cn-brand-mark {
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
   display: none;
+  left: var(--catalog-row-menu-left, auto);
   padding: 6px;
   position: fixed;
-  right: 28px;
-  top: 220px;
+  right: var(--catalog-row-menu-right, 28px);
+  top: var(--catalog-row-menu-top, 220px);
   width: 230px;
   z-index: 62;
 }

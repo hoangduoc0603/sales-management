@@ -341,6 +341,12 @@ export function createApiCompositionFromDependencies(input: ApiCompositionDepend
     tenantId,
     now: () => clock.now(),
     newId,
+    inventoryBalanceProvider: ({ warehouseId, variantIds }) =>
+      inventoryRepository.getBalances(warehouseId, variantIds).map((balance) => ({
+        warehouseId: balance.warehouseId,
+        variantId: balance.variantId,
+        availableMilli: balance.availableMilli,
+      })),
   });
   const customerService = createCustomerService({
     repository: customerRepository,

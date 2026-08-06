@@ -545,7 +545,12 @@ export function SalesManagementApp({
           sessionToken={sessionToken}
         />
       ) : route === 'catalog' || route === 'customers' ? (
-        <CatalogCrmHome apiClient={client} route={route} sessionToken={sessionToken} />
+        <CatalogCrmHome
+          apiClient={client}
+          route={route}
+          selectedWarehouseId={selectedWarehouseId}
+          sessionToken={sessionToken}
+        />
       ) : route === 'inventory' || route === 'purchasing' ? (
         <InventoryHome route={route} />
       ) : route === 'finance' ? (
@@ -589,7 +594,7 @@ const catalogRouteHashes = new Set([
 
 function readRouteFromHash(): AppRoute | undefined {
   if (typeof window === 'undefined') return undefined;
-  const hash = window.location.hash.replace('#', '');
+  const hash = window.location?.hash?.replace('#', '') ?? '';
   if (catalogRouteHashes.has(hash)) return 'catalog';
   return undefined;
 }

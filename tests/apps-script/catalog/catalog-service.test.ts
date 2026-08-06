@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryCatalogRepository } from '../../../apps-script/src/repositories/catalog/catalog-repository';
-import { createCatalogService } from '../../../apps-script/src/services/catalog/catalog-service';
+import {
+  createCatalogService,
+  type CatalogServiceDependencies,
+} from '../../../apps-script/src/services/catalog/catalog-service';
 
-function createService(repository = createInMemoryCatalogRepository()) {
+function createService(
+  repository = createInMemoryCatalogRepository(),
+  options: Pick<CatalogServiceDependencies, 'inventoryBalanceProvider'> = {},
+) {
   let sequence = 0;
 
   return createCatalogService({
@@ -13,6 +19,7 @@ function createService(repository = createInMemoryCatalogRepository()) {
       sequence += 1;
       return `${prefix}-${sequence}`;
     },
+    inventoryBalanceProvider: options.inventoryBalanceProvider,
   });
 }
 
@@ -197,6 +204,8 @@ describe('CatalogService', () => {
       productCode: 'SP-001',
       name: 'Sữa hạt óc chó 1L',
       productType: 'Stocked',
+      categoryId: 'food',
+      brandId: 'internal',
       sku: 'SH-OC-1L',
       barcode: '893000000001',
       defaultUnitId: 'chai',
@@ -221,6 +230,16 @@ describe('CatalogService', () => {
     expect(service.listProducts({ query: '893000000001' }).items[0]?.productId).toBe(
       milk.data.product.productId,
     );
+    expect(service.listProducts({ categoryId: 'food' }).items.map((item) => item.sku)).toEqual([
+      'SH-OC-1L',
+    ]);
+    expect(service.listProducts({ brandId: 'internal' }).items.map((item) => item.sku)).toEqual([
+      'SH-OC-1L',
+    ]);
+    expect(service.listProducts({ productType: 'Stocked' }).items.map((item) => item.sku)).toEqual([
+      'NG-SH-3600',
+      'SH-OC-1L',
+    ]);
 
     service.setProductActive({
       productId: milk.data.product.productId,
@@ -235,6 +254,33 @@ describe('CatalogService', () => {
       'SH-OC-1L',
     ]);
     expect(service.listProducts({ status: 'All' }).items).toHaveLength(2);
+  });
+
+  it('gắn tồn khả dụng theo warehouse từ inventory balance provider cho catalog list', () => {
+    const service = createService(createInMemoryCatalogRepository(), {
+      inventoryBalanceProvider: ({ warehouseId, variantIds }) =>
+        variantIds.map((variantId) => ({
+          warehouseId,
+          variantId,
+          availableMilli: variantId === 'variant-2' ? 4_000 : 0,
+        })),
+    });
+
+    const created = service.createProduct({
+      productCode: 'SP-INV-001',
+      name: 'Hàng có tồn',
+      productType: 'Stocked',
+      sku: 'INV-001',
+      defaultUnitId: 'cái',
+      unitPriceVnd: 10000,
+    });
+    if (!created.ok) throw new Error('create product failed');
+
+    expect(service.listProducts({ warehouseId: 'warehouse-default' }).items[0]).toMatchObject({
+      sku: 'INV-001',
+      availableWarehouseId: 'warehouse-default',
+      availableMilli: 4_000,
+    });
   });
 
   it('cập nhật product/default variant và vẫn chặn SKU/barcode trùng', () => {

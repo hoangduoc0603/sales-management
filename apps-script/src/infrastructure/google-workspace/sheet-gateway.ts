@@ -247,7 +247,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         recordIo('sheetFindCount');
         recordIo('sheetFindCacheHit');
         recordIo('sheetFindRows', cachedFindRows.length);
-        recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+        recordFindRowsByColumnStage(request, Date.now() - startedAt);
         return cachedFindRows.map(deepCloneRecord);
       }
 
@@ -258,7 +258,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
         recordIo('sheetFindCount');
         recordIo('sheetFindCacheHit');
         recordIo('sheetFindRows', result.length);
-        recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+        recordFindRowsByColumnStage(request, Date.now() - startedAt);
         return result;
       }
 
@@ -299,7 +299,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
           findRecordCache.set(findCacheKey, result.map(deepCloneRecord));
           recordIo('sheetFindRows', result.length);
           recordIo('sheetFindSmallFullScanCount');
-          recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+          recordFindRowsByColumnStage(request, Date.now() - startedAt);
           return result;
         }
 
@@ -320,7 +320,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
               });
         findRecordCache.set(findCacheKey, result.map(deepCloneRecord));
         recordIo('sheetFindRows', result.length);
-        recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+        recordFindRowsByColumnStage(request, Date.now() - startedAt);
         return result;
       }
 
@@ -339,7 +339,7 @@ export function createSheetGateway(deps: SheetGatewayDependencies): SheetGateway
       recordIo('sheetFindRows', matchedRows.length);
       recordIo('sheetFindFullScanCount');
       recordIo('sheetFindFullScanRows', Math.max(0, values.length - 1));
-      recordStage('sheet.findRowsByColumnMs', Date.now() - startedAt);
+      recordFindRowsByColumnStage(request, Date.now() - startedAt);
       return matchedRows;
     },
     appendRows(request) {
@@ -568,6 +568,18 @@ function getTableCacheKey(
 
 function getFindCacheKey(tableKey: string, columnName: string, value: string): string {
   return `${tableKey}\u0000${columnName}\u0000${value}`;
+}
+
+function recordFindRowsByColumnStage(request: SheetGatewayFindByColumnRequest, durationMs: number): void {
+  recordStage('sheet.findRowsByColumnMs', durationMs);
+  recordStage(
+    `sheet.findRowsByColumn.${stageSegment(request.table.tableName)}.${stageSegment(request.columnName)}Ms`,
+    durationMs,
+  );
+}
+
+function stageSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9_]/g, '_');
 }
 
 function invalidateFindCacheForTable(

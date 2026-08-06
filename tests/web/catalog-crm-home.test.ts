@@ -77,6 +77,25 @@ describe('CatalogCrmHome', () => {
     expect(html).toContain('Xác nhận mở bán lại');
   });
 
+  it('render skeleton thay vì dữ liệu mẫu khi danh sách hàng hóa đang load từ API', () => {
+    const html = renderToStaticMarkup(
+      createElement(CatalogCrmHome, {
+        apiClient: {
+          invoke: async () => ({
+            ok: true,
+            data: { generatedAt: '2026-08-05T00:00:00.000Z', items: [] },
+          }),
+        },
+        route: 'catalog',
+        sessionToken: 'session-token',
+      }),
+    );
+
+    expect(html).toContain('Đang tải danh sách hàng hóa');
+    expect(html).not.toContain('class="product-row"');
+    expect(html).not.toContain('data-row=""');
+  });
+
   it('route customers ưu tiên Customer workspace', () => {
     const html = renderToStaticMarkup(createElement(CatalogCrmHome, { route: 'customers' }));
 

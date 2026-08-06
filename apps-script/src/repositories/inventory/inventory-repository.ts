@@ -9,6 +9,7 @@ import type {
   StockTransferLineDTO,
 } from '@shared/contracts/inventory/inventory';
 import type { TableDefinitionDTO } from '@shared/contracts/platform/registry';
+import { recordIo } from '../../api/performance-tracker';
 import type { PlatformCacheStore } from '../../infrastructure/platform/cache';
 import {
   createAppendOnlySheetRecordRepository,
@@ -204,8 +205,21 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
   }
 
   function listLatestBalances(warehouseId?: string): InventoryBalanceDTO[] {
+    if (warehouseId !== undefined) {
+      const cached = readCachedWarehouseBalances(deps.cacheStore, warehouseId);
+      if (cached !== undefined) {
+        recordIo('inventoryWarehouseBalanceCacheHit');
+        for (const entry of cached) {
+          latestBalanceVersionCache.set(entry.balance.balanceId, entry.recordVersion);
+        }
+        return cached.map((entry) => deepClone(entry.balance));
+      }
+      recordIo('inventoryWarehouseBalanceCacheMiss');
+    }
+
     const latestByBalanceId = new Map<string, InventoryBalanceSheetRow>();
     const rows = warehouseId === undefined ? readBalanceRows() : findBalanceRowsByColumn('warehouseId', warehouseId);
+    const latestRows: Array<{ balance: InventoryBalanceDTO; recordVersion: number }> = [];
     for (const row of rows) {
       if (warehouseId !== undefined && row.warehouseId !== warehouseId) continue;
       const current = latestByBalanceId.get(row.balanceId);
@@ -213,12 +227,17 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
         latestByBalanceId.set(row.balanceId, row);
       }
     }
-    return [...latestByBalanceId.values()].map((row) => {
+    const balances = [...latestByBalanceId.values()].map((row) => {
       rememberLatestBalanceVersion(row);
       const balance = fromBalanceRow(row);
       cacheBalance(deps.cacheStore, balance, getRecordVersion(row));
+      latestRows.push({ balance, recordVersion: getRecordVersion(row) });
       return balance;
     });
+    if (warehouseId !== undefined) {
+      cacheWarehouseBalances(deps.cacheStore, warehouseId, latestRows);
+    }
+    return balances;
   }
 
   function findLatestBalanceByBalanceId(balanceId: string): InventoryBalanceDTO | undefined {
@@ -256,7 +275,9 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
       const balanceId = `balance-${warehouseId}-${variantId}`;
       const cached = readCachedBalance(deps.cacheStore, balanceId);
       if (cached === undefined) {
-        misses.push(variantId);
+        if (!readCachedMissingBalance(deps.cacheStore, balanceId)) {
+          misses.push(variantId);
+        }
       } else {
         latestBalanceVersionCache.set(balanceId, cached.recordVersion);
         balancesByVariantId.set(variantId, cached.balance);
@@ -265,11 +286,21 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
 
     if (misses.length === 1) {
       const balance = getBalanceInternal(warehouseId, misses[0]);
-      if (balance !== undefined) balancesByVariantId.set(balance.variantId, balance);
+      if (balance !== undefined) {
+        balancesByVariantId.set(balance.variantId, balance);
+      } else {
+        cacheMissingBalance(deps.cacheStore, `balance-${warehouseId}-${misses[0]}`);
+      }
     } else if (misses.length > 1) {
+      const missedVariantIds = new Set(misses);
       for (const balance of listLatestBalances(warehouseId)) {
-        if (misses.includes(balance.variantId)) {
+        if (missedVariantIds.has(balance.variantId)) {
           balancesByVariantId.set(balance.variantId, balance);
+        }
+      }
+      for (const variantId of missedVariantIds) {
+        if (!balancesByVariantId.has(variantId)) {
+          cacheMissingBalance(deps.cacheStore, `balance-${warehouseId}-${variantId}`);
         }
       }
     }
@@ -418,6 +449,8 @@ export function createSheetInventoryRepository(deps: SheetInventoryRepositoryDep
         ],
       });
       latestBalanceVersionCache.set(balance.balanceId, nextVersion);
+      removeCachedWarehouseBalances(deps.cacheStore, balance.warehouseId);
+      removeCachedMissingBalance(deps.cacheStore, balance.balanceId);
       cacheBalance(deps.cacheStore, balance, nextVersion);
     },
     getLotBalance(warehouseId, variantId, lotId) {
@@ -985,10 +1018,18 @@ function inferLogicalIdColumn(tableName: string): string {
 }
 
 const inventoryBalanceCacheTtlSeconds = 300;
+const inventoryWarehouseBalanceCacheTtlSeconds = inventoryBalanceCacheTtlSeconds;
+const inventoryMissingBalanceCacheTtlSeconds = inventoryBalanceCacheTtlSeconds;
+const inventoryWarehouseBalanceCacheMaxPayloadLength = 80_000;
 
 interface CachedInventoryBalancePayload {
   balance: InventoryBalanceDTO;
   recordVersion: number;
+}
+
+interface CachedInventoryWarehouseBalancesPayload {
+  warehouseId: string;
+  items: CachedInventoryBalancePayload[];
 }
 
 function cacheBalance(
@@ -1030,6 +1071,108 @@ function readCachedBalance(
 
 function balanceCacheKey(balanceId: string): string {
   return `inventory:balance:${balanceId}`;
+}
+
+function missingBalanceCacheKey(balanceId: string): string {
+  return `inventory:balance:missing:${balanceId}`;
+}
+
+function cacheMissingBalance(
+  cacheStore: PlatformCacheStore | undefined,
+  balanceId: string,
+): void {
+  if (cacheStore === undefined) return;
+  recordIo('inventoryMissingBalanceCachePut');
+  cacheStore.put(missingBalanceCacheKey(balanceId), '1', inventoryMissingBalanceCacheTtlSeconds);
+}
+
+function readCachedMissingBalance(
+  cacheStore: PlatformCacheStore | undefined,
+  balanceId: string,
+): boolean {
+  if (cacheStore === undefined) return false;
+  const hit = cacheStore.get(missingBalanceCacheKey(balanceId)) !== undefined;
+  if (hit) recordIo('inventoryMissingBalanceCacheHit');
+  return hit;
+}
+
+function removeCachedMissingBalance(
+  cacheStore: PlatformCacheStore | undefined,
+  balanceId: string,
+): void {
+  if (cacheStore === undefined) return;
+  recordIo('inventoryMissingBalanceCacheRemove');
+  cacheStore.remove(missingBalanceCacheKey(balanceId));
+}
+
+function warehouseBalancesCacheKey(warehouseId: string): string {
+  return `inventory:balances:warehouse:${warehouseId}`;
+}
+
+function cacheWarehouseBalances(
+  cacheStore: PlatformCacheStore | undefined,
+  warehouseId: string,
+  items: readonly CachedInventoryBalancePayload[],
+): void {
+  if (cacheStore === undefined) return;
+  const payload = JSON.stringify({
+    warehouseId,
+    items: items.map((entry) => ({
+      balance: deepClone(entry.balance),
+      recordVersion: entry.recordVersion,
+    })),
+  } satisfies CachedInventoryWarehouseBalancesPayload);
+  if (payload.length > inventoryWarehouseBalanceCacheMaxPayloadLength) return;
+  recordIo('inventoryWarehouseBalanceCachePut');
+  cacheStore.put(warehouseBalancesCacheKey(warehouseId), payload, inventoryWarehouseBalanceCacheTtlSeconds);
+}
+
+function readCachedWarehouseBalances(
+  cacheStore: PlatformCacheStore | undefined,
+  warehouseId: string,
+): CachedInventoryBalancePayload[] | undefined {
+  if (cacheStore === undefined) return undefined;
+  const key = warehouseBalancesCacheKey(warehouseId);
+  const raw = cacheStore.get(key);
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CachedInventoryWarehouseBalancesPayload>;
+    if (
+      parsed.warehouseId !== warehouseId ||
+      parsed.items === undefined ||
+      !Array.isArray(parsed.items)
+    ) {
+      cacheStore.remove(key);
+      return undefined;
+    }
+    const items: CachedInventoryBalancePayload[] = [];
+    for (const entry of parsed.items) {
+      if (
+        entry.balance === undefined ||
+        entry.balance.warehouseId !== warehouseId ||
+        typeof entry.recordVersion !== 'number'
+      ) {
+        cacheStore.remove(key);
+        return undefined;
+      }
+      items.push({
+        balance: deepClone(entry.balance),
+        recordVersion: entry.recordVersion,
+      });
+    }
+    return items;
+  } catch {
+    cacheStore.remove(key);
+    return undefined;
+  }
+}
+
+function removeCachedWarehouseBalances(
+  cacheStore: PlatformCacheStore | undefined,
+  warehouseId: string,
+): void {
+  recordIo('inventoryWarehouseBalanceCacheRemove');
+  cacheStore?.remove(warehouseBalancesCacheKey(warehouseId));
 }
 
 function deepClone<T>(value: T): T {

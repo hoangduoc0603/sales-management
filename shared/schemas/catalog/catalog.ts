@@ -21,6 +21,8 @@ export const catalogCreateProductRequestSchema = z
     productCode: nonEmptyTrimmed,
     name: nonEmptyTrimmed,
     productType: z.enum(['Stocked', 'Service', 'NonStock', 'Bundle']),
+    categoryId: optionalNonEmptyTrimmed,
+    brandId: optionalNonEmptyTrimmed,
     sku: nonEmptyTrimmed,
     barcode: optionalNonEmptyTrimmed,
     defaultUnitId: nonEmptyTrimmed,
@@ -39,6 +41,10 @@ export const catalogProductListRequestSchema = z
   .object({
     query: optionalNonEmptyTrimmed,
     status: z.enum(['Active', 'Inactive', 'All']).optional(),
+    productType: z.enum(['Stocked', 'Service', 'NonStock', 'Bundle']).optional(),
+    categoryId: optionalNonEmptyTrimmed,
+    brandId: optionalNonEmptyTrimmed,
+    warehouseId: optionalNonEmptyTrimmed,
     limit: z.number().int().min(1).max(500).optional(),
   })
   .strict();
@@ -53,6 +59,8 @@ export const catalogUpdateProductRequestSchema = z
     productCode: optionalNonEmptyTrimmed,
     name: optionalNonEmptyTrimmed,
     productType: z.enum(['Stocked', 'Service', 'NonStock', 'Bundle']).optional(),
+    categoryId: optionalNonEmptyTrimmed,
+    brandId: optionalNonEmptyTrimmed,
     sku: optionalNonEmptyTrimmed,
     barcode: optionalNonEmptyTrimmed,
     defaultUnitId: optionalNonEmptyTrimmed,

@@ -32,6 +32,7 @@ import type {
   VariantDTO,
 } from '@shared/contracts/catalog/catalog';
 import type { CatalogRepository } from '../../repositories/catalog/catalog-repository';
+import { recordStage } from '../../api/performance-tracker';
 import { createPricingService } from './pricing-service';
 
 type CatalogServiceResult<T> =
@@ -86,6 +87,14 @@ export interface CatalogServiceDependencies {
   tenantId: string;
   now: () => Date;
   newId(prefix: string): string;
+  inventoryBalanceProvider?: (input: {
+    warehouseId: string;
+    variantIds: readonly string[];
+  }) => readonly {
+    warehouseId: string;
+    variantId: string;
+    availableMilli: number;
+  }[];
 }
 
 export function createCatalogService(deps: CatalogServiceDependencies): CatalogService {
@@ -120,6 +129,8 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
         productCode: input.productCode.trim(),
         name: input.name.trim(),
         productType: input.productType,
+        categoryId: input.categoryId?.trim(),
+        brandId: input.brandId?.trim(),
         isActive: true,
       };
       const inventoryMode = resolveInventoryMode(input);
@@ -261,21 +272,39 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
       };
     },
     listProducts(input) {
+      const totalStartedAt = Date.now();
       const status = input.status ?? 'Active';
       const query = input.query === undefined ? undefined : normalizeLookup(input.query);
-      const productsById = new Map(deps.repository.listProducts().map((product) => [product.productId, product]));
+      const productType = input.productType;
+      const categoryId = input.categoryId?.trim();
+      const brandId = input.brandId?.trim();
+      const readProductsStartedAt = Date.now();
+      const products = deps.repository.listProducts();
+      recordStage('catalog.product.list.readProductsMs', Date.now() - readProductsStartedAt);
+
+      const readBarcodesStartedAt = Date.now();
+      const barcodes = deps.repository.listBarcodes();
+      recordStage('catalog.product.list.readBarcodesMs', Date.now() - readBarcodesStartedAt);
+
+      const readVariantsStartedAt = Date.now();
+      const variants = deps.repository.listVariants();
+      recordStage('catalog.product.list.readVariantsMs', Date.now() - readVariantsStartedAt);
+
+      const composeStartedAt = Date.now();
+      const productsById = new Map(products.map((product) => [product.productId, product]));
       const barcodesByVariantId = new Map(
-        deps.repository
-          .listBarcodes()
+        barcodes
           .filter((barcode) => barcode.isActive)
           .map((barcode) => [barcode.variantId, barcode]),
       );
 
-      const items = deps.repository
-        .listVariants()
+      const items = variants
         .flatMap((variant): CatalogProductListItemDTO[] => {
           const product = productsById.get(variant.productId);
           if (product === undefined) return [];
+          if (productType !== undefined && product.productType !== productType) return [];
+          if (categoryId !== undefined && product.categoryId !== categoryId) return [];
+          if (brandId !== undefined && product.brandId !== brandId) return [];
           const isActive = product.isActive && variant.isActive;
           if (status === 'Active' && !isActive) return [];
           if (status === 'Inactive' && isActive) return [];
@@ -285,6 +314,8 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
             productCode: product.productCode,
             productName: product.name,
             productType: product.productType,
+            categoryId: product.categoryId,
+            brandId: product.brandId,
             variantId: variant.variantId,
             sku: variant.sku,
             displayName: variant.displayName,
@@ -300,11 +331,44 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
           return [item];
         })
         .sort((left, right) => left.displayName.localeCompare(right.displayName, 'vi-VN'));
+      const limitedItems = items.slice(0, input.limit ?? 100);
+      recordStage('catalog.product.list.composeMs', Date.now() - composeStartedAt);
 
-      return {
+      const availabilityStartedAt = Date.now();
+      const trackedLimitedVariantIds = limitedItems
+        .filter((item) => item.inventoryMode === 'Tracked')
+        .map((item) => item.variantId);
+      const availabilityByVariantId =
+        input.warehouseId === undefined || deps.inventoryBalanceProvider === undefined || trackedLimitedVariantIds.length === 0
+          ? new Map<string, { warehouseId: string; availableMilli: number }>()
+          : new Map(
+              deps.inventoryBalanceProvider({
+                warehouseId: input.warehouseId,
+                variantIds: trackedLimitedVariantIds,
+              }).map((balance) => [
+                balance.variantId,
+                {
+                  warehouseId: balance.warehouseId,
+                  availableMilli: balance.availableMilli,
+                },
+              ]),
+            );
+      recordStage('catalog.product.list.availabilityMs', Date.now() - availabilityStartedAt);
+
+      const response = {
         generatedAt: deps.now().toISOString(),
-        items: items.slice(0, input.limit ?? 100),
+        items: limitedItems.map((item) => {
+          const balance = availabilityByVariantId.get(item.variantId);
+          if (balance === undefined || item.inventoryMode !== 'Tracked') return item;
+          return {
+            ...item,
+            availableWarehouseId: balance.warehouseId,
+            availableMilli: balance.availableMilli,
+          };
+        }),
       };
+      recordStage('catalog.product.list.totalMs', Date.now() - totalStartedAt);
+      return response;
     },
     updateProduct(input) {
       const product = deps.repository.findProductById(input.productId);
@@ -351,6 +415,8 @@ export function createCatalogService(deps: CatalogServiceDependencies): CatalogS
         productCode: input.productCode?.trim() ?? product.productCode,
         name: nextName,
         productType: input.productType ?? product.productType,
+        categoryId: input.categoryId?.trim() ?? product.categoryId,
+        brandId: input.brandId?.trim() ?? product.brandId,
       };
       const updatedVariant: VariantDTO = {
         ...defaultVariant,

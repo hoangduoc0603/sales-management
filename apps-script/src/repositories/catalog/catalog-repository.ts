@@ -258,7 +258,7 @@ function createVersionedSheetTable<TRecord extends object>(
         .map(deepClone);
     },
     save(record) {
-      deps.cacheStore?.remove(cacheKey);
+      removeCachedList(deps.cacheStore, cacheKey);
       const recordData = deepClone(record) as Record<string, unknown>;
       const recordId = String(recordData[deps.idField] ?? '');
       if (recordId.trim() === '') {
@@ -279,13 +279,15 @@ function createVersionedSheetTable<TRecord extends object>(
           },
         ],
       });
-      deps.cacheStore?.remove(cacheKey);
+      removeCachedList(deps.cacheStore, cacheKey);
     },
   };
 }
 
 const catalogCacheTtlSeconds = 21_600;
 const maxCachePayloadLength = 90_000;
+const maxCacheChunkPayloadLength = 80_000;
+const maxCacheChunks = 8;
 
 function readCachedList<TRecord extends object>(
   cacheStore: PlatformCacheStore | undefined,
@@ -293,7 +295,7 @@ function readCachedList<TRecord extends object>(
 ): TRecord[] | undefined {
   if (cacheStore === undefined) return undefined;
   const raw = cacheStore.get(cacheKey);
-  if (raw === undefined) return undefined;
+  if (raw === undefined) return readChunkedCachedList(cacheStore, cacheKey);
   try {
     return (JSON.parse(raw) as TRecord[]).map(deepClone);
   } catch {
@@ -309,8 +311,85 @@ function writeCachedList<TRecord extends object>(
 ): void {
   if (cacheStore === undefined) return;
   const payload = JSON.stringify(records);
-  if (payload.length > maxCachePayloadLength) return;
-  cacheStore.put(cacheKey, payload, catalogCacheTtlSeconds);
+  if (payload.length <= maxCachePayloadLength) {
+    cacheStore.put(cacheKey, payload, catalogCacheTtlSeconds);
+    cacheStore.remove(chunkedCacheMetaKey(cacheKey));
+    return;
+  }
+
+  const chunks = chunkString(payload, maxCacheChunkPayloadLength);
+  if (chunks.length > maxCacheChunks) return;
+  cacheStore.remove(cacheKey);
+  chunks.forEach((chunk, index) => {
+    cacheStore.put(chunkedCachePartKey(cacheKey, index), chunk, catalogCacheTtlSeconds);
+  });
+  cacheStore.put(
+    chunkedCacheMetaKey(cacheKey),
+    JSON.stringify({ chunks: chunks.length }),
+    catalogCacheTtlSeconds,
+  );
+}
+
+function readChunkedCachedList<TRecord extends object>(
+  cacheStore: PlatformCacheStore,
+  cacheKey: string,
+): TRecord[] | undefined {
+  const rawMeta = cacheStore.get(chunkedCacheMetaKey(cacheKey));
+  if (rawMeta === undefined) return undefined;
+  try {
+    const meta = JSON.parse(rawMeta) as { chunks?: unknown };
+    const chunkCount = typeof meta.chunks === 'number' ? meta.chunks : 0;
+    if (chunkCount <= 0 || chunkCount > maxCacheChunks) {
+      removeCachedList(cacheStore, cacheKey);
+      return undefined;
+    }
+    const chunks: string[] = [];
+    for (let index = 0; index < chunkCount; index += 1) {
+      const chunk = cacheStore.get(chunkedCachePartKey(cacheKey, index));
+      if (chunk === undefined) {
+        removeCachedList(cacheStore, cacheKey);
+        return undefined;
+      }
+      chunks.push(chunk);
+    }
+    return (JSON.parse(chunks.join('')) as TRecord[]).map(deepClone);
+  } catch {
+    removeCachedList(cacheStore, cacheKey);
+    return undefined;
+  }
+}
+
+function removeCachedList(cacheStore: PlatformCacheStore | undefined, cacheKey: string): void {
+  if (cacheStore === undefined) return;
+  const rawMeta = cacheStore.get(chunkedCacheMetaKey(cacheKey));
+  cacheStore.remove(cacheKey);
+  cacheStore.remove(chunkedCacheMetaKey(cacheKey));
+  if (rawMeta === undefined) return;
+  try {
+    const meta = JSON.parse(rawMeta) as { chunks?: unknown };
+    const chunkCount = typeof meta.chunks === 'number' ? meta.chunks : 0;
+    for (let index = 0; index < Math.min(chunkCount, maxCacheChunks); index += 1) {
+      cacheStore.remove(chunkedCachePartKey(cacheKey, index));
+    }
+  } catch {
+    // Metadata is corrupt; removing the metadata key is enough to make stale chunks unreachable.
+  }
+}
+
+function chunkString(value: string, chunkLength: number): string[] {
+  const chunks: string[] = [];
+  for (let index = 0; index < value.length; index += chunkLength) {
+    chunks.push(value.slice(index, index + chunkLength));
+  }
+  return chunks;
+}
+
+function chunkedCacheMetaKey(cacheKey: string): string {
+  return `${cacheKey}.chunks`;
+}
+
+function chunkedCachePartKey(cacheKey: string, index: number): string {
+  return `${cacheKey}.chunk.${index}`;
 }
 
 function findTable(definitions: readonly TableDefinitionDTO[], tableName: string): TableDefinitionDTO {

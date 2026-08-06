@@ -2,6 +2,7 @@ import type {
   CatalogCreateProductResponse,
   CatalogCreateVariantResponse,
   CatalogProductListItemDTO,
+  CatalogProductListRequest,
   CatalogProductListResponse,
   CatalogProductListStatus,
   CatalogSetVariantActiveResponse,
@@ -15,13 +16,14 @@ import type {
   CustomerQuickCreateResponse,
   CustomerSearchResponse,
 } from '@shared/contracts/crm/customer';
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { AppRoute } from '../../app/app-shell/app-shell';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { AppIcon } from '../../components/ui/icons';
 import { Panel } from '../../components/ui/panel';
+import { SkeletonTable } from '../../components/ui/skeleton';
 import { StateBlock } from '../../components/ui/state-block';
 import type { ApiClient } from '../../lib/api/client';
 
@@ -29,6 +31,7 @@ export interface CatalogCrmHomeProps {
   route: Extract<AppRoute, 'catalog' | 'customers'>;
   apiClient?: ApiClient;
   sessionToken?: string;
+  selectedWarehouseId?: string;
   initialProductItems?: readonly CatalogProductListItemDTO[];
 }
 
@@ -72,6 +75,8 @@ const defaultProductItems: readonly CatalogProductListItemDTO[] = [
     productCode: 'SP-001',
     productName: 'Sữa hạt óc chó 1L',
     productType: 'Stocked',
+    categoryId: 'food',
+    brandId: 'internal',
     variantId: 'variant-milk-1l',
     sku: 'SH-OC-1L',
     displayName: 'Sữa hạt óc chó 1L',
@@ -82,12 +87,16 @@ const defaultProductItems: readonly CatalogProductListItemDTO[] = [
     lotTracking: false,
     serialTracking: false,
     isActive: true,
+    availableWarehouseId: 'warehouse-default',
+    availableMilli: 4_000,
   },
   {
     productId: 'product-laundry',
     productCode: 'SP-002',
     productName: 'Nước giặt sinh học hương hoa 3,6kg',
     productType: 'Stocked',
+    categoryId: 'food',
+    brandId: 'internal',
     variantId: 'variant-laundry-36',
     sku: 'NG-SH-3600',
     displayName: 'Nước giặt sinh học hương hoa 3,6kg',
@@ -98,6 +107,8 @@ const defaultProductItems: readonly CatalogProductListItemDTO[] = [
     lotTracking: false,
     serialTracking: false,
     isActive: true,
+    availableWarehouseId: 'warehouse-default',
+    availableMilli: 24_000,
   },
 ];
 
@@ -214,6 +225,11 @@ type CatalogDialog = 'create' | 'edit' | 'detail' | 'row-menu' | 'deactivate' | 
 
 type TrackingMode = (typeof trackingOptions)[number]['value'];
 type DrawerTab = 'overview' | 'variants' | 'units' | 'inventory';
+type CatalogListLoadingReason = 'initial' | 'search' | 'filter' | 'refresh';
+type RowMenuPosition = {
+  left: number;
+  top: number;
+};
 type CatalogHashState =
   | 'catalog'
   | 'detail'
@@ -261,6 +277,11 @@ const catalogHashStates = new Set<CatalogHashState>([
   'bundle-formula',
   'bundle-formula-validation',
 ]);
+const catalogSearchDebounceMs = 300;
+const catalogRowMenuWidthPx = 230;
+const catalogRowMenuHeightPx = 224;
+const catalogRowMenuViewportGapPx = 12;
+const catalogRowMenuAnchorGapPx = 6;
 
 function isImportState(state: string): state is ImportState {
   return (
@@ -295,24 +316,29 @@ export function CatalogCrmHome({
   apiClient,
   initialProductItems = defaultProductItems,
   route,
+  selectedWarehouseId,
   sessionToken,
 }: CatalogCrmHomeProps) {
   const isCustomerRoute = route === 'customers';
+  const shouldLoadProductsFromApi =
+    !isCustomerRoute && apiClient !== undefined && sessionToken !== undefined;
+  const initialCatalogItems = shouldLoadProductsFromApi ? [] : initialProductItems;
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState<CatalogProductListStatus>('All');
-  const [items, setItems] = useState<readonly CatalogProductListItemDTO[]>(initialProductItems);
+  const [items, setItems] = useState<readonly CatalogProductListItemDTO[]>(initialCatalogItems);
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(
-    initialProductItems[0]?.variantId,
+    initialCatalogItems[0]?.variantId,
   );
   const [form, setForm] = useState<ProductFormState>(() =>
-    initialProductItems[0] ? formFromItem(initialProductItems[0]) : emptyForm,
+    initialCatalogItems[0] ? formFromItem(initialCatalogItems[0]) : emptyForm,
   );
   const [variantForm, setVariantForm] = useState<VariantFormState>(() =>
-    initialProductItems[0] ? variantFormFromItem(initialProductItems[0]) : emptyVariantForm,
+    initialCatalogItems[0] ? variantFormFromItem(initialCatalogItems[0]) : emptyVariantForm,
   );
-  const [mode, setMode] = useState<'create' | 'edit'>(initialProductItems[0] ? 'edit' : 'create');
+  const [mode, setMode] = useState<'create' | 'edit'>(initialCatalogItems[0] ? 'edit' : 'create');
   const [variantMode, setVariantMode] = useState<'create' | 'edit'>(
-    initialProductItems[0] ? 'edit' : 'create',
+    initialCatalogItems[0] ? 'edit' : 'create',
   );
   const [productTypeFilter, setProductTypeFilter] = useState<ProductType | 'All'>('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -325,9 +351,14 @@ export function CatalogCrmHome({
   const [formulaValidation, setFormulaValidation] = useState(false);
   const [inventoryEnabled, setInventoryEnabled] = useState(true);
   const [trackingMode, setTrackingMode] = useState<TrackingMode>('none');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(shouldLoadProductsFromApi);
+  const [catalogListLoadingReason, setCatalogListLoadingReason] = useState<CatalogListLoadingReason | undefined>(
+    shouldLoadProductsFromApi ? 'initial' : undefined,
+  );
+  const [rowMenuPosition, setRowMenuPosition] = useState<RowMenuPosition>();
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const loadedQueryRef = useRef<string | undefined>(shouldLoadProductsFromApi ? undefined : '');
 
   const selectedItem = useMemo(
     () => items.find((item) => item.variantId === selectedVariantId) ?? items[0],
@@ -339,11 +370,15 @@ export function CatalogCrmHome({
   );
   const filteredItems = useMemo(
     () => {
-      const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
+      if (shouldLoadProductsFromApi) return items;
+
+      const normalizedQuery = debouncedQuery.trim().toLocaleLowerCase('vi-VN');
       return items.filter((item) => {
         if (status === 'Active' && !item.isActive) return false;
         if (status === 'Inactive' && item.isActive) return false;
         if (productTypeFilter !== 'All' && item.productType !== productTypeFilter) return false;
+        if (categoryFilter !== 'All' && item.categoryId !== categoryFilter) return false;
+        if (brandFilter !== 'All' && item.brandId !== brandFilter) return false;
         if (
           normalizedQuery !== '' &&
           ![item.productName, item.productCode, item.displayName, item.sku, item.barcode]
@@ -355,7 +390,7 @@ export function CatalogCrmHome({
         return true;
       });
     },
-    [items, productTypeFilter, query, status],
+    [brandFilter, categoryFilter, debouncedQuery, items, productTypeFilter, shouldLoadProductsFromApi, status],
   );
   const groupedItems = useMemo(() => groupProductItems(filteredItems), [filteredItems]);
   const selectedProductItems = useMemo(
@@ -371,20 +406,51 @@ export function CatalogCrmHome({
   );
   const isBackdropOpen =
     (activeDialog !== undefined && activeDialog !== 'row-menu') || isBundleFormulaOpen;
+  const showProductLoadingSkeleton = shouldLoadProductsFromApi && isLoading && items.length === 0;
+  const isRefreshingProducts = catalogListLoadingReason === 'refresh';
+  const isSearchingProducts = catalogListLoadingReason === 'search';
+  const hasActiveCatalogFilter =
+    status !== 'All' ||
+    productTypeFilter !== 'All' ||
+    categoryFilter !== 'All' ||
+    brandFilter !== 'All';
 
   function closeCatalogOverlay() {
     setActiveDialog(undefined);
     setIsBundleFormulaOpen(false);
     setFormulaValidation(false);
+    setRowMenuPosition(undefined);
     writeCatalogHash('catalog');
   }
 
   function openCatalogDialog(dialog: CatalogDialog, hash: CatalogHashState) {
+    if (dialog !== 'row-menu') setRowMenuPosition(undefined);
     setActiveDialog(dialog);
     setIsBundleFormulaOpen(false);
     setFormulaValidation(false);
     writeCatalogHash(hash);
   }
+
+  function openRowMenu(item: CatalogProductListItemDTO, anchor: HTMLElement) {
+    setSelectedVariantId(item.variantId);
+    setRowMenuPosition(calculateRowMenuPosition(anchor.getBoundingClientRect()));
+    openCatalogDialog('row-menu', 'row-menu');
+  }
+
+  function clearCatalogFilters() {
+    setStatus('All');
+    setProductTypeFilter('All');
+    setCategoryFilter('All');
+    setBrandFilter('All');
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedQuery(query);
+    }, catalogSearchDebounceMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [query]);
 
   useEffect(() => {
     if (selectedItem === undefined) return;
@@ -400,25 +466,35 @@ export function CatalogCrmHome({
   }, [mode, selectedItem, variantMode]);
 
   useEffect(() => {
-    if (apiClient === undefined || sessionToken === undefined) return;
+    if (!shouldLoadProductsFromApi) return;
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+    const normalizedQuery = debouncedQuery.trim();
+    const loadingReason: CatalogListLoadingReason =
+      items.length === 0 ? 'initial' : normalizedQuery !== loadedQueryRef.current ? 'search' : 'filter';
 
     void loadProducts({
       apiClient,
-      query,
+      brandFilter,
+      categoryFilter,
+      productTypeFilter,
+      query: debouncedQuery,
+      selectedWarehouseId,
       sessionToken,
       status,
       signal: controller.signal,
       onStart: () => {
+        setCatalogListLoadingReason(loadingReason);
         setIsLoading(true);
         setErrorMessage(undefined);
       },
       onFinish: () => {
         window.clearTimeout(timeoutId);
         setIsLoading(false);
+        setCatalogListLoadingReason(undefined);
       },
       onSuccess: (nextItems) => {
+        loadedQueryRef.current = normalizedQuery;
         setItems(nextItems);
         setSelectedVariantId((current) =>
           nextItems.some((item) => item.variantId === current) ? current : nextItems[0]?.variantId,
@@ -431,7 +507,38 @@ export function CatalogCrmHome({
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [apiClient, query, sessionToken, status]);
+  }, [
+    apiClient,
+    brandFilter,
+    categoryFilter,
+    debouncedQuery,
+    productTypeFilter,
+    selectedWarehouseId,
+    sessionToken,
+    shouldLoadProductsFromApi,
+    status,
+  ]);
+
+  useEffect(() => {
+    if (openListbox === undefined || typeof document === 'undefined') return undefined;
+
+    const closeOnPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.cn-catalog-artifact .listbox') !== null) return;
+      setOpenListbox(undefined);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenListbox(undefined);
+    };
+
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openListbox]);
 
   useEffect(() => {
     if (isCustomerRoute || typeof window === 'undefined') return undefined;
@@ -478,6 +585,7 @@ export function CatalogCrmHome({
       }
 
       if (state === 'row-menu') {
+        setRowMenuPosition(undefined);
         setActiveDialog('row-menu');
         setIsBundleFormulaOpen(false);
         return;
@@ -536,21 +644,33 @@ export function CatalogCrmHome({
     return () => window.clearTimeout(timeoutId);
   }, [activeDialog, importState]);
 
-  async function refreshProducts(nextQuery = query, nextStatus = status) {
+  async function refreshProducts(
+    nextQuery = query,
+    nextStatus = status,
+    nextProductType = productTypeFilter,
+    nextCategory = categoryFilter,
+    nextBrand = brandFilter,
+    loadingReason: CatalogListLoadingReason = 'refresh',
+  ) {
     if (apiClient === undefined || sessionToken === undefined) return;
+    setCatalogListLoadingReason(loadingReason);
     setIsLoading(true);
     setErrorMessage(undefined);
     const result = await apiClient.invoke<CatalogProductListResponse>({
       operation: 'catalog.product.list',
       requestId: createRequestId('catalog-list'),
       sessionToken,
-      payload: {
-        query: nextQuery.trim() || undefined,
+      payload: buildCatalogProductListPayload({
+        brandFilter: nextBrand,
+        categoryFilter: nextCategory,
+        productTypeFilter: nextProductType,
+        query: nextQuery,
+        selectedWarehouseId,
         status: nextStatus,
-        limit: 100,
-      },
+      }),
     });
     setIsLoading(false);
+    setCatalogListLoadingReason(undefined);
     if (!result.ok) {
       setErrorMessage(result.error.message);
       return;
@@ -746,7 +866,20 @@ export function CatalogCrmHome({
           <p>Quản lý thông tin sản phẩm gốc và biến thể giao dịch theo phạm vi kho hiện tại.</p>
         </div>
         <div className="head-actions">
-          {isLoading ? <span className="status info">Đang xử lý</span> : null}
+          {hasActiveCatalogFilter ? (
+            <button className="filter-chip header-filter-chip" onClick={clearCatalogFilters} type="button">
+              × Xóa lọc
+            </button>
+          ) : null}
+          <button
+            aria-label="Làm mới danh sách hàng hóa"
+            className={isRefreshingProducts ? 'button subtle icon-only refresh-loading' : 'button subtle icon-only'}
+            disabled={isLoading}
+            onClick={() => void refreshProducts()}
+            type="button"
+          >
+            <AppIcon name="refresh" />
+          </button>
           <button className="button subtle" onClick={() => openCatalogDialog('import', 'import')} type="button">
             <AppIcon name="fileAlert" />
             Nhập dữ liệu
@@ -779,7 +912,12 @@ export function CatalogCrmHome({
       <section className="workspace" aria-label="Danh sách hàng hóa và biến thể">
         <div className="toolbar" aria-label="Bộ lọc hàng hóa">
           <label className="search">
-            <span aria-hidden="true">⌕</span>
+            <span
+              aria-hidden="true"
+              className={isSearchingProducts ? 'search-icon search-icon-loading' : 'search-icon'}
+            >
+              ⌕
+            </span>
             <input
               aria-label="Tìm kiếm hàng hóa"
               onChange={(event) => setQuery(event.target.value)}
@@ -826,52 +964,38 @@ export function CatalogCrmHome({
           <button className="button subtle filter-mobile" type="button">
             Bộ lọc
           </button>
-          <button
-            className="filter-chip"
-            hidden={query === '' && status === 'All' && productTypeFilter === 'All' && categoryFilter === 'All' && brandFilter === 'All'}
-            onClick={() => {
-              setQuery('');
-              setStatus('All');
-              setProductTypeFilter('All');
-              setCategoryFilter('All');
-              setBrandFilter('All');
-            }}
-            type="button"
-          >
-            × Xóa lọc
-          </button>
         </div>
 
         {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
         {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
 
-        <div className={filteredItems.length > 0 ? 'state active' : 'state'} id="ready-state">
-          <CatalogProductsTable
-            groups={groupedItems}
-            onOpenMenu={(item) => {
-              setSelectedVariantId(item.variantId);
-              openCatalogDialog('row-menu', 'row-menu');
-            }}
-            onSelect={(item) => {
-              setSelectedVariantId(item.variantId);
-              setDrawerTab('overview');
-              openCatalogDialog('detail', 'detail');
-            }}
-          />
-          <CatalogMobileList
-            items={filteredItems}
-            onOpenMenu={(item) => {
-              setSelectedVariantId(item.variantId);
-              openCatalogDialog('row-menu', 'row-menu');
-            }}
-            onSelect={(item) => {
-              setSelectedVariantId(item.variantId);
-              setDrawerTab('overview');
-              openCatalogDialog('detail', 'detail');
-            }}
-          />
-        </div>
-        <div className={filteredItems.length === 0 ? 'state empty active' : 'state empty'} id="no-result">
+        {showProductLoadingSkeleton ? (
+          <div className="state active" id="loading-state">
+            <SkeletonTable columns={6} label="Đang tải danh sách hàng hóa" rows={6} />
+          </div>
+        ) : (
+          <div className={filteredItems.length > 0 ? 'state active' : 'state'} id="ready-state">
+            <CatalogProductsTable
+              groups={groupedItems}
+              onOpenMenu={openRowMenu}
+              onSelect={(item) => {
+                setSelectedVariantId(item.variantId);
+                setDrawerTab('overview');
+                openCatalogDialog('detail', 'detail');
+              }}
+            />
+            <CatalogMobileList
+              items={filteredItems}
+              onOpenMenu={openRowMenu}
+              onSelect={(item) => {
+                setSelectedVariantId(item.variantId);
+                setDrawerTab('overview');
+                openCatalogDialog('detail', 'detail');
+              }}
+            />
+          </div>
+        )}
+        <div className={!showProductLoadingSkeleton && filteredItems.length === 0 ? 'state empty active' : 'state empty'} id="no-result">
           Không tìm thấy hàng hóa phù hợp với bộ lọc hiện tại.
         </div>
       </section>
@@ -907,6 +1031,7 @@ export function CatalogCrmHome({
       <CatalogRowMenu
         item={selectedItem}
         isOpen={activeDialog === 'row-menu'}
+        position={rowMenuPosition}
         onClose={closeCatalogOverlay}
         onDeactivate={() => openCatalogDialog('deactivate', 'deactivate-confirm')}
         onDuplicate={() => {
@@ -1038,8 +1163,7 @@ function CatalogDesignListbox(props: {
 }) {
   const selectedOption = props.options.find((option) => option.value === props.value) ?? props.options[0];
   const isOpen = props.openListbox === props.id;
-  const triggerText =
-    props.triggerLabel !== undefined ? props.triggerLabel : `${props.prefix}: ${selectedOption?.label ?? props.value}`;
+  const triggerText = selectedOption?.label ?? props.triggerLabel ?? props.prefix ?? props.value;
 
   return (
     <div className={`listbox ${props.className ?? ''}`.trim()}>
@@ -1076,7 +1200,7 @@ function CatalogDesignListbox(props: {
 
 function CatalogProductsTable(props: {
   groups: readonly CatalogProductGroup[];
-  onOpenMenu(item: CatalogProductListItemDTO): void;
+  onOpenMenu(item: CatalogProductListItemDTO, anchor: HTMLElement): void;
   onSelect(item: CatalogProductListItemDTO): void;
 }) {
   return (
@@ -1132,7 +1256,7 @@ function CatalogProductsTable(props: {
                       className="row-action"
                       onClick={(event) => {
                         event.stopPropagation();
-                        props.onOpenMenu(item);
+                        props.onOpenMenu(item, event.currentTarget);
                       }}
                       type="button"
                     >
@@ -1151,7 +1275,7 @@ function CatalogProductsTable(props: {
 
 function CatalogMobileList(props: {
   items: readonly CatalogProductListItemDTO[];
-  onOpenMenu(item: CatalogProductListItemDTO): void;
+  onOpenMenu(item: CatalogProductListItemDTO, anchor: HTMLElement): void;
   onSelect(item: CatalogProductListItemDTO): void;
 }) {
   return (
@@ -1168,7 +1292,7 @@ function CatalogMobileList(props: {
               className="row-action"
               onClick={(event) => {
                 event.stopPropagation();
-                props.onOpenMenu(item);
+                props.onOpenMenu(item, event.currentTarget);
               }}
               type="button"
             >
@@ -1222,7 +1346,6 @@ function CatalogDetailDrawer(props: {
       aria-hidden={!props.isOpen}
       aria-modal={props.isOpen ? 'true' : undefined}
       className={props.isOpen ? 'drawer open' : 'drawer'}
-      hidden={!props.isOpen}
       role={props.isOpen ? 'dialog' : undefined}
     >
       <header className="drawer-head">
@@ -1253,10 +1376,10 @@ function CatalogDetailDrawer(props: {
       <div className="drawer-body">
         <section className={props.drawerTab === 'overview' ? 'drawer-panel active' : 'drawer-panel'}>
           <Definition label="Mã sản phẩm" value={item?.productCode ?? '—'} />
-          <Definition label="Nhóm hàng" value="Thực phẩm & đồ uống" />
+          <Definition label="Nhóm hàng" value={categoryLabel(item?.categoryId)} />
+          <Definition label="Thương hiệu" value={brandLabel(item?.brandId)} />
           <Definition label="Loại hàng" value={item === undefined ? '—' : productTypeLabel(item.productType)} />
           <Definition label="Trạng thái bán" value={item?.isActive === false ? 'Ngừng bán' : 'Đang bán'} />
-          <Definition label="Kho hiện tại" value="Kho trung tâm" />
           <div className="drawer-note">
             <AppIcon name="warning" />
             Không hard-delete sản phẩm/biến thể đã có khả năng phát sinh chứng từ.
@@ -1310,14 +1433,53 @@ function Definition(props: { label: string; value: string }) {
 function CatalogRowMenu(props: {
   isOpen: boolean;
   item?: CatalogProductListItemDTO;
+  position?: RowMenuPosition;
   onClose(): void;
   onDeactivate(): void;
   onDuplicate(): void;
   onEdit(): void;
   onView(): void;
 }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { isOpen, onClose } = props;
+
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return undefined;
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      onClose();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen, onClose]);
+
   return (
-    <div aria-hidden={!props.isOpen} className={props.isOpen ? 'menu open' : 'menu'} hidden={!props.isOpen} role="menu">
+    <div
+      aria-hidden={!props.isOpen}
+      className={props.isOpen ? 'menu open' : 'menu'}
+      hidden={!props.isOpen}
+      ref={menuRef}
+      role="menu"
+      style={
+        props.position === undefined
+          ? undefined
+          : ({
+              '--catalog-row-menu-left': `${props.position.left}px`,
+              '--catalog-row-menu-right': 'auto',
+              '--catalog-row-menu-top': `${props.position.top}px`,
+            } as CSSProperties)
+      }
+    >
       <button onClick={props.onView} role="menuitem" type="button">
         Xem chi tiết
       </button>
@@ -2195,6 +2357,37 @@ function productTypeLabel(productType: ProductType): string {
   return productTypeOptions.find((option) => option.value === productType)?.label ?? productType;
 }
 
+function categoryLabel(categoryId: string | undefined): string {
+  if (categoryId === undefined) return 'Chưa phân nhóm';
+  return categoryOptions.find((option) => option.value === categoryId)?.label ?? categoryId;
+}
+
+function brandLabel(brandId: string | undefined): string {
+  if (brandId === undefined) return 'Chưa gán thương hiệu';
+  return brandOptions.find((option) => option.value === brandId)?.label ?? brandId;
+}
+
+function calculateRowMenuPosition(anchorRect: DOMRect): RowMenuPosition {
+  const minLeft = catalogRowMenuViewportGapPx;
+  const maxLeft = Math.max(minLeft, window.innerWidth - catalogRowMenuWidthPx - catalogRowMenuViewportGapPx);
+  const left = clamp(anchorRect.right - catalogRowMenuWidthPx, minLeft, maxLeft);
+  const topBelow = anchorRect.bottom + catalogRowMenuAnchorGapPx;
+  const topAbove = anchorRect.top - catalogRowMenuHeightPx - catalogRowMenuAnchorGapPx;
+  const fitsBelow =
+    topBelow + catalogRowMenuHeightPx <= window.innerHeight - catalogRowMenuViewportGapPx;
+  const top = fitsBelow ? topBelow : topAbove;
+  const maxTop = Math.max(catalogRowMenuViewportGapPx, window.innerHeight - catalogRowMenuHeightPx - catalogRowMenuViewportGapPx);
+
+  return {
+    left,
+    top: clamp(top, catalogRowMenuViewportGapPx, maxTop),
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 function variantSummary(count: number): string {
   if (count <= 1) return '1 biến thể mặc định';
   return `${count} biến thể màu / size`;
@@ -2211,23 +2404,24 @@ function unitLabel(value: string | undefined): string {
 
 function renderAvailability(item: CatalogProductListItemDTO): ReactNode {
   if (item.inventoryMode !== 'Tracked') return <span className="status muted">Không kiểm tồn</span>;
-  if (item.sku === 'SH-OC-1L') {
-    return <span className="status warning">! 4 thùng · Tồn thấp</span>;
-  }
-  if (item.sku === 'NG-SH-3600') return <span className="num">24 túi</span>;
-  if (item.sku.includes('BLACK')) return <span className="num">18 cái</span>;
-  if (item.sku.includes('WHITE')) return <span className="num">12 cái</span>;
-  return <span className="num">—</span>;
+  if (item.availableMilli === undefined) return <span className="num">—</span>;
+  const text = `${formatQuantityMilli(item.availableMilli)} ${unitLabel(item.defaultUnitId).toLocaleLowerCase('vi-VN')}`;
+  if (item.availableMilli <= 0) return <span className="status warning">! {text} · Hết tồn</span>;
+  return <span className="num">{text}</span>;
 }
 
 function availabilityText(item: CatalogProductListItemDTO | undefined): string {
   if (item === undefined) return '—';
   if (item.inventoryMode !== 'Tracked') return 'Không kiểm tồn';
-  if (item.sku === 'SH-OC-1L') return '4 thùng · Tồn thấp';
-  if (item.sku === 'NG-SH-3600') return '24 túi';
-  if (item.sku.includes('BLACK')) return '18 cái';
-  if (item.sku.includes('WHITE')) return '12 cái';
-  return 'Chưa có projection tồn';
+  if (item.availableMilli === undefined) return 'Chưa có projection tồn';
+  return `${formatQuantityMilli(item.availableMilli)} ${unitLabel(item.defaultUnitId).toLocaleLowerCase('vi-VN')}`;
+}
+
+function formatQuantityMilli(quantityMilli: number): string {
+  const value = quantityMilli / 1000;
+  return Number.isInteger(value)
+    ? value.toLocaleString('vi-VN')
+    : value.toLocaleString('vi-VN', { maximumFractionDigits: 3 });
 }
 
 function trackingLabel(item: Pick<CatalogProductListItemDTO, 'inventoryMode' | 'lotTracking' | 'serialTracking'>): string {
@@ -2554,6 +2748,10 @@ async function loadProducts(input: {
   sessionToken: string;
   query: string;
   status: CatalogProductListStatus;
+  productTypeFilter: ProductType | 'All';
+  categoryFilter: string;
+  brandFilter: string;
+  selectedWarehouseId?: string;
   signal: AbortSignal;
   onStart: () => void;
   onFinish: () => void;
@@ -2565,11 +2763,7 @@ async function loadProducts(input: {
     operation: 'catalog.product.list',
     requestId: createRequestId('catalog-list'),
     sessionToken: input.sessionToken,
-    payload: {
-      query: input.query.trim() || undefined,
-      status: input.status,
-      limit: 100,
-    },
+    payload: buildCatalogProductListPayload(input),
   });
   if (input.signal.aborted) return;
   input.onFinish();
@@ -2578,6 +2772,27 @@ async function loadProducts(input: {
     return;
   }
   input.onSuccess(result.data.items);
+}
+
+function buildCatalogProductListPayload(input: {
+  query: string;
+  status: CatalogProductListStatus;
+  productTypeFilter: ProductType | 'All';
+  categoryFilter: string;
+  brandFilter: string;
+  selectedWarehouseId?: string;
+}): CatalogProductListRequest {
+  const payload: CatalogProductListRequest = {
+    status: input.status,
+    limit: 100,
+  };
+  const query = input.query.trim();
+  if (query !== '') payload.query = query;
+  if (input.productTypeFilter !== 'All') payload.productType = input.productTypeFilter;
+  if (input.categoryFilter !== 'All') payload.categoryId = input.categoryFilter;
+  if (input.brandFilter !== 'All') payload.brandId = input.brandFilter;
+  if (input.selectedWarehouseId !== undefined) payload.warehouseId = input.selectedWarehouseId;
+  return payload;
 }
 
 function formFromItem(item: CatalogProductListItemDTO): ProductFormState {

@@ -79,6 +79,8 @@ export interface CatalogCreateProductRequest {
   productCode: string;
   name: string;
   productType: ProductType;
+  categoryId?: string;
+  brandId?: string;
   sku: string;
   barcode?: string;
   defaultUnitId: string;
@@ -101,6 +103,10 @@ export type CatalogProductListStatus = (typeof catalogProductListStatuses)[numbe
 export interface CatalogProductListRequest {
   query?: string;
   status?: CatalogProductListStatus;
+  productType?: ProductType;
+  categoryId?: string;
+  brandId?: string;
+  warehouseId?: string;
   limit?: number;
 }
 
@@ -109,6 +115,8 @@ export interface CatalogProductListItemDTO {
   productCode: string;
   productName: string;
   productType: ProductType;
+  categoryId?: string;
+  brandId?: string;
   variantId: string;
   sku: string;
   displayName: string;
@@ -119,6 +127,8 @@ export interface CatalogProductListItemDTO {
   lotTracking: boolean;
   serialTracking: boolean;
   isActive: boolean;
+  availableWarehouseId?: string;
+  availableMilli?: number;
 }
 
 export interface CatalogProductListResponse {
@@ -131,6 +141,8 @@ export interface CatalogUpdateProductRequest {
   productCode?: string;
   name?: string;
   productType?: ProductType;
+  categoryId?: string;
+  brandId?: string;
   sku?: string;
   barcode?: string;
   defaultUnitId?: string;

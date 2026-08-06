@@ -1727,44 +1727,56 @@ function createLocalCatalogProducts(): [string, CatalogProductListItemDTO][] {
       productId: 'product-milk',
       productCode: 'SP-001',
       productName: 'Sữa hạt óc chó 1L',
+      categoryId: 'food',
+      brandId: 'internal',
       variantId: 'variant-milk-1l',
       sku: 'SH-OC-1L',
       barcode: '893000000001',
       defaultUnitId: 'chai',
       unitPriceVnd: 42000,
+      availableMilli: 4_000,
       serialTracking: false,
     }),
     createLocalCatalogProductItem({
       productId: 'product-laundry',
       productCode: 'SP-002',
       productName: 'Nước giặt sinh học hương hoa 3,6kg',
+      categoryId: 'food',
+      brandId: 'internal',
       variantId: 'variant-laundry-36',
       sku: 'NG-SH-3600',
       barcode: '893000000002',
       defaultUnitId: 'túi',
       unitPriceVnd: 185000,
+      availableMilli: 24_000,
       serialTracking: false,
     }),
     createLocalCatalogProductItem({
       productId: 'product-filter',
       productCode: 'SP-003',
       productName: 'Lõi lọc nước gia dụng',
+      categoryId: 'food',
+      brandId: 'internal',
       variantId: 'variant-filter-210',
       sku: 'GD-FL-210',
       barcode: '893000000003',
       defaultUnitId: 'Bộ',
       unitPriceVnd: 285000,
+      availableMilli: 8_000,
       serialTracking: true,
     }),
     createLocalCatalogProductItem({
       productId: 'product-shirt',
       productCode: 'SP-004',
       productName: 'Áo thun cổ tròn basic',
+      categoryId: 'fashion',
+      brandId: 'internal',
       variantId: 'variant-shirt-basic',
       sku: 'FA-TS-018',
       barcode: '893000000004',
       defaultUnitId: 'Cái',
       unitPriceVnd: 159000,
+      availableMilli: 18_000,
       serialTracking: false,
     }),
   ].map((item) => [item.variantId, item]);
@@ -1774,11 +1786,14 @@ function createLocalCatalogProductItem(input: {
   productId: string;
   productCode: string;
   productName: string;
+  categoryId?: string;
+  brandId?: string;
   variantId: string;
   sku: string;
   barcode?: string;
   defaultUnitId: string;
   unitPriceVnd: number;
+  availableMilli?: number;
   serialTracking: boolean;
 }): CatalogProductListItemDTO {
   return {
@@ -1788,6 +1803,7 @@ function createLocalCatalogProductItem(input: {
     inventoryMode: 'Tracked',
     lotTracking: false,
     isActive: true,
+    availableWarehouseId: 'warehouse-default',
   };
 }
 
@@ -1831,6 +1847,9 @@ function listLocalCatalogProducts(
     .filter((item) => {
       if (status === 'Active' && !item.isActive) return false;
       if (status === 'Inactive' && item.isActive) return false;
+      if (input.productType !== undefined && item.productType !== input.productType) return false;
+      if (input.categoryId !== undefined && item.categoryId !== input.categoryId) return false;
+      if (input.brandId !== undefined && item.brandId !== input.brandId) return false;
       if (!query) return true;
       return [
         item.productCode,
@@ -1874,6 +1893,8 @@ function createLocalCatalogProduct(
     productCode: input.productCode.trim(),
     productName: input.name.trim(),
     productType: input.productType,
+    categoryId: input.categoryId?.trim(),
+    brandId: input.brandId?.trim(),
     variantId,
     sku: input.sku.trim(),
     displayName: input.name.trim(),
@@ -1884,6 +1905,7 @@ function createLocalCatalogProduct(
     lotTracking: input.lotTracking ?? false,
     serialTracking: input.serialTracking ?? false,
     isActive: true,
+    availableWarehouseId: 'warehouse-default',
   };
   products.set(variantId, item);
 
@@ -1927,6 +1949,8 @@ function updateLocalCatalogProduct(
     productCode: input.productCode?.trim() ?? current.productCode,
     productName: nextName,
     productType: input.productType ?? current.productType,
+    categoryId: input.categoryId?.trim() ?? current.categoryId,
+    brandId: input.brandId?.trim() ?? current.brandId,
     displayName: nextName,
     sku: nextSku,
     barcode: nextBarcode,
@@ -2162,6 +2186,8 @@ function catalogItemToProduct(item: CatalogProductListItemDTO): ProductDTO {
     productCode: item.productCode,
     name: item.productName,
     productType: item.productType,
+    categoryId: item.categoryId,
+    brandId: item.brandId,
     isActive: item.isActive,
   };
 }
