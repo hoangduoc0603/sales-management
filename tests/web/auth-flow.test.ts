@@ -70,6 +70,48 @@ describe('createSessionStorage', () => {
     expect(storage.read()).toBeUndefined();
   });
 
+  it('lưu snapshot actor/scope cạnh session token để hydrate workspace sau khi reload', () => {
+    const values = new Map<string, string>();
+    const storage = createSessionStorage({
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    });
+
+    storage.write('session-1', {
+      actor: {
+        userId: 'user-admin',
+        loginId: 'admin',
+        displayName: 'Admin',
+        tenantId: 'tenant-default',
+        authVersion: 1,
+        actions: [],
+        scope: { tenantId: 'tenant-default', branchIds: ['branch-default'], warehouseIds: ['warehouse-default'] },
+      },
+      currentScope: {
+        tenant: {
+          tenantId: 'tenant-default',
+          displayName: 'Cenio',
+          status: 'Active',
+          timezone: 'Asia/Ho_Chi_Minh',
+          activeConfigVersionId: 'config-default',
+        },
+        branches: [],
+        warehouses: [],
+        activeBranchId: 'branch-default',
+        activeWarehouseId: 'warehouse-default',
+      },
+    });
+
+    expect(storage.readSnapshot()).toMatchObject({
+      sessionToken: 'session-1',
+      actor: { userId: 'user-admin' },
+      currentScope: { activeBranchId: 'branch-default', activeWarehouseId: 'warehouse-default' },
+    });
+    storage.clear();
+    expect(storage.readSnapshot()).toBeUndefined();
+  });
+
   it('đọc remembered token từ local storage khi session storage không có token', () => {
     const tabValues = new Map<string, string>();
     const deviceValues = new Map<string, string>();

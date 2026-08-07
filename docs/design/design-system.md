@@ -36,6 +36,7 @@
 | Select/Listbox | Không dùng native `<select>` cho UI chính; dùng custom select/listbox hoặc shadcn Select được style theo Cenio Core. |
 | Metric/KPI card | Không dùng top accent strip trang trí. Phân cấp bằng spacing, border, elevation, icon tint và typography. |
 | Badge/Status | Dùng semantic variants `success`, `warning`, `danger`, `info`; không dùng màu ngẫu nhiên theo từng màn. Trạng thái không được chỉ phân biệt bằng màu: kèm icon/copy và focus/contrast đạt chuẩn. |
+| Toast | Feedback tạm thời sau action: fixed góc trái dưới, tối đa 3 toast, có icon semantic, copy ngắn và nút đóng. `success` tự ẩn sau 4 giây, `info` 5 giây, `warning` 6 giây, `danger` 8 giây. Success/info/warning dùng live region lịch sự; danger dùng alert assertive. Không dùng Toast cho cảnh báo cần đọc bền trong luồng, validation theo trường, duplicate warning, recovery state hay permission state. |
 | Table | Header, density, row hover, empty/error/loading state phải theo pattern đã duyệt. |
 | Skeleton loading | Với màn hình/vùng dữ liệu đang chờ API/projection, dùng primitive chung `SkeletonText`, `SkeletonCard`, `SkeletonTable`, `SkeletonPage` trong `web/src/components/ui/skeleton.tsx`; shimmer phải nhẹ, giữ kích thước layout để hạn chế layout shift và tôn trọng `prefers-reduced-motion`. |
 | Sensitive data | Không che số liệu nhạy cảm chỉ bằng UI. Nếu không có quyền, backend/API phải trả permission-restricted state. |

@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CenioBrandMark } from '../components/ui/brand-mark';
 import { SkeletonCard } from '../components/ui/skeleton';
 import { StateBlock } from '../components/ui/state-block';
+import { ToastProvider } from '../components/ui/toast';
 import { AuthFlow, type ChangePasswordInput, type LoginInput } from './auth/auth-flow';
 import { createSessionStorage } from './auth/session-storage';
 import { InstallCheckingScreen, InstallFlow, type InstallFormInput } from './install/install-flow';
@@ -78,8 +79,21 @@ export function SalesManagementApp({
     () => (localDebugAuthEnabled ? createLocalDebugScope() : undefined),
     [localDebugAuthEnabled],
   );
-  const effectiveInitialScope = initialScope ?? localDebugScope;
-  const preAuthenticated = Boolean(initialSessionToken && initialActor && effectiveInitialScope);
+  const storedSessionSnapshot = useMemo(
+    () => (localDebugAuthEnabled ? undefined : sessionStorage.readSnapshot()),
+    [localDebugAuthEnabled, sessionStorage],
+  );
+  const storedSessionToken = storedSessionSnapshot?.sessionToken ?? sessionStorage.read();
+  const effectiveInitialSessionToken =
+    initialSessionToken ?? (localDebugAuthEnabled ? LOCAL_DEBUG_SESSION_TOKEN : storedSessionToken);
+  const canUseStoredSessionSnapshot =
+    !localDebugAuthEnabled &&
+    storedSessionSnapshot !== undefined &&
+    effectiveInitialSessionToken === storedSessionSnapshot.sessionToken;
+  const effectiveInitialActor = initialActor ?? localDebugActor ?? (canUseStoredSessionSnapshot ? storedSessionSnapshot.actor : undefined);
+  const effectiveInitialScope =
+    initialScope ?? localDebugScope ?? (canUseStoredSessionSnapshot ? storedSessionSnapshot.currentScope : undefined);
+  const preAuthenticated = Boolean(effectiveInitialSessionToken && effectiveInitialActor && effectiveInitialScope);
   const hasInitialInstalledMarker = useMemo(
     () =>
       !localDebugAuthEnabled &&
@@ -96,10 +110,8 @@ export function SalesManagementApp({
   const [installStatus, setInstallStatus] = useState<InstallStatusResponse | undefined>(
     effectiveInitialInstallStatus,
   );
-  const [sessionToken, setSessionToken] = useState<string | undefined>(
-    initialSessionToken ?? (localDebugAuthEnabled ? LOCAL_DEBUG_SESSION_TOKEN : sessionStorage.read()),
-  );
-  const [actor, setActor] = useState<ActorContextDTO | undefined>(initialActor ?? localDebugActor);
+  const [sessionToken, setSessionToken] = useState<string | undefined>(effectiveInitialSessionToken);
+  const [actor, setActor] = useState<ActorContextDTO | undefined>(effectiveInitialActor);
   const [scope, setScope] = useState<CurrentScopeResponse | undefined>(effectiveInitialScope);
   const [authMode, setAuthMode] = useState<'login' | 'change-password-required'>('login');
   const [notice, setNotice] = useState<string>();
@@ -108,7 +120,10 @@ export function SalesManagementApp({
   const [installStatusCheckAttempt, setInstallStatusCheckAttempt] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(sessionToken && !actor));
+  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(sessionToken && (!actor || !scope)));
+  const [bootstrappedSessionToken, setBootstrappedSessionToken] = useState<string | undefined>(
+    preAuthenticated && !canUseStoredSessionSnapshot ? sessionToken : undefined,
+  );
   const [route, setRoute] = useState<AppRoute>(initialRoute ?? readRouteFromHash() ?? 'dashboard');
   const [selectedBranchId, setSelectedBranchId] = useState(effectiveInitialScope?.activeBranchId);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(effectiveInitialScope?.activeWarehouseId);
@@ -215,6 +230,7 @@ export function SalesManagementApp({
     setSelectedBranchId(undefined);
     setSelectedWarehouseId(undefined);
     setAuthMode('login');
+    setBootstrappedSessionToken(undefined);
   }, [actor, installStatus?.appVersion, installStatus?.schemaVersion, localDebugActor, localDebugAuthEnabled, localDebugScope, sessionStorage]);
 
   const applyScope = useCallback((nextScope: CurrentScopeResponse) => {
@@ -224,12 +240,14 @@ export function SalesManagementApp({
   }, []);
 
   useEffect(() => {
-    if (!sessionToken || actor) {
+    if (!sessionToken || bootstrappedSessionToken === sessionToken) {
       return;
     }
 
     let isActive = true;
-    setIsBootstrapping(true);
+    if (!actor || !scope) {
+      setIsBootstrapping(true);
+    }
     void client
       .invoke<SessionBootstrapResponse>({
         operation: 'platform.session.bootstrap',
@@ -247,6 +265,13 @@ export function SalesManagementApp({
 
         setActor(result.data.actor);
         applyScope(result.data.currentScope);
+        sessionStorage.writeSnapshot({
+          sessionToken,
+          actor: result.data.actor,
+          currentScope: result.data.currentScope,
+          absoluteExpiresAt: result.data.absoluteExpiresAt,
+        });
+        setBootstrappedSessionToken(sessionToken);
       })
       .catch(() => {
         if (isActive) clearSession();
@@ -258,7 +283,7 @@ export function SalesManagementApp({
     return () => {
       isActive = false;
     };
-  }, [actor, applyScope, clearSession, client, sessionToken]);
+  }, [actor, applyScope, bootstrappedSessionToken, clearSession, client, scope, sessionStorage, sessionToken]);
 
   const handleLogin = useCallback(
     async (input: LoginInput) => {
@@ -279,6 +304,7 @@ export function SalesManagementApp({
       setSessionToken(result.data.sessionToken);
       setActor(result.data.actor);
       applyScope(result.data.currentScope);
+      setBootstrappedSessionToken(result.data.sessionToken);
 
       if (result.data.passwordChangeRequired) {
         setAuthMode('change-password-required');
@@ -288,6 +314,9 @@ export function SalesManagementApp({
       }
 
       sessionStorage.write(result.data.sessionToken, {
+        actor: result.data.actor,
+        currentScope: result.data.currentScope,
+        absoluteExpiresAt: result.data.absoluteExpiresAt,
         rememberSession: input.rememberSession === true,
       });
       setNotice(undefined);
@@ -498,73 +527,75 @@ export function SalesManagementApp({
   }
 
   return (
-    <AppShell
-      actor={actor}
-      currentRoute={route}
-      onLogout={handleLogout}
-      onRouteChange={setRoute}
-      onScopeChange={({ branchId, warehouseId }) => {
-        if (branchId) setSelectedBranchId(branchId);
-        if (warehouseId) setSelectedWarehouseId(warehouseId);
-      }}
-      onThemeToggle={handleThemeToggle}
-      scope={scope}
-      selectedBranchId={selectedBranchId}
-      selectedWarehouseId={selectedWarehouseId}
-      theme={theme}
-    >
-      {route === 'dashboard' ? (
-        <DashboardHome
-          apiClient={client}
-          scope={scope}
-          selectedBranchId={selectedBranchId}
-          selectedWarehouseId={selectedWarehouseId}
-          sessionToken={sessionToken}
-        />
-      ) : route === 'pos' ? (
-        <PosCheckoutShell
-          actor={actor}
-          appVersion={installStatus?.appVersion}
-          apiClient={client}
-          schemaVersion={installStatus?.schemaVersion}
-          scope={scope}
-          selectedBranchId={selectedBranchId}
-          selectedWarehouseId={selectedWarehouseId}
-          sessionToken={sessionToken}
-          shellMode="embedded"
-          theme={theme}
-          onSessionExpired={clearSession}
-        />
-      ) : route === 'orders' ? (
-        <SalesOrdersReturnsHome
-          actorId={actor.userId}
-          apiClient={client}
-          scope={scope}
-          selectedBranchId={selectedBranchId}
-          selectedWarehouseId={selectedWarehouseId}
-          sessionToken={sessionToken}
-        />
-      ) : route === 'catalog' || route === 'customers' ? (
-        <CatalogCrmHome
-          apiClient={client}
-          route={route}
-          selectedWarehouseId={selectedWarehouseId}
-          sessionToken={sessionToken}
-        />
-      ) : route === 'inventory' || route === 'purchasing' ? (
-        <InventoryHome route={route} />
-      ) : route === 'finance' ? (
-        <FinanceHome />
-      ) : route === 'reports' || route === 'admin' ? (
-        <ReportingAdministrationOperationsHome route={route} />
-      ) : (
-        <StateBlock
-          description="Route đã có vị trí trong AppShell. Module nghiệp vụ sẽ được nối ở phase tương ứng sau khi backend/API slice sẵn sàng."
-          title="Màn hình đang chờ triển khai module"
-          tone="neutral"
-        />
-      )}
-    </AppShell>
+    <ToastProvider>
+      <AppShell
+        actor={actor}
+        currentRoute={route}
+        onLogout={handleLogout}
+        onRouteChange={setRoute}
+        onScopeChange={({ branchId, warehouseId }) => {
+          if (branchId) setSelectedBranchId(branchId);
+          if (warehouseId) setSelectedWarehouseId(warehouseId);
+        }}
+        onThemeToggle={handleThemeToggle}
+        scope={scope}
+        selectedBranchId={selectedBranchId}
+        selectedWarehouseId={selectedWarehouseId}
+        theme={theme}
+      >
+        {route === 'dashboard' ? (
+          <DashboardHome
+            apiClient={client}
+            scope={scope}
+            selectedBranchId={selectedBranchId}
+            selectedWarehouseId={selectedWarehouseId}
+            sessionToken={sessionToken}
+          />
+        ) : route === 'pos' ? (
+          <PosCheckoutShell
+            actor={actor}
+            appVersion={installStatus?.appVersion}
+            apiClient={client}
+            schemaVersion={installStatus?.schemaVersion}
+            scope={scope}
+            selectedBranchId={selectedBranchId}
+            selectedWarehouseId={selectedWarehouseId}
+            sessionToken={sessionToken}
+            shellMode="embedded"
+            theme={theme}
+            onSessionExpired={clearSession}
+          />
+        ) : route === 'orders' ? (
+          <SalesOrdersReturnsHome
+            actorId={actor.userId}
+            apiClient={client}
+            scope={scope}
+            selectedBranchId={selectedBranchId}
+            selectedWarehouseId={selectedWarehouseId}
+            sessionToken={sessionToken}
+          />
+        ) : route === 'catalog' || route === 'customers' ? (
+          <CatalogCrmHome
+            apiClient={client}
+            route={route}
+            selectedWarehouseId={selectedWarehouseId}
+            sessionToken={sessionToken}
+          />
+        ) : route === 'inventory' || route === 'purchasing' ? (
+          <InventoryHome route={route} />
+        ) : route === 'finance' ? (
+          <FinanceHome />
+        ) : route === 'reports' || route === 'admin' ? (
+          <ReportingAdministrationOperationsHome route={route} />
+        ) : (
+          <StateBlock
+            description="Route đã có vị trí trong AppShell. Module nghiệp vụ sẽ được nối ở phase tương ứng sau khi backend/API slice sẵn sàng."
+            title="Màn hình đang chờ triển khai module"
+            tone="neutral"
+          />
+        )}
+      </AppShell>
+    </ToastProvider>
   );
 }
 

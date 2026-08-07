@@ -8,6 +8,7 @@ import type { ReportingDashboardResponse } from '@shared/contracts/reporting/rep
 import { DashboardHome } from '../../web/src/features/dashboard/dashboard-home';
 import { SalesManagementApp } from '../../web/src/app/sales-management-app';
 import { AuthFlow } from '../../web/src/app/auth/auth-flow';
+import { createSessionStorage } from '../../web/src/app/auth/session-storage';
 
 const scope: CurrentScopeResponse = {
   tenant: {
@@ -118,6 +119,66 @@ describe('SalesManagementApp', () => {
     expect(html).toContain('Đang chuẩn bị màn hình làm việc');
     expect(html).toContain('cn-skeleton-auth-card');
     expect(html).not.toContain('Đang xác thực session và tải scope Branch/Warehouse');
+  });
+
+  it('hydrate workspace từ session snapshot để không hiện màn chuẩn bị khi reload app đã đăng nhập', () => {
+    const originalWindow = globalThis.window;
+    const sessionValues = new Map<string, string>();
+    const persistentValues = new Map<string, string>();
+    const storage = createSessionStorage({
+      session: {
+        getItem: (key) => sessionValues.get(key) ?? null,
+        setItem: (key, value) => sessionValues.set(key, value),
+        removeItem: (key) => sessionValues.delete(key),
+      },
+      persistent: {
+        getItem: (key) => persistentValues.get(key) ?? null,
+        setItem: (key, value) => persistentValues.set(key, value),
+        removeItem: (key) => persistentValues.delete(key),
+      },
+    });
+
+    storage.write('session-token', {
+      actor,
+      currentScope: scope,
+      absoluteExpiresAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: { hash: '#catalog' },
+        sessionStorage: {
+          getItem: (key: string) => sessionValues.get(key) ?? null,
+          setItem: (key: string, value: string) => sessionValues.set(key, value),
+          removeItem: (key: string) => sessionValues.delete(key),
+        },
+        localStorage: {
+          getItem: (key: string) => persistentValues.get(key) ?? null,
+          setItem: (key: string, value: string) => persistentValues.set(key, value),
+          removeItem: (key: string) => persistentValues.delete(key),
+        },
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+
+    try {
+      const html = renderToStaticMarkup(
+        createElement(SalesManagementApp, {
+          initialInstallStatus: installedStatus,
+        }),
+      );
+
+      expect(html).toContain('cn-app-shell');
+      expect(html).toContain('Hàng hóa &amp; biến thể');
+      expect(html).not.toContain('Đang chuẩn bị màn hình làm việc');
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
   });
 
   it('DashboardHome có đúng 4 KPI chính theo handoff', () => {

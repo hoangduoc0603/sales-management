@@ -25,6 +25,7 @@ import { AppIcon } from '../../components/ui/icons';
 import { Panel } from '../../components/ui/panel';
 import { SkeletonTable } from '../../components/ui/skeleton';
 import { StateBlock } from '../../components/ui/state-block';
+import { useToast } from '../../components/ui/toast';
 import type { ApiClient } from '../../lib/api/client';
 
 export interface CatalogCrmHomeProps {
@@ -279,7 +280,7 @@ const catalogHashStates = new Set<CatalogHashState>([
 ]);
 const catalogSearchDebounceMs = 300;
 const catalogRowMenuWidthPx = 230;
-const catalogRowMenuHeightPx = 224;
+const catalogRowMenuHeightPx = 185;
 const catalogRowMenuViewportGapPx = 12;
 const catalogRowMenuAnchorGapPx = 6;
 
@@ -319,6 +320,7 @@ export function CatalogCrmHome({
   selectedWarehouseId,
   sessionToken,
 }: CatalogCrmHomeProps) {
+  const toast = useToast();
   const isCustomerRoute = route === 'customers';
   const shouldLoadProductsFromApi =
     !isCustomerRoute && apiClient !== undefined && sessionToken !== undefined;
@@ -356,9 +358,12 @@ export function CatalogCrmHome({
     shouldLoadProductsFromApi ? 'initial' : undefined,
   );
   const [rowMenuPosition, setRowMenuPosition] = useState<RowMenuPosition>();
-  const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
   const loadedQueryRef = useRef<string | undefined>(shouldLoadProductsFromApi ? undefined : '');
+
+  useEffect(() => {
+    if (errorMessage !== undefined) toast.danger(errorMessage);
+  }, [errorMessage, toast]);
 
   const selectedItem = useMemo(
     () => items.find((item) => item.variantId === selectedVariantId) ?? items[0],
@@ -685,7 +690,7 @@ export function CatalogCrmHome({
       return;
     }
     if (apiClient === undefined || sessionToken === undefined) {
-      setMessage(mode === 'create' ? 'Đã mô phỏng tạo sản phẩm.' : 'Đã mô phỏng cập nhật sản phẩm.');
+      toast.success(mode === 'create' ? 'Đã mô phỏng tạo sản phẩm.' : 'Đã mô phỏng cập nhật sản phẩm.');
       return;
     }
 
@@ -735,7 +740,7 @@ export function CatalogCrmHome({
       setErrorMessage(result.error.message);
       return;
     }
-    setMessage(mode === 'create' ? 'Đã tạo sản phẩm.' : 'Đã cập nhật sản phẩm.');
+    toast.success(mode === 'create' ? 'Đã tạo sản phẩm.' : 'Đã cập nhật sản phẩm.');
     await refreshProducts();
     if (mode === 'create') {
       setSelectedVariantId(result.data.defaultVariant.variantId);
@@ -760,7 +765,7 @@ export function CatalogCrmHome({
       return;
     }
     if (apiClient === undefined || sessionToken === undefined) {
-      setMessage(variantMode === 'create' ? 'Đã mô phỏng tạo biến thể.' : 'Đã mô phỏng cập nhật biến thể.');
+      toast.success(variantMode === 'create' ? 'Đã mô phỏng tạo biến thể.' : 'Đã mô phỏng cập nhật biến thể.');
       return;
     }
 
@@ -805,13 +810,13 @@ export function CatalogCrmHome({
       setErrorMessage(result.error.message);
       return;
     }
-    setMessage(variantMode === 'create' ? 'Đã tạo biến thể.' : 'Đã cập nhật biến thể.');
+    toast.success(variantMode === 'create' ? 'Đã tạo biến thể.' : 'Đã cập nhật biến thể.');
     await refreshProducts();
     setVariantMode('edit');
     setSelectedVariantId(result.data.variant.variantId);
   }
 
-  async function toggleVariantActive(item: CatalogProductListItemDTO) {
+  async function toggleVariantActive(item: CatalogProductListItemDTO): Promise<boolean> {
     if (apiClient === undefined || sessionToken === undefined) {
       setItems((current) =>
         current.map((candidate) =>
@@ -820,7 +825,8 @@ export function CatalogCrmHome({
             : candidate,
         ),
       );
-      return;
+      toast.success(item.isActive ? 'Đã ngừng bán biến thể.' : 'Đã kích hoạt biến thể.');
+      return true;
     }
 
     setIsLoading(true);
@@ -838,10 +844,11 @@ export function CatalogCrmHome({
     setIsLoading(false);
     if (!result.ok) {
       setErrorMessage(result.error.message);
-      return;
+      return false;
     }
-    setMessage(item.isActive ? 'Đã ngừng bán biến thể.' : 'Đã kích hoạt biến thể.');
+    toast.success(item.isActive ? 'Đã ngừng bán biến thể.' : 'Đã kích hoạt biến thể.');
     await refreshProducts();
+    return true;
   }
 
   if (isCustomerRoute) {
@@ -966,9 +973,6 @@ export function CatalogCrmHome({
           </button>
         </div>
 
-        {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
-        {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
-
         {showProductLoadingSkeleton ? (
           <div className="state active" id="loading-state">
             <SkeletonTable columns={6} label="Đang tải danh sách hàng hóa" rows={6} />
@@ -1059,9 +1063,10 @@ export function CatalogCrmHome({
         isLoading={isLoading}
         isOpen={activeDialog === 'deactivate'}
         onClose={closeCatalogOverlay}
-        onConfirm={() => {
-          if (selectedItem !== undefined) void toggleVariantActive(selectedItem);
-          closeCatalogOverlay();
+        onConfirm={async () => {
+          if (selectedItem === undefined) return;
+          const ok = await toggleVariantActive(selectedItem);
+          if (ok) closeCatalogOverlay();
         }}
       />
 
@@ -1498,9 +1503,6 @@ function CatalogRowMenu(props: {
       >
         {props.item?.isActive === false ? 'Mở bán lại' : 'Ngừng bán'}
       </button>
-      <button onClick={props.onClose} role="menuitem" type="button">
-        Đóng menu
-      </button>
     </div>
   );
 }
@@ -1537,11 +1539,18 @@ function CatalogLifecycleDialog(props: {
         <p>{props.item?.sku ?? 'SKU chưa xác định'}</p>
       </div>
       <footer className="modal-foot">
-        <button className="button" onClick={props.onClose} type="button">
+        <button className="button" disabled={props.isLoading} onClick={props.onClose} type="button">
           Hủy
         </button>
-        <button className="button primary" disabled={props.isLoading} onClick={props.onConfirm} type="button">
-          {isDeactivate ? 'Xác nhận ngừng bán' : 'Xác nhận mở bán lại'}
+        <button
+          aria-busy={props.isLoading || undefined}
+          className="button primary"
+          disabled={props.isLoading}
+          onClick={props.onConfirm}
+          type="button"
+        >
+          {props.isLoading ? <span aria-hidden="true" className="cn-spinner" /> : null}
+          Xác nhận
         </button>
       </footer>
     </section>
@@ -2468,14 +2477,18 @@ function CustomerWorkspace(props: {
   initialCustomerItems: readonly CustomerDTO[];
   sessionToken?: string;
 }) {
+  const toast = useToast();
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<readonly CustomerDTO[]>(props.initialCustomerItems);
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
   const [duplicateWarnings, setDuplicateWarnings] =
     useState<readonly CustomerQuickCreateResponse['duplicateWarnings'][number][]>([]);
+
+  useEffect(() => {
+    if (errorMessage !== undefined) toast.danger(errorMessage);
+  }, [errorMessage, toast]);
 
   async function searchCustomers(nextQuery = query) {
     const trimmedQuery = nextQuery.trim();
@@ -2553,7 +2566,7 @@ function CustomerWorkspace(props: {
       const customer = createUiCustomer(payload, customers.length + 1);
       setCustomers((current) => [customer, ...current]);
       setForm(emptyCustomerForm);
-      setMessage('Đã tạo khách hàng.');
+      toast.success('Đã tạo khách hàng.');
       setIsLoading(false);
       return;
     }
@@ -2581,7 +2594,7 @@ function CustomerWorkspace(props: {
     if (result.data.customer !== undefined) {
       setCustomers((current) => [result.data.customer as CustomerDTO, ...current]);
       setForm(emptyCustomerForm);
-      setMessage('Đã tạo khách hàng.');
+      toast.success('Đã tạo khách hàng.');
     }
   }
 
@@ -2601,8 +2614,6 @@ function CustomerWorkspace(props: {
         </div>
       </header>
 
-      {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
-      {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
       {duplicateWarnings.length > 0 ? (
         <p className="cn-inline-message cn-inline-message-warning">
           Cảnh báo trùng: {duplicateWarnings.map((warning) => warning.displayName).join(', ')}.

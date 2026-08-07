@@ -29,7 +29,9 @@ describe('CatalogCrmHome', () => {
     expect(html).toContain('Sửa biến thể');
     expect(html).toContain('Sao chép');
     expect(html).toContain('Ngừng bán');
-    expect(html).toContain('Xác nhận ngừng bán');
+    expect(html).not.toContain('Đóng menu');
+    expect(html).toContain('Xác nhận');
+    expect(html).not.toContain('Xác nhận ngừng bán');
     expect(html).toContain('Chỉ tạo mới. SKU hoặc barcode đã tồn tại sẽ được báo lỗi và không ghi đè.');
     expect(html).toContain('Chọn tệp');
     expect(html).toContain('Kiểm tra');
@@ -74,7 +76,8 @@ describe('CatalogCrmHome', () => {
     );
 
     expect(html).toContain('Mở bán lại');
-    expect(html).toContain('Xác nhận mở bán lại');
+    expect(html).toContain('Xác nhận');
+    expect(html).not.toContain('Xác nhận mở bán lại');
   });
 
   it('render skeleton thay vì dữ liệu mẫu khi danh sách hàng hóa đang load từ API', () => {

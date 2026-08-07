@@ -22,6 +22,7 @@ import { Listbox } from '../../components/ui/listbox';
 import { Panel } from '../../components/ui/panel';
 import { StateBlock } from '../../components/ui/state-block';
 import { Table } from '../../components/ui/table';
+import { useToast } from '../../components/ui/toast';
 import type { ApiClient } from '../../lib/api/client';
 
 export interface SalesOrdersReturnsHomeProps {
@@ -83,6 +84,7 @@ export function SalesOrdersReturnsHome({
   selectedWarehouseId,
   sessionToken,
 }: SalesOrdersReturnsHomeProps) {
+  const toast = useToast();
   const [source, setSource] = useState('all');
   const [status, setStatus] = useState('active');
   const [query, setQuery] = useState('');
@@ -91,7 +93,6 @@ export function SalesOrdersReturnsHome({
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingManualDraft, setIsSavingManualDraft] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [message, setMessage] = useState<string>();
   const [manualSource, setManualSource] = useState<string>(MANUAL_ORDER_SOURCE_OPTIONS[0].value);
   const [manualPaymentMode, setManualPaymentMode] = useState<ManualPaymentMode>('deposit');
   const [manualRecipientName, setManualRecipientName] = useState('Khách lẻ');
@@ -115,6 +116,10 @@ export function SalesOrdersReturnsHome({
   const [activeWarrantyStatus, setActiveWarrantyStatus] = useState<WarrantyCaseStatus>();
   const [isOpeningWarranty, setIsOpeningWarranty] = useState(false);
   const [isTransitioningWarranty, setIsTransitioningWarranty] = useState(false);
+
+  useEffect(() => {
+    if (errorMessage !== undefined) toast.danger(errorMessage);
+  }, [errorMessage, toast]);
   const branch = scope.branches.find((item) => item.branchId === selectedBranchId);
   const warehouse = scope.warehouses.find((item) => item.warehouseId === selectedWarehouseId);
 
@@ -203,7 +208,7 @@ export function SalesOrdersReturnsHome({
       setErrorMessage(result.error.message);
       return;
     }
-    setMessage(`Đã cập nhật đơn ${result.data.order.businessNumber}.`);
+    toast.success(`Đã cập nhật đơn ${result.data.order.businessNumber}.`);
     await loadOrders();
   }
 
@@ -221,7 +226,7 @@ export function SalesOrdersReturnsHome({
       setActiveReturnId(`return-demo-${selectedItem.order.saleOrderId}`);
       setActiveReturnLineIds([`return-line-demo-${selectedItem.order.saleOrderId}`]);
       setActiveReturnRefundVnd(Math.min(42_000, selectedItem.order.totalVnd));
-      setMessage(`Đã tạo phiếu trả demo cho ${selectedItem.order.businessNumber}.`);
+      toast.success(`Đã tạo phiếu trả demo cho ${selectedItem.order.businessNumber}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -285,7 +290,7 @@ export function SalesOrdersReturnsHome({
     setActiveReturnId(result.data.returnOrder.returnId);
     setActiveReturnLineIds(result.data.returnOrder.lines.map((line) => line.returnLineId));
     setActiveReturnRefundVnd(result.data.returnOrder.lines.reduce((sum, line) => sum + line.refundVnd, 0));
-    setMessage(`Đã tạo phiếu trả ${result.data.returnOrder.returnId}; hàng đang chờ kiểm.`);
+    toast.success(`Đã tạo phiếu trả ${result.data.returnOrder.returnId}; hàng đang chờ kiểm.`);
     await loadOrders();
   }
 
@@ -299,7 +304,7 @@ export function SalesOrdersReturnsHome({
       setActiveReturnId(undefined);
       setActiveReturnLineIds([]);
       setActiveReturnRefundVnd(0);
-      setMessage(`Đã hoàn tất kiểm hàng demo với phương án ${disposition}.`);
+      toast.success(`Đã hoàn tất kiểm hàng demo với phương án ${disposition}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -336,7 +341,7 @@ export function SalesOrdersReturnsHome({
     setActiveReturnId(undefined);
     setActiveReturnLineIds([]);
     setActiveReturnRefundVnd(0);
-    setMessage(`Đã hoàn tất kiểm hàng ${result.data.returnOrder.returnId} với phương án ${disposition}.`);
+    toast.success(`Đã hoàn tất kiểm hàng ${result.data.returnOrder.returnId} với phương án ${disposition}.`);
     await loadOrders();
   }
 
@@ -353,7 +358,7 @@ export function SalesOrdersReturnsHome({
     if (apiClient === undefined || sessionToken === undefined) {
       setActiveExchangeOrderNumber(`SO-EX-DEMO-${selectedItem.order.businessNumber.slice(-5)}`);
       setActiveExchangeNetSettlementVnd(143_000);
-      setMessage(`Đã tạo đơn đổi hàng demo từ ${selectedItem.order.businessNumber}.`);
+      toast.success(`Đã tạo đơn đổi hàng demo từ ${selectedItem.order.businessNumber}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -480,7 +485,7 @@ export function SalesOrdersReturnsHome({
 
     setActiveExchangeOrderNumber(result.data.exchangeOrder.businessNumber);
     setActiveExchangeNetSettlementVnd(result.data.netSettlementVnd);
-    setMessage(`Đã tạo đơn đổi hàng ${result.data.exchangeOrder.businessNumber}.`);
+    toast.success(`Đã tạo đơn đổi hàng ${result.data.exchangeOrder.businessNumber}.`);
     await loadOrders();
   }
 
@@ -503,7 +508,7 @@ export function SalesOrdersReturnsHome({
     if (apiClient === undefined || sessionToken === undefined) {
       setActiveWarrantyCaseId(`warranty-demo-${selectedItem.order.saleOrderId}`);
       setActiveWarrantyStatus('Open');
-      setMessage(`Đã mở ca bảo hành demo cho ${selectedItem.order.businessNumber}.`);
+      toast.success(`Đã mở ca bảo hành demo cho ${selectedItem.order.businessNumber}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -555,7 +560,7 @@ export function SalesOrdersReturnsHome({
 
     setActiveWarrantyCaseId(result.data.warrantyCase.warrantyCaseId);
     setActiveWarrantyStatus(result.data.warrantyCase.status);
-    setMessage(`Đã mở ca bảo hành ${result.data.warrantyCase.warrantyCaseId}.`);
+    toast.success(`Đã mở ca bảo hành ${result.data.warrantyCase.warrantyCaseId}.`);
     await loadOrders();
   }
 
@@ -567,7 +572,7 @@ export function SalesOrdersReturnsHome({
 
     if (apiClient === undefined || sessionToken === undefined) {
       setActiveWarrantyStatus(status);
-      setMessage(`Đã chuyển ca bảo hành demo sang ${status}.`);
+      toast.success(`Đã chuyển ca bảo hành demo sang ${status}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -595,7 +600,7 @@ export function SalesOrdersReturnsHome({
     }
 
     setActiveWarrantyStatus(result.data.warrantyCase.status);
-    setMessage(`Đã chuyển ca bảo hành ${result.data.warrantyCase.warrantyCaseId} sang ${result.data.warrantyCase.status}.`);
+    toast.success(`Đã chuyển ca bảo hành ${result.data.warrantyCase.warrantyCaseId} sang ${result.data.warrantyCase.status}.`);
     await loadOrders();
   }
 
@@ -619,7 +624,7 @@ export function SalesOrdersReturnsHome({
       setSelectedOrderId(demoOrder.order.saleOrderId);
       setManualSavedDraftId(demoOrder.order.saleOrderId);
       setManualSavedDraftNumber(demoOrder.order.businessNumber);
-      setMessage(`Đã lưu nháp đơn ${demoOrder.order.businessNumber}.`);
+      toast.success(`Đã lưu nháp đơn ${demoOrder.order.businessNumber}.`);
       setErrorMessage(undefined);
       return;
     }
@@ -700,7 +705,7 @@ export function SalesOrdersReturnsHome({
       return;
     }
 
-    setMessage(`Đã lưu nháp đơn ${result.data.order.businessNumber}.`);
+    toast.success(`Đã lưu nháp đơn ${result.data.order.businessNumber}.`);
     setManualSavedDraftId(result.data.order.saleOrderId);
     setManualSavedDraftNumber(result.data.order.businessNumber);
     setSelectedOrderId(result.data.order.saleOrderId);
@@ -724,7 +729,7 @@ export function SalesOrdersReturnsHome({
       setSelectedOrderId(manualSavedDraftId);
       setManualSavedDraftId(undefined);
       setManualSavedDraftNumber(undefined);
-      setMessage('Đã xác nhận đơn nhập tay demo.');
+      toast.success('Đã xác nhận đơn nhập tay demo.');
       setErrorMessage(undefined);
       return;
     }
@@ -753,7 +758,7 @@ export function SalesOrdersReturnsHome({
     setManualSavedDraftId(undefined);
     setManualSavedDraftNumber(undefined);
     setSelectedOrderId(result.data.order.saleOrderId);
-    setMessage(`Đã xác nhận đơn ${result.data.order.businessNumber}.`);
+    toast.success(`Đã xác nhận đơn ${result.data.order.businessNumber}.`);
     await loadOrders();
   }
 
@@ -766,7 +771,7 @@ export function SalesOrdersReturnsHome({
     setManualDepositVnd('300000');
     setManualSavedDraftId(undefined);
     setManualSavedDraftNumber(undefined);
-    setMessage('Đã hủy nội dung nháp đang nhập trên màn hình.');
+    toast.info('Đã hủy nội dung nháp đang nhập trên màn hình.');
     setErrorMessage(undefined);
   }
 
@@ -789,9 +794,6 @@ export function SalesOrdersReturnsHome({
           <Button variant="primary">Tạo đơn nhập tay</Button>
         </div>
       </header>
-
-      {errorMessage ? <p className="cn-inline-message cn-inline-message-danger">{errorMessage}</p> : null}
-      {message ? <p className="cn-inline-message cn-inline-message-success">{message}</p> : null}
 
       <div className="cn-filter-bar" aria-label="Bộ lọc đơn bán">
         <Listbox

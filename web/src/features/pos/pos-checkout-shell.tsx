@@ -12,6 +12,7 @@ import { Button, IconButton } from '../../components/ui/button';
 import { AppIcon } from '../../components/ui/icons';
 import { Listbox } from '../../components/ui/listbox';
 import { TextAvatar } from '../../components/ui/text-avatar';
+import { useToast } from '../../components/ui/toast';
 import type { ApiClient } from '../../lib/api/client';
 import {
   buildPosCatalogCacheNamespace,
@@ -249,6 +250,7 @@ export function PosCheckoutShell({
   appVersion = '0.1.0',
   schemaVersion = 1,
 }: PosCheckoutShellProps) {
+  const toast = useToast();
   const [activeProjection, setActiveProjection] = useState(projection);
   const [query, setQuery] = useState('');
   const [cartLines, setCartLines] = useState<PosCartLine[]>([]);
@@ -438,7 +440,14 @@ export function PosCheckoutShell({
         tenders: toTenderInputs(selectedTenderId, receivedAmountVnd),
       },
     });
-    setMessage(result.ok ? `Đã lưu nháp ${result.data.order.businessNumber}.` : result.error.message);
+    if (result.ok) {
+      const message = `Đã lưu nháp ${result.data.order.businessNumber}.`;
+      setMessage(message);
+      toast.success(message);
+      return;
+    }
+    setMessage(result.error.message);
+    toast.danger(result.error.message);
   }, [
     activeActor.userId,
     apiClient,
@@ -448,6 +457,7 @@ export function PosCheckoutShell({
     selectedTenderId,
     selectedWarehouseId,
     sessionToken,
+    toast,
   ]);
 
   const openDraft = useCallback(async () => {
@@ -458,14 +468,23 @@ export function PosCheckoutShell({
       sessionToken,
       payload: { branchId: selectedBranchId, warehouseId: selectedWarehouseId },
     });
-    setMessage(result.ok ? `Có ${result.data.drafts.length} phiếu nháp trong scope hiện tại.` : result.error.message);
-  }, [apiClient, selectedBranchId, selectedWarehouseId, sessionToken]);
+    if (result.ok) {
+      const message = `Có ${result.data.drafts.length} phiếu nháp trong scope hiện tại.`;
+      setMessage(message);
+      toast.info(message);
+      return;
+    }
+    setMessage(result.error.message);
+    toast.danger(result.error.message);
+  }, [apiClient, selectedBranchId, selectedWarehouseId, sessionToken, toast]);
 
   const completeSale = useCallback(async () => {
     if (apiClient === undefined || sessionToken === undefined || cartLines.length === 0) return;
     if (missingTrackedSelection !== undefined) {
       setActiveStateId('serial');
-      setMessage(`${missingTrackedSelection.displayName} cần chọn lô/serial trước khi hoàn tất.`);
+      const message = `${missingTrackedSelection.displayName} cần chọn lô/serial trước khi hoàn tất.`;
+      setMessage(message);
+      toast.warning(message);
       return;
     }
     setIsCompleting(true);
@@ -494,18 +513,20 @@ export function PosCheckoutShell({
     setIsCompleting(false);
     if (!result.ok) {
       setActiveStateId(result.commandPending ? 'timeout' : result.error.code === 'SHIFT_NOT_OPEN' ? 'shift' : 'conflict');
-      setMessage(
-        result.commandPending
-          ? `${result.error.message} Đang tra cứu commandId trước khi cho phép retry.`
-          : result.error.message,
-      );
+      const message = result.commandPending
+        ? `${result.error.message} Đang tra cứu commandId trước khi cho phép retry.`
+        : result.error.message;
+      setMessage(message);
+      toast.danger(message);
       return;
     }
     setReceipt(result.data.receipt);
     pendingCompleteCommandRef.current = undefined;
     setCartLines([]);
     setActiveStateId('success');
-    setMessage(`Đã hoàn tất ${result.data.order.businessNumber}.`);
+    const message = `Đã hoàn tất ${result.data.order.businessNumber}.`;
+    setMessage(message);
+    toast.success(message);
   }, [
     activeActor.userId,
     apiClient,
@@ -516,6 +537,7 @@ export function PosCheckoutShell({
     selectedTenderId,
     selectedWarehouseId,
     sessionToken,
+    toast,
     totals.totalVnd,
   ]);
 
@@ -856,7 +878,17 @@ export function PosCheckoutShell({
               <div className="cn-cart-actions">
                 <Button disabled={cartLines.length === 0} onClick={saveDraft} variant="secondary">Lưu nháp</Button>
                 <Button onClick={openDraft} variant="secondary">Mở nháp</Button>
-                <Button onClick={() => { setCartLines([]); setMessage('Đã hủy giỏ trên trình duyệt.'); }} variant="secondary">Hủy giỏ</Button>
+                <Button
+                  onClick={() => {
+                    const message = 'Đã hủy giỏ trên trình duyệt.';
+                    setCartLines([]);
+                    setMessage(message);
+                    toast.info(message);
+                  }}
+                  variant="secondary"
+                >
+                  Hủy giỏ
+                </Button>
               </div>
               <div className="cn-complete-wrap">
                 <Button

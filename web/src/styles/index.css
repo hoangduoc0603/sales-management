@@ -2527,17 +2527,72 @@ input:focus-visible {
   padding: 16px;
 }
 
-.cn-toast {
-  display: inline-flex;
-  align-items: center;
+.cn-toast-viewport {
+  align-items: end;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: grid;
   gap: 8px;
+  left: max(20px, env(safe-area-inset-left));
+  pointer-events: none;
+  position: fixed;
+  right: auto;
+  width: min(384px, calc(100vw - 40px));
+  z-index: 60;
+}
+
+.cn-toast {
+  align-items: start;
   border: 1px solid var(--cn-border);
-  border-radius: var(--cn-radius-control);
+  border-radius: var(--cn-radius-container);
   background: var(--cn-surface-elevated);
   box-shadow: var(--cn-shadow-md);
   color: var(--cn-text);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 20px minmax(0, 1fr) 28px;
   padding: 10px 12px;
   font-size: 13px;
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+.cn-toast-icon {
+  height: 18px;
+  margin-top: 1px;
+  width: 18px;
+}
+
+.cn-toast-message {
+  min-width: 0;
+}
+
+.cn-toast-dismiss {
+  align-items: center;
+  align-self: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  color: currentColor;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  margin: -2px -4px -2px 0;
+  padding: 0;
+  width: 28px;
+}
+
+.cn-toast-dismiss:hover {
+  background: color-mix(in oklab, currentColor, transparent 90%);
+}
+
+.cn-toast-dismiss:focus-visible {
+  outline: 0;
+  box-shadow: var(--cn-focus-ring);
+}
+
+.cn-toast-dismiss svg {
+  height: 16px;
+  width: 16px;
 }
 
 .cn-toast-success {
